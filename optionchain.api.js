@@ -1,5 +1,5 @@
 // ==========================================
-// OPTION CHAIN CONTROLLER – FINAL (A3.3)
+// OPTION CHAIN API – FINAL (A3.4)
 // Angel = SINGLE SOURCE OF TRUTH
 // ==========================================
 
@@ -15,7 +15,7 @@ async function getOptionChain(req, res) {
     const { index, expiry } = req.query;
 
     // -------------------------------
-    // VALIDATION
+    // BASIC VALIDATION
     // -------------------------------
     if (!index || !expiry) {
       return res.json({
@@ -35,12 +35,19 @@ async function getOptionChain(req, res) {
     }
 
     // -------------------------------
-    // STRIKES (ANGEL VALIDATED)
+    // STRIKES (ANGEL SOURCE OF TRUTH)
     // -------------------------------
     const strikes = getValidStrikes({
       index: INDEX,
       expiryDate,
     });
+
+    if (!Array.isArray(strikes) || strikes.length === 0) {
+      return res.json({
+        status: false,
+        message: "no valid strikes from Angel",
+      });
+    }
 
     // -------------------------------
     // BUILD OPTION CHAIN
@@ -58,14 +65,14 @@ async function getOptionChain(req, res) {
       status: true,
       index: INDEX,
       expiry: expiryDate.toISOString().slice(0, 10),
-      strikes: Object.keys(chain).length,
+      totalStrikes: Object.keys(chain).length,
       chain,
     });
   } catch (e) {
-    console.error("❌ OptionChain Error:", e.message);
+    console.error("❌ OptionChain API Error:", e);
     return res.json({
       status: false,
-      message: "option chain error",
+      message: "option chain internal error",
     });
   }
 }
