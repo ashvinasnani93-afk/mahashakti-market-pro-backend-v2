@@ -1,10 +1,10 @@
 // ==========================================
-// OPTION CHAIN API – FINAL (A3.4)
+// OPTION CHAIN API – FINAL (A3.5)
 // Angel = SINGLE SOURCE OF TRUTH
 // ==========================================
 
 const { getValidStrikes } = require("./strike.service");
-const { buildOptionChain } = require("./optionchain.service");
+const { buildOptionChain } = require("./optionChain.service");
 
 // ==========================================
 // GET OPTION CHAIN
