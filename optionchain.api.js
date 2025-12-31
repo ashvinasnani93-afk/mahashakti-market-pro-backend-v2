@@ -4,7 +4,7 @@
 // ==========================================
 
 const { getValidStrikes } = require("./strike.service");
-const { buildOptionChain } = require("../optionChain.service");
+const { buildOptionChain } = require("./optionchain.service");
 
 // ==========================================
 // GET OPTION CHAIN
