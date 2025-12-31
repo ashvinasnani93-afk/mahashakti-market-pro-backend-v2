@@ -10,7 +10,7 @@ const https = require("https");
 const axios = require("axios");
 const { SmartAPI } = require("smartapi-javascript");
 const { authenticator } = require("otplib");
-const { getOptionChain } = require("./controllers/optionChain.api");
+const { getOptionChain } = require("./controllers/optionchain.api");
 const { loadOptionSymbolMaster } = require("./token.service");
 const { buildOptionChain } = require("./optionChain.service");
 
