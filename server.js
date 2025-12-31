@@ -7,12 +7,12 @@ const express = require("express");
 const cors = require("cors");
 const WebSocket = require("ws");
 const https = require("https");
-const axios = require("axios");
 const { SmartAPI } = require("smartapi-javascript");
 const { authenticator } = require("otplib");
+
 const { getOptionChain } = require("./optionchain.api");
 const { loadOptionSymbolMaster } = require("./token.service");
-const { buildOptionChain } = require("./optionChain.service");
+const { buildOptionChain } = require("./optionchain.service"); // ✅ FIXED (lowercase)
 
 const app = express();
 app.use(cors());
@@ -64,33 +64,35 @@ function loadSymbolMaster() {
   return new Promise((resolve, reject) => {
     console.log("📥 Loading Angel Symbol Master...");
 
-    https.get(
-      "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",
-      (res) => {
-        let data = "";
-        res.on("data", (c) => (data += c));
-        res.on("end", () => {
-          const json = JSON.parse(data);
+    https
+      .get(
+        "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",
+        (res) => {
+          let data = "";
+          res.on("data", (c) => (data += c));
+          res.on("end", () => {
+            const json = JSON.parse(data);
 
-          json.forEach((item) => {
-            if (!item.symbol || !item.token) return;
-            if (item.exch_seg === "NSE" || item.exch_seg === "BSE") {
-              const symbol = item.symbol.toUpperCase();
-              const exchangeType = item.exch_seg === "NSE" ? 1 : 3;
+            json.forEach((item) => {
+              if (!item.symbol || !item.token) return;
+              if (item.exch_seg === "NSE" || item.exch_seg === "BSE") {
+                const symbol = item.symbol.toUpperCase();
+                const exchangeType = item.exch_seg === "NSE" ? 1 : 3;
 
-              symbolTokenMap[symbol] = {
-                token: item.token,
-                exchangeType,
-              };
-              tokenSymbolMap[item.token] = symbol;
-            }
+                symbolTokenMap[symbol] = {
+                  token: item.token,
+                  exchangeType,
+                };
+                tokenSymbolMap[item.token] = symbol;
+              }
+            });
+
+            console.log("✅ STOCK Symbols Loaded:", Object.keys(symbolTokenMap).length);
+            resolve();
           });
-
-          console.log("✅ STOCK Symbols Loaded:", Object.keys(symbolTokenMap).length);
-          resolve();
-        });
-      }
-    ).on("error", reject);
+        }
+      )
+      .on("error", reject);
   });
 }
 
@@ -147,14 +149,12 @@ function startWebSocket() {
 
   ws.on("message", (data) => {
     if (!Buffer.isBuffer(data)) return;
-    if (data.length === 4) return;
+    if (data.length !== 51) return;
 
-    if (data.length === 51) {
-      const ltp = decodeLTP(data);
-      const token = data.toString("utf8", 2, 27).replace(/\0/g, "");
-      const symbol = tokenSymbolMap[token];
-      if (symbol && ltp) latestLTP[symbol] = ltp;
-    }
+    const ltp = decodeLTP(data);
+    const token = data.toString("utf8", 2, 27).replace(/\0/g, "");
+    const symbol = tokenSymbolMap[token];
+    if (symbol && ltp) latestLTP[symbol] = ltp;
   });
 
   ws.on("close", () => setTimeout(startWebSocket, 3000));
@@ -184,7 +184,7 @@ function subscribeSymbol(symbol) {
 // ==========================================
 // STOCK LTP API
 // ==========================================
-app.get("/angel/ltp", async (req, res) => {
+app.get("/angel/ltp", (req, res) => {
   const symbol = req.query.symbol?.toUpperCase();
   if (!symbol || !symbolTokenMap[symbol]) {
     return res.json({ status: false, message: "symbol invalid" });
@@ -200,9 +200,10 @@ app.get("/angel/ltp", async (req, res) => {
 });
 
 // ==========================================
-// OPTION CHAIN API (CONTROLLER BASED)
+// OPTION CHAIN API
 // ==========================================
 app.get("/option-chain", getOptionChain);
+
 // ==========================================
 // START SERVER
 // ==========================================
