@@ -48,6 +48,7 @@ function checkTrend({ closes = [], ema20 = [], ema50 = [] }) {
     reason: "EMA compression / sideways",
   };
 }
+
 // ==========================================
 // SIGNAL ENGINE – STEP 2 (RSI SANITY CHECK)
 // ==========================================
@@ -88,10 +89,61 @@ function checkRSI({ rsi, trend }) {
     reason: "RSI within safe range",
   };
 }
+
 // ==========================================
-// EXPORT
+// SIGNAL ENGINE – STEP 3
+// BREAKOUT / BREAKDOWN (CANDLE CLOSE)
+// ==========================================
+
+/**
+ * checkBreakout
+ * @param {number} close - latest candle close price
+ * @param {number} support - support level
+ * @param {number} resistance - resistance level
+ * @param {string} trend - UPTREND / DOWNTREND
+ */
+function checkBreakout({ close, support, resistance, trend }) {
+  if (
+    typeof close !== "number" ||
+    typeof support !== "number" ||
+    typeof resistance !== "number"
+  ) {
+    return {
+      allowed: false,
+      reason: "price levels missing",
+    };
+  }
+
+  // ✅ BUY condition
+  if (trend === "UPTREND" && close > resistance) {
+    return {
+      allowed: true,
+      action: "BUY",
+      reason: "bullish breakout with close",
+    };
+  }
+
+  // ✅ SELL condition
+  if (trend === "DOWNTREND" && close < support) {
+    return {
+      allowed: true,
+      action: "SELL",
+      reason: "bearish breakdown with close",
+    };
+  }
+
+  // ❌ No confirmation
+  return {
+    allowed: false,
+    reason: "no confirmed breakout/breakdown",
+  };
+}
+
+// ==========================================
+// EXPORTS
 // ==========================================
 module.exports = {
   checkTrend,
   checkRSI,
+  checkBreakout,
 };
