@@ -6,30 +6,36 @@
 const { finalDecision } = require("./signalDecision.service");
 
 // ==========================================
-// GET SIGNAL
-// /signal
+// POST /signal
 // ==========================================
 function getSignal(req, res) {
   try {
     const data = req.body;
 
-    if (!data) {
+    // -------------------------------
+    // BASIC INPUT CHECK
+    // -------------------------------
+    if (!data || typeof data !== "object") {
       return res.json({
         status: false,
-        message: "input data missing",
+        message: "input data missing or invalid",
       });
     }
 
+    // -------------------------------
+    // FINAL DECISION ENGINE
+    // -------------------------------
     const result = finalDecision(data);
 
     return res.json({
       status: true,
-      signal: result.signal,
-      trend: result.trend || null,
-      reason: result.reason,
+      signal: result.signal,          // BUY / SELL / WAIT
+      trend: result.trend || null,    // UPTREND / DOWNTREND / null
+      reason: result.reason,          // clear explanation
     });
   } catch (e) {
-    console.error("❌ Signal API Error:", e.message);
+    console.error("❌ Signal API Error:", e);
+
     return res.json({
       status: false,
       message: "signal processing error",
