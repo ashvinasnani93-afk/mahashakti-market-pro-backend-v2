@@ -1,6 +1,7 @@
 // ==========================================
-// SIGNAL API – ANDROID READY
+// SIGNAL API – FINAL (PHASE 1 SAFE)
 // BUY / SELL / WAIT
+// ANDROID READY + SAFETY CONTEXT
 // ==========================================
 
 const { finalDecision } = require("./signalDecision.service");
@@ -10,17 +11,46 @@ const { finalDecision } = require("./signalDecision.service");
 // ==========================================
 function getSignal(req, res) {
   try {
-    const data = req.body;
+    const body = req.body;
 
     // -------------------------------
     // BASIC INPUT CHECK
     // -------------------------------
-    if (!data || typeof data !== "object") {
+    if (!body || typeof body !== "object") {
       return res.json({
         status: false,
         message: "input data missing or invalid",
       });
     }
+
+    if (!Array.isArray(body.closes) || body.closes.length === 0) {
+      return res.json({
+        status: false,
+        message: "closes array required",
+      });
+    }
+
+    // -------------------------------
+    // NORMALIZED DATA (ENGINE + SAFETY SAFE)
+    // -------------------------------
+    const data = {
+      // ===== PRICE DATA =====
+      closes: body.closes,
+      ema20: body.ema20 || [],
+      ema50: body.ema50 || [],
+      rsi: body.rsi,
+      close: body.close,
+      support: body.support,
+      resistance: body.resistance,
+      volume: body.volume,
+      avgVolume: body.avgVolume,
+
+      // ===== SAFETY CONTEXT (PHASE 1) =====
+      isResultDay: body.isResultDay === true,
+      isExpiryDay: body.isExpiryDay === true,
+      tradeCountToday: Number(body.tradeCountToday || 0),
+      tradeType: body.tradeType || "INTRADAY",
+    };
 
     // -------------------------------
     // FINAL DECISION ENGINE
@@ -29,12 +59,12 @@ function getSignal(req, res) {
 
     return res.json({
       status: true,
-      signal: result.signal,          // BUY / SELL / WAIT
-      trend: result.trend || null,    // UPTREND / DOWNTREND / null
-      reason: result.reason,          // clear explanation
+      signal: result.signal,        // BUY / SELL / WAIT
+      trend: result.trend || null,  // UPTREND / DOWNTREND / null
+      reason: result.reason,        // clear explanation
     });
   } catch (e) {
-    console.error("❌ Signal API Error:", e);
+    console.error("❌ Signal API Error:", e.message);
 
     return res.json({
       status: false,
