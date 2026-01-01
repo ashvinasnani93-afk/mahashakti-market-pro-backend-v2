@@ -1,6 +1,7 @@
 // ==========================================
-// SIGNAL DECISION ENGINE – FINAL STEP
-// Combines all checks → BUY / SELL / WAIT
+// SIGNAL DECISION ENGINE – FINAL STEP (PHASE-2A)
+// Combines Technical + Institutional + Safety
+// BUY / SELL / WAIT
 // ==========================================
 
 const {
@@ -10,8 +11,12 @@ const {
   checkVolume,
 } = require("./signal.engine");
 
-// 🔒 SAFETY LAYER (Phase-1)
+// 🔒 SAFETY LAYER (Phase-1 LOCKED)
 const { applySafety } = require("./signalSafety.service");
+
+// 🏦 INSTITUTIONAL CONTEXT (REAL – PHASE-2A)
+const { summarizeOI } = require("./institutional/oi.service");
+const { getPCRContext } = require("./institutional/pcr.service");
 
 /**
  * finalDecision
@@ -105,12 +110,48 @@ function finalDecision(data) {
   }
 
   // -------------------------------
-  // ✅ FINAL RAW SIGNAL
+  // STEP 5: INSTITUTIONAL CONFIRMATION (REAL)
+  // -------------------------------
+  const oiSummary = summarizeOI(data.oiData || []);
+  const pcrContext = getPCRContext(data.pcrValue);
+
+  // BUY allowed only if institutional not bearish
+  if (
+    breakoutResult.action === "BUY" &&
+    (oiSummary.bias === "BEARISH" || pcrContext.bias === "BEARISH")
+  ) {
+    return applySafety(
+      {
+        signal: "WAIT",
+        trend: trendResult.trend,
+        reason: "Technical BUY but institutional bearish",
+      },
+      safetyContext
+    );
+  }
+
+  // SELL allowed only if institutional not bullish
+  if (
+    breakoutResult.action === "SELL" &&
+    (oiSummary.bias === "BULLISH" || pcrContext.bias === "BULLISH")
+  ) {
+    return applySafety(
+      {
+        signal: "WAIT",
+        trend: trendResult.trend,
+        reason: "Technical SELL but institutional bullish",
+      },
+      safetyContext
+    );
+  }
+
+  // -------------------------------
+  // ✅ FINAL RAW SIGNAL (ALIGNED)
   // -------------------------------
   const rawSignal = {
-    signal: breakoutResult.action, // BUY or SELL
+    signal: breakoutResult.action, // BUY / SELL
     trend: trendResult.trend,
-    reason: "All conditions satisfied",
+    reason: "Technical + Institutional conditions aligned",
   };
 
   // 🔒 APPLY SAFETY (result / expiry / overtrade etc.)
