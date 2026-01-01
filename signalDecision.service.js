@@ -18,7 +18,7 @@ const { applySafety } = require("./signalSafety.service");
 // 🏦 INSTITUTIONAL CONTEXT (REAL – PHASE-2A)
 const { summarizeOI } = require("./institutional/oi.service");
 const { getPCRContext } = require("./institutional/pcr.service");
-
+const { detectFastMove } = require("./services/intradayFastMove.service");
 /**
  * finalDecision
  * @param {object} data
@@ -100,7 +100,31 @@ function finalDecision(data) {
       safetyContext
     );
   }
+// -------------------------------
+// STEP 4.5: INTRADAY FAST MOVE CHECK (PHASE-2B)
+// -------------------------------
+if (data.tradeType === "INTRADAY") {
+  const fastMoveResult = detectFastMove({
+    ltp: data.close,
+    prevLtp: data.prevClose,
+    volume: data.volume,
+    avgVolume: data.avgVolume,
+    trend: trendResult.trend,
+    isExpiryDay: safetyContext.isExpiryDay,
+    isResultDay: safetyContext.isResultDay,
+  });
 
+  if (fastMoveResult.signal && fastMoveResult.signal !== "WAIT") {
+    return applySafety(
+      {
+        signal: fastMoveResult.signal,
+        reason: fastMoveResult.reason,
+        mode: fastMoveResult.mode,
+      },
+      safetyContext
+    );
+  }
+}
   // -------------------------------
   // STEP 5: INSTITUTIONAL CONFIRMATION
   // -------------------------------
