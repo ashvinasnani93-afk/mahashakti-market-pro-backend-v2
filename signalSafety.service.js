@@ -1,59 +1,90 @@
 // ==========================================
-// SIGNAL SAFETY SERVICE – PHASE 1
+// SIGNAL SAFETY SERVICE – PHASE 1 (FINAL)
 // FINAL SAFETY + CONTEXT LAYER
+// (RULE-LOCKED IMPLEMENTATION)
 // ==========================================
 
 /**
  * applySafety
- * @param {object} signalResult  // BUY / SELL / WAIT from signalDecision
- * @param {object} context       // market & user context
- * @returns {object}             // FINAL SAFE SIGNAL
+ * @param {object} signalResult
+ *   { signal: "BUY" | "SELL" | "WAIT", reason?: string, trend?: string }
+ * @param {object} context
+ *   {
+ *     isResultDay: boolean,
+ *     isExpiryDay: boolean,
+ *     tradeCountToday: number,
+ *     tradeType: "INTRADAY" | "EQUITY"
+ *   }
+ * @returns {object} FINAL SAFE SIGNAL
  */
 function applySafety(signalResult, context = {}) {
   // -------------------------------
-  // DEFAULT CONTEXT (TEMP)
+  // HARD SAFETY: invalid input
+  // -------------------------------
+  if (!signalResult || !signalResult.signal) {
+    return {
+      signal: "WAIT",
+      reason: "Safety: invalid signal input",
+    };
+  }
+
+  // -------------------------------
+  // CONTEXT DEFAULTS
   // -------------------------------
   const {
     isResultDay = false,
     isExpiryDay = false,
     tradeCountToday = 0,
-    tradeType = "INTRADAY", // EQUITY / INTRADAY
+    tradeType = "INTRADAY",
   } = context;
 
   // -------------------------------
-  // RESULT DAY SAFETY
+  // RESULT DAY SAFETY (LOCKED)
   // -------------------------------
   if (isResultDay && signalResult.signal !== "WAIT") {
     return {
       signal: "WAIT",
-      reason: "Result day safety – trade blocked",
+      reason: "Result-day safety active",
     };
   }
 
   // -------------------------------
-  // EXPIRY DAY SAFETY
+  // EXPIRY DAY SAFETY (LOCKED)
   // -------------------------------
   if (isExpiryDay && signalResult.signal !== "WAIT") {
     return {
       signal: "WAIT",
-      reason: "Expiry day safety – trade blocked",
+      reason: "Expiry-day safety active",
     };
   }
 
   // -------------------------------
-  // OVERTRADE GUARD
+  // OVERTRADE GUARD (LOCKED)
   // -------------------------------
   if (tradeCountToday >= 3 && signalResult.signal !== "WAIT") {
     return {
       signal: "WAIT",
-      reason: "Overtrade guard – trade limit reached",
+      reason: "Overtrade guard: daily limit reached",
     };
   }
 
   // -------------------------------
-  // PASS THROUGH (SAFE)
+  // EQUITY vs INTRADAY SAFETY
   // -------------------------------
-  return signalResult;
+  if (tradeType === "EQUITY" && signalResult.signal === "SELL") {
+    return {
+      signal: "WAIT",
+      reason: "Equity safety: no panic sell allowed",
+    };
+  }
+
+  // -------------------------------
+  // SAFE PASS THROUGH
+  // -------------------------------
+  return {
+    ...signalResult,
+    safety: "PASSED",
+  };
 }
 
 // ==========================================
