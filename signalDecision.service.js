@@ -1,5 +1,5 @@
 // ==========================================
-// SIGNAL DECISION ENGINE – FINAL STEP (PHASE-2A)
+// SIGNAL DECISION ENGINE – FINAL STEP (PHASE-2A + C3.1)
 // Combines Technical + Institutional + Safety
 // BUY / SELL / WAIT
 // ==========================================
@@ -25,13 +25,16 @@ const { getPCRContext } = require("./institutional/pcr.service");
  */
 function finalDecision(data) {
   // -------------------------------
-  // SAFETY CONTEXT
+  // SAFETY + RISK CONTEXT
   // -------------------------------
   const safetyContext = {
     isResultDay: data.isResultDay || false,
     isExpiryDay: data.isExpiryDay || false,
     tradeCountToday: data.tradeCountToday || 0,
     tradeType: data.tradeType || "INTRADAY",
+
+    // 🟡 VIX CONTEXT (C3.1 – SAFETY ONLY)
+    vix: typeof data.vix === "number" ? data.vix : null,
   };
 
   // -------------------------------
@@ -134,7 +137,7 @@ function finalDecision(data) {
   }
 
   // -------------------------------
-  // ✅ FINAL SIGNAL
+  // ✅ FINAL SIGNAL (CORE UNCHANGED)
   // -------------------------------
   const rawSignal = {
     signal: breakoutResult.action, // BUY / SELL
@@ -142,6 +145,7 @@ function finalDecision(data) {
     reason: "Technical + Institutional conditions aligned",
   };
 
+  // 🔒 APPLY SAFETY (Result / Expiry / Overtrade / VIX context)
   return applySafety(rawSignal, safetyContext);
 }
 
