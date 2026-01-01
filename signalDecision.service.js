@@ -20,6 +20,16 @@ const { applySafety } = require("./signalSafety.service");
  */
 function finalDecision(data) {
   // -------------------------------
+  // SAFETY CONTEXT (EXPLICIT)
+  // -------------------------------
+  const safetyContext = {
+    isResultDay: data.isResultDay || false,
+    isExpiryDay: data.isExpiryDay || false,
+    tradeCountToday: data.tradeCountToday || 0,
+    tradeType: data.tradeType || "INTRADAY",
+  };
+
+  // -------------------------------
   // STEP 1: TREND
   // -------------------------------
   const trendResult = checkTrend({
@@ -34,7 +44,7 @@ function finalDecision(data) {
         signal: "WAIT",
         reason: trendResult.reason,
       },
-      data
+      safetyContext
     );
   }
 
@@ -52,7 +62,7 @@ function finalDecision(data) {
         signal: "WAIT",
         reason: rsiResult.reason,
       },
-      data
+      safetyContext
     );
   }
 
@@ -72,7 +82,7 @@ function finalDecision(data) {
         signal: "WAIT",
         reason: breakoutResult.reason,
       },
-      data
+      safetyContext
     );
   }
 
@@ -90,7 +100,7 @@ function finalDecision(data) {
         signal: "WAIT",
         reason: volumeResult.reason,
       },
-      data
+      safetyContext
     );
   }
 
@@ -104,7 +114,7 @@ function finalDecision(data) {
   };
 
   // 🔒 APPLY SAFETY (result / expiry / overtrade etc.)
-  return applySafety(rawSignal, data);
+  return applySafety(rawSignal, safetyContext);
 }
 
 // ==========================================
