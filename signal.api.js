@@ -1,7 +1,7 @@
 // ==========================================
-// SIGNAL API – FINAL (PHASE 1 SAFE)
+// SIGNAL API – FINAL (PHASE-2A READY)
 // BUY / SELL / WAIT
-// ANDROID READY + SAFETY CONTEXT
+// ANDROID READY + SAFETY + INSTITUTIONAL
 // ==========================================
 
 const { finalDecision } = require("./signalDecision.service");
@@ -31,10 +31,10 @@ function getSignal(req, res) {
     }
 
     // -------------------------------
-    // NORMALIZED DATA (ENGINE + SAFETY SAFE)
+    // NORMALIZED DATA (ENGINE + SAFETY + INSTITUTIONAL)
     // -------------------------------
     const data = {
-      // ===== PRICE DATA =====
+      // ===== PRICE / TECHNICAL =====
       closes: body.closes,
       ema20: body.ema20 || [],
       ema50: body.ema50 || [],
@@ -45,7 +45,12 @@ function getSignal(req, res) {
       volume: body.volume,
       avgVolume: body.avgVolume,
 
-      // ===== SAFETY CONTEXT (PHASE 1) =====
+      // ===== INSTITUTIONAL (PHASE-2A REAL) =====
+      oiData: Array.isArray(body.oiData) ? body.oiData : [],
+      pcrValue:
+        typeof body.pcrValue === "number" ? body.pcrValue : null,
+
+      // ===== SAFETY CONTEXT (PHASE-1 LOCKED) =====
       isResultDay: body.isResultDay === true,
       isExpiryDay: body.isExpiryDay === true,
       tradeCountToday: Number(body.tradeCountToday || 0),
@@ -61,7 +66,7 @@ function getSignal(req, res) {
       status: true,
       signal: result.signal,        // BUY / SELL / WAIT
       trend: result.trend || null,  // UPTREND / DOWNTREND / null
-      reason: result.reason,        // clear explanation
+      reason: result.reason,        // explainable output
     });
   } catch (e) {
     console.error("❌ Signal API Error:", e.message);
