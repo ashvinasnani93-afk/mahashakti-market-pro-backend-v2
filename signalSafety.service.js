@@ -1,5 +1,5 @@
 // ==========================================
-// SIGNAL SAFETY SERVICE – PHASE 1 (FINAL)
+// SIGNAL SAFETY SERVICE – PHASE 1 + C3.2
 // FINAL SAFETY + CONTEXT LAYER
 // (RULE-LOCKED IMPLEMENTATION)
 // ==========================================
@@ -13,7 +13,8 @@
  *     isResultDay: boolean,
  *     isExpiryDay: boolean,
  *     tradeCountToday: number,
- *     tradeType: "INTRADAY" | "EQUITY"
+ *     tradeType: "INTRADAY" | "EQUITY",
+ *     vix?: number
  *   }
  * @returns {object} FINAL SAFE SIGNAL
  */
@@ -36,6 +37,7 @@ function applySafety(signalResult, context = {}) {
     isExpiryDay = false,
     tradeCountToday = 0,
     tradeType = "INTRADAY",
+    vix = null, // 🟡 VIX CONTEXT (C3.2)
   } = context;
 
   // -------------------------------
@@ -69,13 +71,34 @@ function applySafety(signalResult, context = {}) {
   }
 
   // -------------------------------
-  // EQUITY vs INTRADAY SAFETY
+  // EQUITY vs INTRADAY SAFETY (LOCKED)
   // -------------------------------
   if (tradeType === "EQUITY" && signalResult.signal === "SELL") {
     return {
       signal: "WAIT",
       reason: "Equity safety: no panic sell allowed",
     };
+  }
+
+  // -------------------------------
+  // 🟡 VIX BEHAVIOR MESSAGE (C3.2 – NON-BLOCKING)
+  // -------------------------------
+  if (typeof vix === "number") {
+    if (vix >= 20) {
+      return {
+        ...signalResult,
+        note: "High volatility (VIX elevated) – trade with caution",
+        safety: "PASSED",
+      };
+    }
+
+    if (vix <= 12) {
+      return {
+        ...signalResult,
+        note: "Low volatility – stable market conditions",
+        safety: "PASSED",
+      };
+    }
   }
 
   // -------------------------------
