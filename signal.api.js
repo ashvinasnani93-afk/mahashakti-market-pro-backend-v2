@@ -31,7 +31,8 @@ function getSignal(req, res) {
     }
 
     // -------------------------------
-    // NORMALIZED DATA (ENGINE + SAFETY + INSTITUTIONAL)
+    // NORMALIZED DATA
+    // (ENGINE + SAFETY + INSTITUTIONAL)
     // -------------------------------
     const data = {
       // ===== PRICE / TECHNICAL =====
@@ -55,6 +56,9 @@ function getSignal(req, res) {
       isExpiryDay: body.isExpiryDay === true,
       tradeCountToday: Number(body.tradeCountToday || 0),
       tradeType: body.tradeType || "INTRADAY",
+
+      // ===== VIX (SAFETY TEXT ONLY – LOCKED RULE) =====
+      vix: typeof body.vix === "number" ? body.vix : null,
     };
 
     // -------------------------------
@@ -62,11 +66,28 @@ function getSignal(req, res) {
     // -------------------------------
     const result = finalDecision(data);
 
+    // -------------------------------
+    // VIX SAFETY NOTE (TEXT ONLY)
+    // ❌ No signal change allowed
+    // -------------------------------
+    let vixNote = null;
+
+    if (typeof data.vix === "number") {
+      if (data.vix >= 18) {
+        vixNote = "High volatility (VIX elevated) – reduce position size & expect fast moves";
+      } else if (data.vix <= 12) {
+        vixNote = "Low volatility (VIX calm) – breakout follow-through may be slow";
+      } else {
+        vixNote = "Normal volatility conditions";
+      }
+    }
+
     return res.json({
       status: true,
       signal: result.signal,        // BUY / SELL / WAIT
       trend: result.trend || null,  // UPTREND / DOWNTREND / null
       reason: result.reason,        // explainable output
+      vixNote,                      // 🟡 SAFETY CONTEXT ONLY
     });
   } catch (e) {
     console.error("❌ Signal API Error:", e.message);
