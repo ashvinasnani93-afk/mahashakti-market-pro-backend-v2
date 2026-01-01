@@ -10,6 +10,9 @@ const {
   checkVolume,
 } = require("./signal.engine");
 
+// 🔒 SAFETY LAYER (Phase-1)
+const { applySafety } = require("./signalSafety.service");
+
 /**
  * finalDecision
  * @param {object} data
@@ -26,10 +29,13 @@ function finalDecision(data) {
   });
 
   if (trendResult.trend === "NO_TRADE") {
-    return {
-      signal: "WAIT",
-      reason: trendResult.reason,
-    };
+    return applySafety(
+      {
+        signal: "WAIT",
+        reason: trendResult.reason,
+      },
+      data
+    );
   }
 
   // -------------------------------
@@ -41,10 +47,13 @@ function finalDecision(data) {
   });
 
   if (!rsiResult.allowed) {
-    return {
-      signal: "WAIT",
-      reason: rsiResult.reason,
-    };
+    return applySafety(
+      {
+        signal: "WAIT",
+        reason: rsiResult.reason,
+      },
+      data
+    );
   }
 
   // -------------------------------
@@ -58,10 +67,13 @@ function finalDecision(data) {
   });
 
   if (!breakoutResult.allowed) {
-    return {
-      signal: "WAIT",
-      reason: breakoutResult.reason,
-    };
+    return applySafety(
+      {
+        signal: "WAIT",
+        reason: breakoutResult.reason,
+      },
+      data
+    );
   }
 
   // -------------------------------
@@ -73,24 +85,30 @@ function finalDecision(data) {
   });
 
   if (!volumeResult.allowed) {
-    return {
-      signal: "WAIT",
-      reason: volumeResult.reason,
-    };
+    return applySafety(
+      {
+        signal: "WAIT",
+        reason: volumeResult.reason,
+      },
+      data
+    );
   }
 
   // -------------------------------
-  // ✅ FINAL SIGNAL
+  // ✅ FINAL RAW SIGNAL
   // -------------------------------
-  return {
+  const rawSignal = {
     signal: breakoutResult.action, // BUY or SELL
     trend: trendResult.trend,
     reason: "All conditions satisfied",
   };
+
+  // 🔒 APPLY SAFETY (result / expiry / overtrade etc.)
+  return applySafety(rawSignal, data);
 }
 
 // ==========================================
-// EXPORT (⚠️ ONLY small f)
+// EXPORT
 // ==========================================
 module.exports = {
   finalDecision,
