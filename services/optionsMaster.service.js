@@ -57,7 +57,6 @@ function getOptionsContext(data = {}) {
     note: "Options context prepared (no signal yet)",
   };
 }
-}
 
 // ==========================================
 // EXPORT
