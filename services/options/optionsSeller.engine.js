@@ -1,8 +1,32 @@
 // ==================================================
 // OPTIONS SELLER ENGINE (PHASE-4.2)
-// RANGE / SIDEWAYS MARKET – SELL DECISION ONLY
+// RANGE / SIDEWAYS MARKET – SELL DECISION + STRIKE LOGIC
 // NO EXECUTION | RULE LOCKED
 // ==================================================
+
+/**
+ * calculateStrike
+ * @param {number} spotPrice
+ * @param {string} expiryType  WEEKLY_EXPIRY / MONTHLY_EXPIRY
+ * @returns {object}
+ */
+function calculateStrike(spotPrice, expiryType) {
+  // Base ATM rounded to nearest 50
+  const atm = Math.round(spotPrice / 50) * 50;
+
+  // Distance rules
+  const percent =
+    expiryType === "WEEKLY_EXPIRY" ? 0.012 : 0.025; // 1.2% weekly | 2.5% monthly
+
+  const distance = Math.round((spotPrice * percent) / 50) * 50;
+
+  return {
+    ceStrike: atm + distance,
+    peStrike: atm - distance,
+    atm,
+    distance,
+  };
+}
 
 /**
  * evaluateSellerContext
@@ -16,6 +40,8 @@ function evaluateSellerContext(context = {}) {
     trend,        // UPTREND / DOWNTREND / SIDEWAYS
     rsi,
     safety,
+    spotPrice,
+    expiryType,
   } = context;
 
   // ----------------------------------
@@ -24,15 +50,15 @@ function evaluateSellerContext(context = {}) {
   if (!safety) {
     return {
       sellerAllowed: false,
-      reason: "Safety context missing",
+      note: "Safety context missing",
     };
   }
 
   // Expiry / Event day = no selling
-  if (safety.isExpiryDay) {
+  if (safety.isExpiryDay || safety.isResultDay) {
     return {
       sellerAllowed: false,
-      reason: "Option selling blocked on expiry day",
+      note: "Option selling blocked on expiry / result day",
     };
   }
 
@@ -42,7 +68,7 @@ function evaluateSellerContext(context = {}) {
   if (trend !== "SIDEWAYS") {
     return {
       sellerAllowed: false,
-      reason: "Market not sideways – option selling avoided",
+      note: "Market not sideways – option selling avoided",
     };
   }
 
@@ -52,7 +78,7 @@ function evaluateSellerContext(context = {}) {
   if (typeof rsi !== "number") {
     return {
       sellerAllowed: false,
-      reason: "RSI data missing for seller decision",
+      note: "RSI data missing for seller decision",
     };
   }
 
@@ -60,9 +86,21 @@ function evaluateSellerContext(context = {}) {
   if (rsi > 65 || rsi < 35) {
     return {
       sellerAllowed: false,
-      reason: "RSI extreme – unsafe for option selling",
+      note: "RSI extreme – unsafe for option selling",
     };
   }
+
+  // ----------------------------------
+  // STRIKE SELECTION (RULE LOCKED)
+  // ----------------------------------
+  if (typeof spotPrice !== "number" || !expiryType) {
+    return {
+      sellerAllowed: false,
+      note: "Spot price / expiry missing for strike selection",
+    };
+  }
+
+  const strikeInfo = calculateStrike(spotPrice, expiryType);
 
   // ----------------------------------
   // ✅ SELL ALLOWED
@@ -70,7 +108,13 @@ function evaluateSellerContext(context = {}) {
   return {
     sellerAllowed: true,
     strategy: "RANGE_OPTION_SELL",
-    note: "Sideways market + stable RSI – option selling allowed",
+    expiryType,
+    atm: strikeInfo.atm,
+    ceStrike: strikeInfo.ceStrike,
+    peStrike: strikeInfo.peStrike,
+    strikeDistance: strikeInfo.distance,
+    note:
+      "Sideways market + stable RSI → CE & PE selling allowed (safe distance)",
   };
 }
 
