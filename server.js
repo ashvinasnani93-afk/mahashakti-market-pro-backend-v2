@@ -14,7 +14,7 @@ const { getSignal } = require("./signal.api");
 const { getOptionChain } = require("./optionchain.api");
 
 // ✅ OPTIONS CONTEXT API (PHASE-3 START)
-const { getOptionsContextApi } = require("./services/options/options.api");
+const { getOptionsContextApi } = require("./services/options/optionsContext.api");
 
 const { loadOptionSymbolMaster } = require("./token.service");
 
