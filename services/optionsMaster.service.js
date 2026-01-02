@@ -56,7 +56,8 @@ function getOptionsContext(data = {}) {
   });
 
   // -----------------------------
-  // BASE CONTEXT (NO SIGNAL)
+  // FINAL OPTIONS CONTEXT
+  // (NO BUY / SELL — LOCKED)
   // -----------------------------
   return {
     status: "READY",
@@ -64,8 +65,8 @@ function getOptionsContext(data = {}) {
     spotPrice,
     expiryType,
     tradeContext,
-    safety: safetyContext,
-    note: "Options context prepared (no signal yet)",
+    safety: safetyContext.safety,
+    note: "Options master + safety context ready (no signal yet)",
   };
 }
 
