@@ -93,7 +93,7 @@ function generateOptionsSignal(context = {}) {
   else if (ema20 < ema50) trend = "DOWNTREND";
 
   // --------------------------------------------------
-  // NO-TRADE ZONE
+  // OPTIONS NO-TRADE ZONE (LOCKED)
   // --------------------------------------------------
   if (isNoTradeZone({ spotPrice, ema20, ema50 })) {
     return {
@@ -107,7 +107,7 @@ function generateOptionsSignal(context = {}) {
   }
 
   // --------------------------------------------------
-  // RSI + VIX SANITY
+  // RSI + VIX SANITY (LOCKED)
   // --------------------------------------------------
   if (typeof rsi !== "number") {
     return { status: "WAIT", reason: "RSI data missing" };
@@ -127,7 +127,7 @@ function generateOptionsSignal(context = {}) {
   }
 
   // --------------------------------------------------
-  // BUYER / SELLER REGIME
+  // BUYER / SELLER REGIME (FOUNDATION)
   // --------------------------------------------------
   let regime = "SIDEWAYS";
   let buyerAllowed = false;
@@ -136,31 +136,35 @@ function generateOptionsSignal(context = {}) {
   if (trend === "UPTREND" || trend === "DOWNTREND") {
     regime = "TRENDING";
     buyerAllowed = true;
+    sellerAllowed = false;
   } else {
     regime = "SIDEWAYS";
+    buyerAllowed = false;
     sellerAllowed = true;
   }
 
   // --------------------------------------------------
-  // 🔥 SELLER ENGINE FINAL DECISION
+  // 🔥 SELLER ENGINE (FINAL AUTHORITY FOR SELL)
   // --------------------------------------------------
+  let sellerContext = null;
+
   if (sellerAllowed) {
-    const sellerContext = evaluateSellerContext({
+    sellerContext = evaluateSellerContext({
       trend,
       rsi,
       safety,
+      regime,
+      vix,
     });
 
-    if (sellerContext.sellerAllowed) {
+    if (!sellerContext.sellerAllowed) {
       return {
-        status: "SELL_ALLOWED",
+        status: "WAIT",
         engine: "OPTIONS_SIGNAL_ENGINE",
-        mode: "OPTION_SELLER",
-        strategy: sellerContext.strategy,
         trend,
         regime,
         buyerAllowed: false,
-        sellerAllowed: true,
+        sellerAllowed: false,
         reason: sellerContext.note,
       };
     }
@@ -176,9 +180,14 @@ function generateOptionsSignal(context = {}) {
     spotPrice,
     trend,
     regime,
+
     buyerAllowed,
-    sellerAllowed,
-    note: "Options regime evaluated (buyer/seller rules applied)",
+    sellerAllowed: sellerContext ? sellerContext.sellerAllowed : false,
+    sellerStrategy: sellerContext ? sellerContext.strategy : null,
+
+    note: sellerContext
+      ? sellerContext.note
+      : "Options regime evaluated (no execution)",
   };
 }
 
