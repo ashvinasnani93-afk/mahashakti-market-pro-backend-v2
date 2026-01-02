@@ -5,6 +5,7 @@
 // ==================================================
 
 const { evaluateSellerContext } = require("./optionsSeller.engine");
+const { evaluateBuyerContext } = require("./optionsBuyer.engine");
 
 // ==========================================
 // OPTIONS NO-TRADE ZONE (FOUNDATION)
@@ -133,14 +134,24 @@ function generateOptionsSignal(context = {}) {
   let buyerAllowed = false;
   let sellerAllowed = false;
 
-  if (trend === "UPTREND" || trend === "DOWNTREND") {
-    regime = "TRENDING";
-    buyerAllowed = true;
-    sellerAllowed = false;
-  } else {
+  // ---------- BUYER ENGINE (FINAL AUTHORITY FOR BUY)
+  const buyerContext = evaluateBuyerContext({
+    trend,
+    rsi,
+    vix,
+    safety,
+    tradeContext,
+  });
+
+  buyerAllowed = buyerContext.buyerAllowed;
+
+  // ---------- SELLER BASE CONDITION
+  if (!buyerAllowed) {
     regime = "SIDEWAYS";
-    buyerAllowed = false;
     sellerAllowed = true;
+  } else {
+    regime = "TRENDING";
+    sellerAllowed = false;
   }
 
   // --------------------------------------------------
@@ -182,12 +193,13 @@ function generateOptionsSignal(context = {}) {
     regime,
 
     buyerAllowed,
+    buyerReason: buyerContext.reason,
+
     sellerAllowed: sellerContext ? sellerContext.sellerAllowed : false,
     sellerStrategy: sellerContext ? sellerContext.strategy : null,
+    sellerReason: sellerContext ? sellerContext.note : null,
 
-    note: sellerContext
-      ? sellerContext.note
-      : "Options regime evaluated (no execution)",
+    note: "Options buyer/seller regime evaluated (no execution)",
   };
 }
 
