@@ -10,10 +10,53 @@
  * @returns {object}
  */
 function getOptionsContext(data = {}) {
+  const {
+    symbol,
+    spotPrice,
+    expiry,
+    tradeType,
+  } = data;
+
+  // -----------------------------
+  // HARD SAFETY CHECK
+  // -----------------------------
+  if (!symbol || !spotPrice || !expiry || !tradeType) {
+    return {
+      status: "WAIT",
+      reason: "Insufficient options input data",
+    };
+  }
+
+  // -----------------------------
+  // EXPIRY CONTEXT
+  // -----------------------------
+  const expiryType =
+    expiry === "WEEKLY"
+      ? "WEEKLY_EXPIRY"
+      : expiry === "MONTHLY"
+      ? "MONTHLY_EXPIRY"
+      : "UNKNOWN_EXPIRY";
+
+  // -----------------------------
+  // TRADE TYPE CONTEXT
+  // -----------------------------
+  const tradeContext =
+    tradeType === "INTRADAY"
+      ? "INTRADAY_OPTIONS"
+      : "POSITIONAL_OPTIONS";
+
+  // -----------------------------
+  // BASE CONTEXT (NO SIGNAL)
+  // -----------------------------
   return {
-    status: "INIT",
-    note: "Options master initialized",
+    status: "READY",
+    symbol,
+    spotPrice,
+    expiryType,
+    tradeContext,
+    note: "Options context prepared (no signal yet)",
   };
+}
 }
 
 // ==========================================
