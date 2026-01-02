@@ -13,13 +13,16 @@
  * No direct market / API calls here
  */
 function generateOptionsSignal(context = {}) {
-  const {
-    symbol,
-    spotPrice,
-    expiryType,
-    tradeContext,
-    safety,
-  } = context;
+ const {
+  symbol,
+  spotPrice,
+  expiryType,
+  tradeContext,
+  safety,
+
+  ema20,
+  ema50,
+} = context;
 
   // --------------------------------------------------
   // HARD INPUT VALIDATION
