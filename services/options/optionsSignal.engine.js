@@ -4,6 +4,35 @@
 // NO DUMMY | NO SHORTCUT
 // ==================================================
 
+// ==========================================
+// OPTIONS NO-TRADE ZONE (FOUNDATION)
+// Sideways / Noise market protection
+// ==========================================
+function isNoTradeZone({ spotPrice, ema20, ema50 }) {
+  if (
+    typeof spotPrice !== "number" ||
+    typeof ema20 !== "number" ||
+    typeof ema50 !== "number"
+  ) {
+    return false;
+  }
+
+  // EMA compression check
+  const emaDiffPercent =
+    (Math.abs(ema20 - ema50) / spotPrice) * 100;
+
+  // Price too close to EMA (noise zone)
+  const priceNearEMA =
+    (Math.abs(spotPrice - ema20) / spotPrice) * 100 < 0.15;
+
+  // NO-TRADE ZONE condition
+  if (emaDiffPercent < 0.2 && priceNearEMA) {
+    return true;
+  }
+
+  return false;
+}
+
 /**
  * generateOptionsSignal
  * @param {object} context
@@ -52,7 +81,6 @@ function generateOptionsSignal(context = {}) {
     };
   }
 
-  // Expiry day = no fresh options signal
   if (safety.isExpiryDay) {
     return {
       status: "WAIT",
@@ -60,7 +88,6 @@ function generateOptionsSignal(context = {}) {
     };
   }
 
-  // Intraday trade blocked if not allowed
   if (
     tradeContext === "INTRADAY_OPTIONS" &&
     !safety.intradayAllowed
@@ -71,7 +98,6 @@ function generateOptionsSignal(context = {}) {
     };
   }
 
-  // Positional trade blocked if not allowed
   if (
     tradeContext === "POSITIONAL_OPTIONS" &&
     !safety.positionalAllowed
@@ -93,10 +119,18 @@ function generateOptionsSignal(context = {}) {
   }
 
   let trend = "SIDEWAYS";
-  if (ema20 > ema50) {
-    trend = "UPTREND";
-  } else if (ema20 < ema50) {
-    trend = "DOWNTREND";
+  if (ema20 > ema50) trend = "UPTREND";
+  else if (ema20 < ema50) trend = "DOWNTREND";
+
+  // --------------------------------------------------
+  // 🔒 OPTIONS NO-TRADE ZONE (LOCKED)
+  // --------------------------------------------------
+  if (isNoTradeZone({ spotPrice, ema20, ema50 })) {
+    return {
+      status: "WAIT",
+      trend,
+      reason: "Options no-trade zone: EMA compression / price noise",
+    };
   }
 
   // --------------------------------------------------
@@ -109,7 +143,6 @@ function generateOptionsSignal(context = {}) {
     };
   }
 
-  // Overbought zone
   if (rsi >= 70) {
     return {
       status: "WAIT",
@@ -117,7 +150,6 @@ function generateOptionsSignal(context = {}) {
     };
   }
 
-  // Oversold zone
   if (rsi <= 30) {
     return {
       status: "WAIT",
@@ -133,7 +165,8 @@ function generateOptionsSignal(context = {}) {
     engine: "OPTIONS_SIGNAL_ENGINE",
     trend,
     rsiStatus: "NORMAL",
-    note: "EMA trend + RSI sanity evaluated. Signal rules locked (no execution).",
+    note:
+      "EMA trend + RSI sanity + no-trade zone evaluated. Rules locked.",
   };
 }
 
