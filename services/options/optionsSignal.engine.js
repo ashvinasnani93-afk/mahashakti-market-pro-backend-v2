@@ -4,6 +4,8 @@
 // NO DUMMY | NO SHORTCUT
 // ==================================================
 
+const { evaluateSellerContext } = require("./optionsSeller.engine");
+
 // ==========================================
 // OPTIONS NO-TRADE ZONE (FOUNDATION)
 // Sideways / Noise market protection
@@ -17,26 +19,17 @@ function isNoTradeZone({ spotPrice, ema20, ema50 }) {
     return false;
   }
 
-  // EMA compression check
   const emaDiffPercent =
     (Math.abs(ema20 - ema50) / spotPrice) * 100;
 
-  // Price too close to EMA (noise zone)
   const priceNearEMA =
     (Math.abs(spotPrice - ema20) / spotPrice) * 100 < 0.15;
 
-  if (emaDiffPercent < 0.2 && priceNearEMA) {
-    return true;
-  }
-
-  return false;
+  return emaDiffPercent < 0.2 && priceNearEMA;
 }
 
 /**
  * generateOptionsSignal
- * @param {object} context
- * @returns {object}
- *
  * Context comes ONLY from optionsMaster.service
  */
 function generateOptionsSignal(context = {}) {
@@ -46,38 +39,28 @@ function generateOptionsSignal(context = {}) {
     expiryType,
     tradeContext,
     safety,
-
     ema20,
     ema50,
     rsi,
-    vix, // optional (future safety)
+    vix,
   } = context;
 
   // --------------------------------------------------
   // HARD INPUT VALIDATION
   // --------------------------------------------------
   if (!symbol || typeof spotPrice !== "number") {
-    return {
-      status: "WAIT",
-      reason: "Invalid symbol or spot price",
-    };
+    return { status: "WAIT", reason: "Invalid symbol or spot price" };
   }
 
   if (!expiryType || !tradeContext) {
-    return {
-      status: "WAIT",
-      reason: "Missing expiry or trade context",
-    };
+    return { status: "WAIT", reason: "Missing expiry or trade context" };
   }
 
   // --------------------------------------------------
   // SAFETY GATE (NON-NEGOTIABLE)
   // --------------------------------------------------
   if (!safety) {
-    return {
-      status: "WAIT",
-      reason: "Safety context missing",
-    };
+    return { status: "WAIT", reason: "Safety context missing" };
   }
 
   if (safety.isExpiryDay || safety.isResultDay) {
@@ -90,34 +73,19 @@ function generateOptionsSignal(context = {}) {
     };
   }
 
-  if (
-    tradeContext === "INTRADAY_OPTIONS" &&
-    !safety.intradayAllowed
-  ) {
-    return {
-      status: "WAIT",
-      reason: "Intraday options not allowed by safety layer",
-    };
+  if (tradeContext === "INTRADAY_OPTIONS" && !safety.intradayAllowed) {
+    return { status: "WAIT", reason: "Intraday options blocked by safety" };
   }
 
-  if (
-    tradeContext === "POSITIONAL_OPTIONS" &&
-    !safety.positionalAllowed
-  ) {
-    return {
-      status: "WAIT",
-      reason: "Positional options not allowed by safety layer",
-    };
+  if (tradeContext === "POSITIONAL_OPTIONS" && !safety.positionalAllowed) {
+    return { status: "WAIT", reason: "Positional options blocked by safety" };
   }
 
   // --------------------------------------------------
   // TREND CHECK (EMA 20 / EMA 50)
   // --------------------------------------------------
   if (typeof ema20 !== "number" || typeof ema50 !== "number") {
-    return {
-      status: "WAIT",
-      reason: "EMA data missing for options trend evaluation",
-    };
+    return { status: "WAIT", reason: "EMA data missing" };
   }
 
   let trend = "SIDEWAYS";
@@ -125,7 +93,7 @@ function generateOptionsSignal(context = {}) {
   else if (ema20 < ema50) trend = "DOWNTREND";
 
   // --------------------------------------------------
-  // OPTIONS NO-TRADE ZONE (LOCKED)
+  // NO-TRADE ZONE
   // --------------------------------------------------
   if (isNoTradeZone({ spotPrice, ema20, ema50 })) {
     return {
@@ -134,48 +102,68 @@ function generateOptionsSignal(context = {}) {
       regime: "NO_TRADE_ZONE",
       buyerAllowed: false,
       sellerAllowed: false,
-      reason: "EMA compression / price noise zone",
+      reason: "EMA compression / price noise",
     };
   }
 
   // --------------------------------------------------
-  // RSI SANITY CHECK (OPTIONS)
+  // RSI + VIX SANITY
   // --------------------------------------------------
   if (typeof rsi !== "number") {
-    return {
-      status: "WAIT",
-      reason: "RSI data missing",
-    };
+    return { status: "WAIT", reason: "RSI data missing" };
   }
 
   const rsiExtreme = rsi >= 70 || rsi <= 30;
+  const highVix = typeof vix === "number" && vix >= 18;
+
+  if (rsiExtreme || highVix) {
+    return {
+      status: "WAIT",
+      regime: "HIGH_RISK",
+      buyerAllowed: false,
+      sellerAllowed: false,
+      reason: "RSI extreme or high VIX",
+    };
+  }
 
   // --------------------------------------------------
-  // BUYER vs SELLER REGIME (FOUNDATION)
+  // BUYER / SELLER REGIME
   // --------------------------------------------------
   let regime = "SIDEWAYS";
   let buyerAllowed = false;
   let sellerAllowed = false;
 
-  // Strong trend → Buyer allowed
-  if ((trend === "UPTREND" || trend === "DOWNTREND") && !rsiExtreme) {
+  if (trend === "UPTREND" || trend === "DOWNTREND") {
     regime = "TRENDING";
     buyerAllowed = true;
-    sellerAllowed = false;
-  }
-
-  // Sideways market → Seller allowed
-  if (trend === "SIDEWAYS" && !rsiExtreme) {
+  } else {
     regime = "SIDEWAYS";
-    buyerAllowed = false;
     sellerAllowed = true;
   }
 
-  // High risk zone (RSI extreme / VIX spike)
-  if (rsiExtreme || vix >= 18) {
-    regime = "HIGH_RISK";
-    buyerAllowed = false;
-    sellerAllowed = false;
+  // --------------------------------------------------
+  // 🔥 SELLER ENGINE FINAL DECISION
+  // --------------------------------------------------
+  if (sellerAllowed) {
+    const sellerContext = evaluateSellerContext({
+      trend,
+      rsi,
+      safety,
+    });
+
+    if (sellerContext.sellerAllowed) {
+      return {
+        status: "SELL_ALLOWED",
+        engine: "OPTIONS_SIGNAL_ENGINE",
+        mode: "OPTION_SELLER",
+        strategy: sellerContext.strategy,
+        trend,
+        regime,
+        buyerAllowed: false,
+        sellerAllowed: true,
+        reason: sellerContext.note,
+      };
+    }
   }
 
   // --------------------------------------------------
@@ -187,11 +175,10 @@ function generateOptionsSignal(context = {}) {
     symbol,
     spotPrice,
     trend,
-    regime,          // TRENDING / SIDEWAYS / NO_TRADE_ZONE / HIGH_RISK
+    regime,
     buyerAllowed,
     sellerAllowed,
-    note:
-      "Options regime evaluated (buyer/seller rules applied, no execution)",
+    note: "Options regime evaluated (buyer/seller rules applied)",
   };
 }
 
