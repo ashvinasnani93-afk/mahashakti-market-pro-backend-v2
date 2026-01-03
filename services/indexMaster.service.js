@@ -8,94 +8,74 @@
  * INDEX / INSTRUMENT REGISTRY
  * This decides:
  * - Which symbols are allowed
- * - Which segment/page they belong to
- * - Whether options chain is supported
- * - UI intent mapping (color/symbol based, NOT text)
+ * - Which segments they belong to
+ * - What trade types are allowed
+ * - Whether OPTION CHAIN is supported
  */
-
 const INDEX_REGISTRY = {
   // ==========================
-  // INDEX OPTIONS
+  // NSE INDEXES
   // ==========================
   NIFTY: {
     instrumentType: "INDEX",
-    category: "INDEX_OPTIONS",
+    exchange: "NSE",
     segments: ["EQUITY", "OPTIONS"],
     allowedTradeTypes: ["INTRADAY", "POSITIONAL"],
     optionChain: true,
-    uiIntent: {
-      BUY: "GREEN",
-      SELL: "RED",
-      WAIT: "YELLOW",
-    },
   },
 
   BANKNIFTY: {
     instrumentType: "INDEX",
-    category: "INDEX_OPTIONS",
+    exchange: "NSE",
     segments: ["EQUITY", "OPTIONS"],
     allowedTradeTypes: ["INTRADAY", "POSITIONAL"],
     optionChain: true,
-    uiIntent: {
-      BUY: "GREEN",
-      SELL: "RED",
-      WAIT: "YELLOW",
-    },
   },
 
   FINNIFTY: {
     instrumentType: "INDEX",
-    category: "INDEX_OPTIONS",
+    exchange: "NSE",
     segments: ["EQUITY", "OPTIONS"],
     allowedTradeTypes: ["INTRADAY"],
     optionChain: true,
-    uiIntent: {
-      BUY: "GREEN",
-      SELL: "RED",
-      WAIT: "YELLOW",
-    },
   },
 
   MIDCPNIFTY: {
     instrumentType: "INDEX",
-    category: "INDEX_OPTIONS",
+    exchange: "NSE",
     segments: ["EQUITY", "OPTIONS"],
     allowedTradeTypes: ["INTRADAY"],
     optionChain: true,
-    uiIntent: {
-      BUY: "GREEN",
-      SELL: "RED",
-      WAIT: "YELLOW",
-    },
   },
 
   // ==========================
-  // STOCK OPTIONS
+  // BSE INDEX
   // ==========================
-  RELIANCE: {
-    instrumentType: "STOCK",
-    category: "STOCK_OPTIONS",
+  SENSEX: {
+    instrumentType: "INDEX",
+    exchange: "BSE",
     segments: ["EQUITY", "OPTIONS"],
     allowedTradeTypes: ["INTRADAY", "POSITIONAL"],
     optionChain: true,
-    uiIntent: {
-      BUY: "GREEN",
-      SELL: "RED",
-      WAIT: "YELLOW",
-    },
+  },
+
+  // ==========================
+  // STOCK OPTIONS (STARTER SET)
+  // ==========================
+  RELIANCE: {
+    instrumentType: "STOCK",
+    exchange: "NSE",
+    segments: ["EQUITY", "OPTIONS"],
+    allowedTradeTypes: ["INTRADAY", "POSITIONAL"],
+    optionChain: true,
   },
 
   TCS: {
     instrumentType: "STOCK",
-    category: "STOCK_OPTIONS",
+    exchange: "NSE",
     segments: ["EQUITY", "OPTIONS"],
     allowedTradeTypes: ["INTRADAY", "POSITIONAL"],
     optionChain: true,
-    uiIntent: {
-      BUY: "GREEN",
-      SELL: "RED",
-      WAIT: "YELLOW",
-    },
   },
 
   // ==========================
@@ -103,14 +83,11 @@ const INDEX_REGISTRY = {
   // ==========================
   VIX: {
     instrumentType: "INDEX",
-    category: "VOLATILITY",
+    exchange: "NSE",
     segments: ["DISPLAY_ONLY"],
     allowedTradeTypes: [],
     optionChain: false,
-    uiIntent: {
-      INFO: "BLUE",
-    },
-    note: "VIX is safety-only. No trading allowed.",
+    note: "Used only for risk & safety context",
   },
 };
 
@@ -121,7 +98,6 @@ const INDEX_REGISTRY = {
  */
 function getIndexConfig(symbol) {
   if (!symbol) return null;
-
   const key = symbol.toUpperCase();
   return INDEX_REGISTRY[key] || null;
 }
