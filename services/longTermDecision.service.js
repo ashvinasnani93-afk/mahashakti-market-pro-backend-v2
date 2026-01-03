@@ -1,7 +1,7 @@
 // ==================================================
-// LONG-TERM EQUITY DECISION ENGINE (PHASE-L)
+// LONG-TERM EQUITY DECISION ENGINE (PHASE-L1 FINAL)
 // HOLD / PARTIAL EXIT / FULL EXIT
-// RULE-LOCKED | NO FIXED TIME | NO PREDICTION
+// CONDITION BASED – NO FIXED TIME – NO PREDICTION
 // ==================================================
 
 const { applyLongTermSafety } = require("./longTermSafety.service");
@@ -17,7 +17,7 @@ const { applyLongTermSafety } = require("./longTermSafety.service");
  * - monthlyTrend  (UPTREND / DOWNTREND / SIDEWAYS)
  * - entryPrice
  * - currentPrice
- * - timeInTradeDays (number)
+ * - timeInTradeDays (number, optional)
  */
 function decideLongTermAction(data = {}) {
   const {
@@ -47,7 +47,7 @@ function decideLongTermAction(data = {}) {
   }
 
   // --------------------------------------------------
-  // SAFETY LAYER (LOCKED)
+  // SAFETY LAYER (LOCKED – NON NEGOTIABLE)
   // --------------------------------------------------
   const safetyResult = applyLongTermSafety({
     weeklyTrend,
@@ -63,10 +63,24 @@ function decideLongTermAction(data = {}) {
   }
 
   // --------------------------------------------------
-  // PROFIT / LOSS CONTEXT (TEXT ONLY)
+  // PROFIT / LOSS CONTEXT (TEXT ONLY – NOT DECISION DRIVER)
   // --------------------------------------------------
   const pnlPercent =
     ((currentPrice - entryPrice) / entryPrice) * 100;
+
+  // --------------------------------------------------
+  // TIME IN TRADE CONTEXT (TEXT ONLY)
+  // --------------------------------------------------
+  let timeContext = "Holding period not specified";
+  if (typeof timeInTradeDays === "number") {
+    if (timeInTradeDays < 90) {
+      timeContext = "Early stage long-term holding";
+    } else if (timeInTradeDays < 365) {
+      timeContext = "Mid-stage long-term holding";
+    } else {
+      timeContext = "Mature long-term holding";
+    }
+  }
 
   // --------------------------------------------------
   // CORE LONG-TERM LOGIC (LOCKED)
@@ -81,9 +95,11 @@ function decideLongTermAction(data = {}) {
       status: "OK",
       action: "HOLD",
       confidence: "HIGH",
-      pnlPercent: Number(pnlPercent.toFixed(2)),
+      trendContext: "Weekly and Monthly trends aligned upward",
+      timeContext,
+      pnlContext: `Approx P&L: ${pnlPercent.toFixed(2)}%`,
       note:
-        "Weekly and Monthly trends aligned upward. Long-term HOLD advised.",
+        "Long-term structure strong. No exit pressure. Continue holding.",
     };
   }
 
@@ -96,9 +112,12 @@ function decideLongTermAction(data = {}) {
       status: "OK",
       action: "PARTIAL_EXIT",
       confidence: "MEDIUM",
-      pnlPercent: Number(pnlPercent.toFixed(2)),
+      trendContext:
+        "Weekly trend weakened, monthly trend still supportive",
+      timeContext,
+      pnlContext: `Approx P&L: ${pnlPercent.toFixed(2)}%`,
       note:
-        "Weekly trend weakened but monthly trend intact. Partial profit booking advised.",
+        "Structural caution phase. Partial profit booking can reduce risk.",
     };
   }
 
@@ -111,9 +130,11 @@ function decideLongTermAction(data = {}) {
       status: "OK",
       action: "FULL_EXIT",
       confidence: "HIGH",
-      pnlPercent: Number(pnlPercent.toFixed(2)),
+      trendContext: "Weekly and Monthly structure broken",
+      timeContext,
+      pnlContext: `Approx P&L: ${pnlPercent.toFixed(2)}%`,
       note:
-        "Weekly and Monthly trends both down. Long-term exit advised.",
+        "Long-term trend damage confirmed. Capital protection prioritized.",
     };
   }
 
@@ -124,9 +145,11 @@ function decideLongTermAction(data = {}) {
     status: "OK",
     action: "HOLD",
     confidence: "LOW",
-    pnlPercent: Number(pnlPercent.toFixed(2)),
+    trendContext: "Mixed or sideways long-term structure",
+    timeContext,
+    pnlContext: `Approx P&L: ${pnlPercent.toFixed(2)}%`,
     note:
-      "Trend mixed but no structural breakdown. Continue holding with caution.",
+      "No clear breakdown. Hold with patience and monitor structure.",
   };
 }
 
