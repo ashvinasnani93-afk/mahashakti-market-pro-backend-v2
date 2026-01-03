@@ -1,7 +1,7 @@
 // ==================================================
 // OPTIONS SAFETY SERVICE (PHASE-4B)
 // Capital + Event + Volatility Protection
-// NO BUY / SELL DECISION
+// NO BUY / SELL DECISION (SAFETY ONLY)
 // ==================================================
 
 /**
@@ -10,17 +10,21 @@
  * @returns {object}
  *
  * This service ONLY decides:
- * - Trade allowed or blocked
- * - Risk level
- * - Clear reason (text)
+ * - Whether options trade is allowed
+ * - Risk level (NORMAL / HIGH)
+ * - Clear, explainable safety reason (TEXT)
+ *
+ * ❌ No BUY / SELL
+ * ❌ No strike logic
+ * ❌ No execution
  */
 function getOptionsSafetyContext(context = {}) {
   const {
-    tradeType,        // INTRADAY_OPTIONS / POSITIONAL_OPTIONS
-    expiryType,       // WEEKLY_EXPIRY / MONTHLY_EXPIRY
+    tradeType,          // INTRADAY_OPTIONS / POSITIONAL_OPTIONS
+    expiryType,         // WEEKLY_EXPIRY / MONTHLY_EXPIRY
     isExpiryDay = false,
     isResultDay = false,
-    vix,              // optional number
+    vix,                // optional number
     overnightRisk = false,
   } = context;
 
@@ -41,8 +45,9 @@ function getOptionsSafetyContext(context = {}) {
       safety: {
         allowTrade: false,
         riskLevel: "HIGH",
-        reason: "Option safety: result day risk",
+        reason: "Options blocked: result day event risk",
       },
+      note: "Equity results can cause sudden option volatility",
     };
   }
 
@@ -54,21 +59,23 @@ function getOptionsSafetyContext(context = {}) {
       safety: {
         allowTrade: false,
         riskLevel: "HIGH",
-        reason: "Option safety: expiry day risk",
+        reason: "Options blocked: expiry day risk",
       },
+      note: "Expiry day has extreme theta decay and random moves",
     };
   }
 
   // ------------------------------
-  // HIGH VIX ENVIRONMENT (SOFT BLOCK)
+  // HIGH VOLATILITY (VIX) – SAFETY BLOCK
   // ------------------------------
   if (typeof vix === "number" && vix >= 18) {
     return {
       safety: {
         allowTrade: false,
         riskLevel: "HIGH",
-        reason: "Option safety: high volatility environment",
+        reason: "Options blocked: high volatility environment (VIX elevated)",
       },
+      note: "High VIX leads to fast premium expansion and whipsaws",
     };
   }
 
@@ -83,13 +90,14 @@ function getOptionsSafetyContext(context = {}) {
       safety: {
         allowTrade: false,
         riskLevel: "HIGH",
-        reason: "Option safety: overnight gap risk",
+        reason: "Options blocked: overnight gap risk",
       },
+      note: "Overnight gaps can destroy option premium",
     };
   }
 
   // ------------------------------
-  // WEEKLY EXPIRY WARNING (NOT BLOCK)
+  // WEEKLY EXPIRY WARNING (SOFT RISK)
   // ------------------------------
   if (expiryType === "WEEKLY_EXPIRY") {
     safety.riskLevel = "HIGH";
