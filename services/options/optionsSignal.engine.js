@@ -29,6 +29,33 @@ function isNoTradeZone({ spotPrice, ema20, ema50 }) {
   return emaDiffPercent < 0.2 && priceNearEMA;
 }
 
+// ==========================================
+// UI SIGNAL MAPPER (LOCKED)
+// ==========================================
+function mapUISignal({ buyerAllowed, sellerAllowed }) {
+  if (buyerAllowed) {
+    return {
+      uiSignal: "BUY",
+      uiColor: "GREEN",
+      uiIcon: "🟢",
+    };
+  }
+
+  if (sellerAllowed) {
+    return {
+      uiSignal: "SELL",
+      uiColor: "RED",
+      uiIcon: "🔴",
+    };
+  }
+
+  return {
+    uiSignal: "WAIT",
+    uiColor: "YELLOW",
+    uiIcon: "🟡",
+  };
+}
+
 /**
  * generateOptionsSignal
  * Context comes ONLY from optionsMaster.service
@@ -68,25 +95,36 @@ function generateOptionsSignal(context = {}) {
     return {
       status: "WAIT",
       regime: "HIGH_RISK",
-      buyerAllowed: false,
-      sellerAllowed: false,
+      ...mapUISignal({}),
       reason: "Result / expiry day risk",
     };
   }
 
   if (tradeContext === "INTRADAY_OPTIONS" && !safety.intradayAllowed) {
-    return { status: "WAIT", reason: "Intraday options blocked by safety" };
+    return {
+      status: "WAIT",
+      ...mapUISignal({}),
+      reason: "Intraday options blocked by safety",
+    };
   }
 
   if (tradeContext === "POSITIONAL_OPTIONS" && !safety.positionalAllowed) {
-    return { status: "WAIT", reason: "Positional options blocked by safety" };
+    return {
+      status: "WAIT",
+      ...mapUISignal({}),
+      reason: "Positional options blocked by safety",
+    };
   }
 
   // --------------------------------------------------
   // TREND CHECK (EMA 20 / EMA 50)
   // --------------------------------------------------
   if (typeof ema20 !== "number" || typeof ema50 !== "number") {
-    return { status: "WAIT", reason: "EMA data missing" };
+    return {
+      status: "WAIT",
+      ...mapUISignal({}),
+      reason: "EMA data missing",
+    };
   }
 
   let trend = "SIDEWAYS";
@@ -94,24 +132,27 @@ function generateOptionsSignal(context = {}) {
   else if (ema20 < ema50) trend = "DOWNTREND";
 
   // --------------------------------------------------
-  // OPTIONS NO-TRADE ZONE (LOCKED)
+  // OPTIONS NO-TRADE ZONE
   // --------------------------------------------------
   if (isNoTradeZone({ spotPrice, ema20, ema50 })) {
     return {
       status: "WAIT",
       trend,
       regime: "NO_TRADE_ZONE",
-      buyerAllowed: false,
-      sellerAllowed: false,
+      ...mapUISignal({}),
       reason: "EMA compression / price noise",
     };
   }
 
   // --------------------------------------------------
-  // RSI + VIX SANITY (LOCKED)
+  // RSI + VIX SANITY
   // --------------------------------------------------
   if (typeof rsi !== "number") {
-    return { status: "WAIT", reason: "RSI data missing" };
+    return {
+      status: "WAIT",
+      ...mapUISignal({}),
+      reason: "RSI data missing",
+    };
   }
 
   const rsiExtreme = rsi >= 70 || rsi <= 30;
@@ -121,14 +162,13 @@ function generateOptionsSignal(context = {}) {
     return {
       status: "WAIT",
       regime: "HIGH_RISK",
-      buyerAllowed: false,
-      sellerAllowed: false,
+      ...mapUISignal({}),
       reason: "RSI extreme or high VIX",
     };
   }
 
   // --------------------------------------------------
-  // BUYER ENGINE (FINAL AUTHORITY FOR BUY)
+  // BUYER ENGINE
   // --------------------------------------------------
   const buyerContext = evaluateBuyerContext({
     trend,
@@ -141,13 +181,13 @@ function generateOptionsSignal(context = {}) {
   const buyerAllowed = buyerContext.buyerAllowed;
 
   // --------------------------------------------------
-  // REGIME DECISION (PERMISSION ONLY)
+  // REGIME DECISION
   // --------------------------------------------------
   let regime = buyerAllowed ? "TRENDING" : "SIDEWAYS";
-  let sellerAllowed = !buyerAllowed; // permission only
+  let sellerAllowed = !buyerAllowed;
 
   // --------------------------------------------------
-  // SELLER ENGINE (FINAL AUTHORITY FOR SELL)
+  // SELLER ENGINE
   // --------------------------------------------------
   let sellerContext = null;
 
@@ -163,19 +203,19 @@ function generateOptionsSignal(context = {}) {
     if (!sellerContext.sellerAllowed) {
       return {
         status: "WAIT",
-        engine: "OPTIONS_SIGNAL_ENGINE",
         trend,
         regime,
-        buyerAllowed: false,
-        sellerAllowed: false,
+        ...mapUISignal({}),
         reason: sellerContext.reason || sellerContext.note,
       };
     }
   }
 
   // --------------------------------------------------
-  // FINAL OUTPUT (NO EXECUTION)
+  // FINAL OUTPUT (UI READY)
   // --------------------------------------------------
+  const ui = mapUISignal({ buyerAllowed, sellerAllowed });
+
   return {
     status: "READY",
     engine: "OPTIONS_SIGNAL_ENGINE",
@@ -191,7 +231,12 @@ function generateOptionsSignal(context = {}) {
     sellerStrategy: sellerContext ? sellerContext.strategy : null,
     sellerReason: sellerContext ? sellerContext.note : null,
 
-    note: "Options buyer/seller regime evaluated (no execution)",
+    // 🔥 UI LOCKED OUTPUT
+    uiSignal: ui.uiSignal,
+    uiColor: ui.uiColor,
+    uiIcon: ui.uiIcon,
+
+    note: "Options buyer/seller regime evaluated (UI symbol based)",
   };
 }
 
