@@ -4,7 +4,9 @@
 // CONDITION BASED – NO FIXED TIME – NO PREDICTION
 // ==================================================
 
-const { applyLongTermSafety } = require("./longTermSafety.service");
+const {
+  getLongTermSafetyContext,
+} = require("./longTermSafety.service");
 
 /**
  * decideLongTermAction
@@ -18,6 +20,9 @@ const { applyLongTermSafety } = require("./longTermSafety.service");
  * - entryPrice
  * - currentPrice
  * - timeInTradeDays (number, optional)
+ * - intradaySignal (optional)
+ * - isResultDay (optional)
+ * - isMarketCrash (optional)
  */
 function decideLongTermAction(data = {}) {
   const {
@@ -27,6 +32,9 @@ function decideLongTermAction(data = {}) {
     entryPrice,
     currentPrice,
     timeInTradeDays,
+    intradaySignal,
+    isResultDay,
+    isMarketCrash,
   } = data;
 
   // --------------------------------------------------
@@ -47,23 +55,24 @@ function decideLongTermAction(data = {}) {
   }
 
   // --------------------------------------------------
-  // SAFETY LAYER (LOCKED – NON NEGOTIABLE)
+  // SAFETY CONTEXT (PHASE-L1 – LOCKED)
   // --------------------------------------------------
-  const safetyResult = applyLongTermSafety({
-    weeklyTrend,
-    monthlyTrend,
+  const safetyContext = getLongTermSafetyContext({
+    isMarketCrash: isMarketCrash === true,
+    isResultDay: isResultDay === true,
+    intradaySignal,
   });
 
-  if (safetyResult.status !== "SAFE") {
+  if (safetyContext.status !== "SAFE") {
     return {
-      status: "WAIT",
-      action: "NO_DECISION",
-      reason: safetyResult.reason,
+      status: safetyContext.status,
+      action: safetyContext.action || "HOLD",
+      reason: safetyContext.reason,
     };
   }
 
   // --------------------------------------------------
-  // PROFIT / LOSS CONTEXT (TEXT ONLY – NOT DECISION DRIVER)
+  // PROFIT / LOSS CONTEXT (TEXT ONLY)
   // --------------------------------------------------
   const pnlPercent =
     ((currentPrice - entryPrice) / entryPrice) * 100;
@@ -83,10 +92,10 @@ function decideLongTermAction(data = {}) {
   }
 
   // --------------------------------------------------
-  // CORE LONG-TERM LOGIC (LOCKED)
+  // CORE LONG-TERM DECISION LOGIC (LOCKED)
   // --------------------------------------------------
 
-  // 🟢 STRONG HOLD CONDITION
+  // 🟢 STRONG HOLD
   if (
     weeklyTrend === "UPTREND" &&
     monthlyTrend === "UPTREND"
@@ -103,7 +112,7 @@ function decideLongTermAction(data = {}) {
     };
   }
 
-  // 🟡 PARTIAL EXIT CONDITION
+  // 🟡 PARTIAL EXIT
   if (
     weeklyTrend === "DOWNTREND" &&
     monthlyTrend === "UPTREND"
@@ -121,7 +130,7 @@ function decideLongTermAction(data = {}) {
     };
   }
 
-  // 🔴 FULL EXIT CONDITION
+  // 🔴 FULL EXIT
   if (
     weeklyTrend === "DOWNTREND" &&
     monthlyTrend === "DOWNTREND"
