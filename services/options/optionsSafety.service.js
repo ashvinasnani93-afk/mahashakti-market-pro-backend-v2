@@ -19,14 +19,14 @@
  * ❌ No execution
  */
 function getOptionsSafetyContext(context = {}) {
-  const {
-    tradeType,          // INTRADAY_OPTIONS / POSITIONAL_OPTIONS
-    expiryType,         // WEEKLY_EXPIRY / MONTHLY_EXPIRY
-    isExpiryDay = false,
-    isResultDay = false,
-    vix,                // optional number
-    overnightRisk = false,
-  } = context;
+ const {
+  tradeContext,       // INTRADAY_OPTIONS / POSITIONAL_OPTIONS
+  expiryType,
+  isExpiryDay = false,
+  isResultDay = false,
+  vix,
+  overnightRisk = false,
+} = context;
 
   // ------------------------------
   // DEFAULT SAFETY STATE
@@ -82,9 +82,7 @@ function getOptionsSafetyContext(context = {}) {
   // ------------------------------
   // POSITIONAL OVERNIGHT RISK
   // ------------------------------
-  if (
-    tradeType === "POSITIONAL_OPTIONS" &&
-    overnightRisk === true
+  if (tradeContext === "POSITIONAL_OPTIONS" && overnightRisk === true)
   ) {
     return {
       safety: {
