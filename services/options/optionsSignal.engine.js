@@ -4,8 +4,10 @@
 // UI SYMBOL BASED (NO BUY/SELL WORD DEPENDENCY)
 // ==================================================
 
-const { evaluateSellerContext } = require("./optionsSeller.engine");
 const { evaluateBuyerContext } = require("./optionsBuyer.engine");
+const {
+  getOptionsSellerContext,
+} = require("./optionsSellerContext.service");
 
 // ==========================================
 // OPTIONS NO-TRADE ZONE (FOUNDATION)
@@ -105,16 +107,16 @@ function generateOptionsSignal(context = {}) {
   else if (ema20 < ema50) trend = "DOWNTREND";
 
   // --------------------------------------------------
-  // OPTIONS NO-TRADE ZONE
+  // REGIME DETECTION (FIXED)
   // --------------------------------------------------
+  let regime = "SIDEWAYS";
+
+  if (trend !== "SIDEWAYS") {
+    regime = "TRENDING";
+  }
+
   if (isNoTradeZone({ spotPrice, ema20, ema50 })) {
-    return {
-      status: "WAIT",
-      trend,
-      regime: "NO_TRADE_ZONE",
-      ...mapUISignal("WAIT"),
-      reason: "EMA compression / price noise",
-    };
+    regime = "NO_TRADE_ZONE";
   }
 
   // --------------------------------------------------
@@ -123,6 +125,7 @@ function generateOptionsSignal(context = {}) {
   if (typeof rsi !== "number") {
     return {
       status: "WAIT",
+      regime,
       ...mapUISignal("WAIT"),
       reason: "RSI data missing",
     };
@@ -138,14 +141,13 @@ function generateOptionsSignal(context = {}) {
   }
 
   // --------------------------------------------------
-  // BUYER ENGINE
+  // BUYER ENGINE (FIXED INPUT)
   // --------------------------------------------------
   const buyerContext = evaluateBuyerContext({
     trend,
     rsi,
     vix,
     safety,
-    tradeContext,
   });
 
   if (buyerContext.buyerAllowed) {
@@ -165,14 +167,13 @@ function generateOptionsSignal(context = {}) {
   }
 
   // --------------------------------------------------
-  // SELLER ENGINE
+  // SELLER CONTEXT SERVICE (FIXED LAYER)
   // --------------------------------------------------
-  const sellerContext = evaluateSellerContext({
+  const sellerContext = getOptionsSellerContext({
+    regime,
     trend,
-    rsi,
     safety,
-    regime: "SIDEWAYS",
-    vix,
+    expiryType,
   });
 
   if (sellerContext.sellerAllowed) {
@@ -182,11 +183,11 @@ function generateOptionsSignal(context = {}) {
       symbol,
       spotPrice,
       trend,
-      regime: "SIDEWAYS",
+      regime,
       buyerAllowed: false,
       sellerAllowed: true,
-      sellerStrategy: sellerContext.strategy,
-      sellerReason: sellerContext.note,
+      sellerType: sellerContext.sellerType,
+      sellerReason: sellerContext.reason,
       ...mapUISignal("SELL"),
       note: "Option SELL bias (UI symbol based)",
     };
@@ -198,7 +199,7 @@ function generateOptionsSignal(context = {}) {
   return {
     status: "WAIT",
     trend,
-    regime: "SIDEWAYS",
+    regime,
     ...mapUISignal("WAIT"),
     reason: "No buyer or seller edge",
   };
