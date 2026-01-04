@@ -6,7 +6,7 @@
 // ==========================================
 
 const { getOptionsContext } = require("./optionsMaster.service");
-const { decideOptionTrade } = require("./optionsDecision.service.js");
+const { decideOptionTrade } = require("./options/optionDecision.service.js");
 
 // ==========================================
 // POST /options
