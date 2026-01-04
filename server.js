@@ -172,11 +172,10 @@ function startWebSocket() {
 if (!feedToken) return;
 
 const wsUrl =
-wss://smartapisocket.angelone.in/smart-stream +
-?clientCode=${ANGEL_CLIENT_ID} +
-&feedToken=${feedToken} +
-&apiKey=${ANGEL_API_KEY};
-
+  `wss://smartapisocket.angelone.in/smart-stream` +
+  `?clientCode=${ANGEL_CLIENT_ID}` +
+  `&feedToken=${feedToken}` +
+  `&apiKey=${ANGEL_API_KEY}`;
 ws = new WebSocket(wsUrl);
 
 ws.on("open", () => {
