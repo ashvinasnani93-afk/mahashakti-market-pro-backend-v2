@@ -17,11 +17,20 @@ function buildOptionChain({
 }) {
   const chain = {};
 
+  // -------------------------------
+  // HARD VALIDATION
+  // -------------------------------
+  if (!index || !(expiryDate instanceof Date) || !Array.isArray(strikes)) {
+    return chain;
+  }
+
   const expiryType = isMonthlyExpiry(expiryDate)
     ? "MONTHLY"
     : "WEEKLY";
 
   strikes.forEach((strike) => {
+    if (typeof strike !== "number") return;
+
     // -------------------------------
     // FORMAT OPTION SYMBOLS
     // -------------------------------
@@ -41,17 +50,18 @@ function buildOptionChain({
       expiryType,
     });
 
+    // format failed → skip
+    if (!ceSymbol && !peSymbol) return;
+
     // -------------------------------
     // FETCH TOKENS FROM ANGEL MASTER
     // -------------------------------
-    const ceToken = getOptionToken(ceSymbol);
-    const peToken = getOptionToken(peSymbol);
+    const ceToken = ceSymbol ? getOptionToken(ceSymbol) : null;
+    const peToken = peSymbol ? getOptionToken(peSymbol) : null;
 
     // 🚫 HARD FILTER
     // Angel ke paas dono nahi → strike exist hi nahi karta
-    if (!ceToken && !peToken) {
-      return;
-    }
+    if (!ceToken && !peToken) return;
 
     // -------------------------------
     // FINAL STRIKE OBJECT
