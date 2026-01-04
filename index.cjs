@@ -1,30 +1,53 @@
+// ==========================================
+// ANGEL AUTH + NIFTY LTP SERVICE (SAFE)
+// NO HARDCODED CREDENTIALS
+// SESSION SAFE | RULE-ALIGNED
+// ==========================================
+
 const axios = require("axios");
 
-/* ===============================
-   GLOBAL TOKENS
-================================ */
-let JWT_TOKEN = "";
-let REFRESH_TOKEN = "";
+// ===============================
+// SESSION CACHE
+// ===============================
+let JWT_TOKEN = null;
 
-/* ===============================
-   USER CREDENTIALS
-================================ */
-const API_KEY = "nclvoLI";
-const CLIENT_CODE = "M1007477";
-const PASSWORD = "2310";
-const TOTP = "453139";
+// ===============================
+// ENV CONFIG (MANDATORY)
+// ===============================
+const {
+  ANGEL_API_KEY,
+  ANGEL_CLIENT_CODE,
+  ANGEL_MPIN,
+  ANGEL_TOTP,
+} = process.env;
 
-/* ===============================
-   LOGIN
-================================ */
+// ===============================
+// VALIDATION
+// ===============================
+function validateEnv() {
+  if (
+    !ANGEL_API_KEY ||
+    !ANGEL_CLIENT_CODE ||
+    !ANGEL_MPIN ||
+    !ANGEL_TOTP
+  ) {
+    throw new Error("❌ Angel credentials missing in ENV");
+  }
+}
+
+// ===============================
+// LOGIN (MPIN BASED – ANGEL SAFE)
+// ===============================
 async function login() {
   try {
+    validateEnv();
+
     const response = await axios.post(
-      "https://apiconnect.angelone.in/rest/auth/angelbroking/user/v1/loginByPassword",
+      "https://apiconnect.angelone.in/rest/auth/angelbroking/user/v1/loginByMPIN",
       {
-        clientcode: CLIENT_CODE,
-        password: PASSWORD,
-        totp: TOTP,
+        clientcode: ANGEL_CLIENT_CODE,
+        mpin: ANGEL_MPIN,
+        totp: ANGEL_TOTP,
       },
       {
         headers: {
@@ -34,26 +57,32 @@ async function login() {
           "X-ClientLocalIP": "127.0.0.1",
           "X-ClientPublicIP": "127.0.0.1",
           "X-MACAddress": "00:00:00:00:00:00",
-          "X-PrivateKey": API_KEY,
+          "X-PrivateKey": ANGEL_API_KEY,
         },
       }
     );
 
-    JWT_TOKEN = response.data.data.jwtToken;
-    REFRESH_TOKEN = response.data.data.refreshToken;
+    JWT_TOKEN = response.data?.data?.jwtToken || null;
 
-    console.log("✅ LOGIN SUCCESS");
+    if (!JWT_TOKEN) {
+      throw new Error("JWT not received");
+    }
+
+    console.log("✅ Angel Login SUCCESS");
     return true;
   } catch (err) {
-    console.log("❌ LOGIN FAILED");
-    console.log(err.response?.data || err.message);
+    console.error(
+      "❌ Angel Login Failed:",
+      err.response?.data || err.message
+    );
+    JWT_TOKEN = null;
     return false;
   }
 }
 
-/* ===============================
-   GET NIFTY LTP
-================================ */
+// ===============================
+// GET NIFTY LTP (SAFE RETRY)
+// ===============================
 async function getNiftyLTP() {
   try {
     if (!JWT_TOKEN) {
@@ -67,45 +96,53 @@ async function getNiftyLTP() {
         params: {
           exchange: "NSE",
           tradingsymbol: "NIFTY",
-          symboltoken: "99926000",
+          symboltoken: "99926000", // index token (allowed)
         },
         headers: {
-          Authorization: "Bearer " + JWT_TOKEN,
+          Authorization: `Bearer ${JWT_TOKEN}`,
           "Content-Type": "application/json",
           "X-UserType": "USER",
           "X-SourceID": "WEB",
           "X-ClientLocalIP": "127.0.0.1",
           "X-ClientPublicIP": "127.0.0.1",
           "X-MACAddress": "00:00:00:00:00:00",
-          "X-PrivateKey": API_KEY,
+          "X-PrivateKey": ANGEL_API_KEY,
         },
       }
     );
 
-    return response.data.data.ltp;
+    return response.data?.data?.ltp ?? null;
   } catch (err) {
-    console.log("❌ LTP ERROR");
-    console.log(err.response?.data || err.message);
+    console.error(
+      "❌ NIFTY LTP Error:",
+      err.response?.data || err.message
+    );
+    JWT_TOKEN = null; // force re-login next time
     return null;
   }
 }
 
-/* ===============================
-   EXPORT FOR SERVER
-================================ */
-module.exports = function(app) {
-  login();
-
-  app.get("/login", async (req, res) => {
+// ===============================
+// ROUTES
+// ===============================
+module.exports = function (app) {
+  app.get("/angel/login", async (req, res) => {
     const ok = await login();
     res.json({ success: ok });
   });
 
-  app.get("/nifty", async (req, res) => {
+  app.get("/market/nifty/ltp", async (req, res) => {
     const ltp = await getNiftyLTP();
     if (!ltp) {
-      return res.status(500).json({ error: "LTP not available" });
+      return res.status(503).json({
+        status: false,
+        message: "NIFTY LTP unavailable",
+      });
     }
-    res.json({ symbol: "NIFTY", ltp });
+    res.json({
+      status: true,
+      symbol: "NIFTY",
+      ltp,
+    });
   });
 };
