@@ -5,16 +5,16 @@
 
 const express = require("express");
 const cors = require("cors");
-const WebSocket = require("ws");
 const https = require("https");
 const { SmartAPI } = require("smartapi-javascript");
 const { authenticator } = require("otplib");
 
 const { getSignal } = require("./signal.api");
 const { getOptionChain } = require("./optionchain.api");
-
-// ✅ OPTIONS CONTEXT API (PHASE-3 START)
-const { getOptionsContextApi } = require("./services/options/optionsContext.api");
+const { getOptions } = require("./options.api");
+const { getIndexConfigAPI } = require("./index.api");
+const { getCommodity } = require("./commodity.api");
+const { getLongTerm } = require("./longTerm.api");
 
 const { loadOptionSymbolMaster } = require("./token.service");
 
@@ -26,12 +26,10 @@ app.use(express.json());
 // BASIC ROUTES
 // ==========================================
 
-// ROOT CHECK
 app.get("/", (req, res) => {
   res.send("Mahashakti Market Pro API is LIVE 🚀");
 });
 
-// HEALTH CHECK (Render / Monitoring)
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
@@ -43,7 +41,7 @@ app.get("/health", (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 // ==========================================
-// ENV CHECK (IMPORTANT – BEFORE ANGEL)
+// ENV CHECK
 // ==========================================
 const {
   ANGEL_API_KEY,
@@ -58,14 +56,15 @@ if (!ANGEL_PASSWORD) throw new Error("ANGEL_PASSWORD missing");
 if (!ANGEL_TOTP_SECRET) throw new Error("ANGEL_TOTP_SECRET missing");
 
 // ==========================================
-// SIGNAL API (BUY / SELL / WAIT)
+// API ROUTES (FINAL WIRING)
 // ==========================================
-app.post("/signal", getSignal);
 
-// ==========================================
-// OPTIONS CONTEXT API (PHASE-3)
-// ==========================================
-app.post("/options/context", getOptionsContextApi);
+app.post("/signal", getSignal);              // Equity / Index
+app.post("/options", getOptions);            // Options decision
+app.get("/option-chain", getOptionChain);    // Option chain
+app.post("/commodity", getCommodity);        // Commodity
+app.post("/index/config", getIndexConfigAPI);// Index registry
+app.post("/long-term", getLongTerm);         // Long-term equity
 
 // ==========================================
 // GLOBAL STATE
@@ -169,6 +168,7 @@ async function angelLogin() {
 function startWebSocket() {
   if (!feedToken) return;
 
+  const WebSocket = require("ws");
   const wsUrl =
     `wss://smartapisocket.angelone.in/smart-stream` +
     `?clientCode=${ANGEL_CLIENT_ID}` +
@@ -199,27 +199,6 @@ function startWebSocket() {
 }
 
 // ==========================================
-// SUBSCRIBE SYMBOL
-// ==========================================
-function subscribeSymbol(symbol) {
-  const info = symbolTokenMap[symbol];
-  if (!info || !ws || ws.readyState !== 1) return;
-  if (subscribedTokens.has(info.token)) return;
-
-  ws.send(
-    JSON.stringify({
-      action: 1,
-      params: {
-        mode: 1,
-        tokenList: [{ exchangeType: info.exchangeType, tokens: [info.token] }],
-      },
-    })
-  );
-
-  subscribedTokens.add(info.token);
-}
-
-// ==========================================
 // STOCK LTP API
 // ==========================================
 app.get("/angel/ltp", (req, res) => {
@@ -227,8 +206,6 @@ app.get("/angel/ltp", (req, res) => {
   if (!symbol || !symbolTokenMap[symbol]) {
     return res.json({ status: false, message: "symbol invalid" });
   }
-
-  subscribeSymbol(symbol);
 
   if (latestLTP[symbol]) {
     return res.json({
@@ -241,11 +218,6 @@ app.get("/angel/ltp", (req, res) => {
 
   res.json({ status: false, message: "LTP not ready yet" });
 });
-
-// ==========================================
-// OPTION CHAIN API
-// ==========================================
-app.get("/option-chain", getOptionChain);
 
 // ==========================================
 // START SERVER
