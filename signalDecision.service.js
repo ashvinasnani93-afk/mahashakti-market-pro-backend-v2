@@ -17,15 +17,11 @@ const { detectFastMove } = require("./services/intradayFastMove.service");
 // 🔒 SAFETY LAYER (Phase-1 LOCKED)
 const { applySafety } = require("./signalSafety.service");
 
-// 🏦 INSTITUTIONAL CONTEXT (REAL – PHASE-2A)
-// ✅ OI
+// 🏦 INSTITUTIONAL CONTEXT
 const { summarizeOI } = require("./services/institutional_oi.service");
-
-// ✅ PCR
 const { getPCRContext } = require("./services/institutional_pcr.service");
 
-// 🧠 GREEKS CONTEXT (TEXT ONLY – PHASE-2A)
-// ✅ Greeks
+// 🧠 GREEKS CONTEXT (TEXT ONLY)
 const { getGreeksContext } = require("./services/greeks.service");
 
 /**
@@ -42,10 +38,15 @@ function finalDecision(data) {
     isExpiryDay: data.isExpiryDay || false,
     tradeCountToday: data.tradeCountToday || 0,
     tradeType: data.tradeType || "INTRADAY",
-
-    // 🟡 VIX CONTEXT (C3.1 – SAFETY ONLY)
     vix: typeof data.vix === "number" ? data.vix : null,
   };
+
+  // -------------------------------
+  // RISK TAG (TEXT ONLY)
+  // -------------------------------
+  let riskTag = "NORMAL";
+  if (safetyContext.isResultDay) riskTag = "RESULT_DAY";
+  else if (safetyContext.isExpiryDay) riskTag = "EXPIRY_DAY";
 
   // -------------------------------
   // STEP 1: TREND
@@ -58,7 +59,12 @@ function finalDecision(data) {
 
   if (trendResult.trend === "NO_TRADE") {
     return applySafety(
-      { signal: "WAIT", reason: trendResult.reason },
+      {
+        signal: "WAIT",
+        reason: trendResult.reason,
+        mode: "NORMAL",
+        riskTag,
+      },
       safetyContext
     );
   }
@@ -73,7 +79,12 @@ function finalDecision(data) {
 
   if (!rsiResult.allowed) {
     return applySafety(
-      { signal: "WAIT", reason: rsiResult.reason },
+      {
+        signal: "WAIT",
+        reason: rsiResult.reason,
+        mode: "NORMAL",
+        riskTag,
+      },
       safetyContext
     );
   }
@@ -90,7 +101,12 @@ function finalDecision(data) {
 
   if (!breakoutResult.allowed) {
     return applySafety(
-      { signal: "WAIT", reason: breakoutResult.reason },
+      {
+        signal: "WAIT",
+        reason: breakoutResult.reason,
+        mode: "NORMAL",
+        riskTag,
+      },
       safetyContext
     );
   }
@@ -105,13 +121,18 @@ function finalDecision(data) {
 
   if (!volumeResult.allowed) {
     return applySafety(
-      { signal: "WAIT", reason: volumeResult.reason },
+      {
+        signal: "WAIT",
+        reason: volumeResult.reason,
+        mode: "NORMAL",
+        riskTag,
+      },
       safetyContext
     );
   }
 
   // -------------------------------
-  // STEP 4.5: INTRADAY FAST MOVE CHECK (PHASE-2B)
+  // STEP 4.5: INTRADAY FAST MOVE
   // -------------------------------
   if (data.tradeType === "INTRADAY") {
     const fastMoveResult = detectFastMove({
@@ -129,7 +150,8 @@ function finalDecision(data) {
         {
           signal: fastMoveResult.signal,
           reason: fastMoveResult.reason,
-          mode: fastMoveResult.mode,
+          mode: fastMoveResult.mode || "FAST_MOVE",
+          riskTag,
         },
         safetyContext
       );
@@ -137,12 +159,10 @@ function finalDecision(data) {
   }
 
   // -------------------------------
-  // STEP 5: INSTITUTIONAL CONFIRMATION
+  // STEP 5: INSTITUTIONAL CONTEXT
   // -------------------------------
   const oiSummary = summarizeOI(data.oiData || []);
   const pcrContext = getPCRContext(data.pcrValue);
-
-  // 🧠 GREEKS CONTEXT (NON-BLOCKING)
   const greeksContext = getGreeksContext(data.greeks || {});
 
   // ❌ Block BUY if institution bearish
@@ -155,7 +175,11 @@ function finalDecision(data) {
         signal: "WAIT",
         trend: trendResult.trend,
         reason: "Technical BUY but institutional bearish",
+        institutionalBias: oiSummary.bias,
+        pcrBias: pcrContext.bias,
         greeksNote: greeksContext.note,
+        mode: "NORMAL",
+        riskTag,
       },
       safetyContext
     );
@@ -171,28 +195,33 @@ function finalDecision(data) {
         signal: "WAIT",
         trend: trendResult.trend,
         reason: "Technical SELL but institutional bullish",
+        institutionalBias: oiSummary.bias,
+        pcrBias: pcrContext.bias,
         greeksNote: greeksContext.note,
+        mode: "NORMAL",
+        riskTag,
       },
       safetyContext
     );
   }
 
   // -------------------------------
-  // ✅ FINAL SIGNAL (CORE UNCHANGED)
+  // ✅ FINAL SIGNAL (UNCHANGED CORE)
   // -------------------------------
   const rawSignal = {
     signal: breakoutResult.action, // BUY / SELL
     trend: trendResult.trend,
     reason: "Technical + Institutional conditions aligned",
 
-    // 🧠 CONTEXT ONLY (NO FORCE)
     institutionalBias: oiSummary.bias,
     pcrBias: pcrContext.bias,
     greeksBias: greeksContext.bias,
     greeksNote: greeksContext.note,
+
+    mode: "NORMAL",
+    riskTag,
   };
 
-  // 🔒 APPLY SAFETY (Result / Expiry / Overtrade / VIX context)
   return applySafety(rawSignal, safetyContext);
 }
 
