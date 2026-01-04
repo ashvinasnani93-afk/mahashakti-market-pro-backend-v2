@@ -117,61 +117,55 @@ function decideOptionTrade(data = {}) {
       "Theta dominant; option selling favoured, vega contraction likely";
   }
 
-  // ----------------------------------
-  // STEP 5: OPTION BUY DECISION
-  // ----------------------------------
-  if (buyerAllowed) {
-    return {
-      status: "OK",
-      decision: "OPTION_BUY_ALLOWED",
-      mode: "OPTIONS_BUYER",
+ // STEP 5: OPTION SELL DECISION (PRIORITY)
+if (sellerAllowed) {
+  return {
+    status: "OK",
+    decision: "OPTION_SELL_ALLOWED",
+    mode: "OPTIONS_SELLER",
 
-      // 🔥 UI OUTPUT (CONFUSION-FREE)
-      uiSignal,
-      uiColor,
-      uiIcon,
+    uiSignal,
+    uiColor,
+    uiIcon,
 
-      trend,
-      regime,
-      thetaContext: thetaNote,
-      greeksContext: greeksNote,
-      expiryRisk: expiryRiskNote,
-      overnightRisk: overnightRiskNote,
+    trend,
+    regime,
+    strategy: sellerStrategy || "RANGE_SELL",
 
-      reason: buyerReason || "Options buyer conditions satisfied",
-      note:
-        "Options BUY allowed. Premium decay risk applies. This is NOT equity buying.",
-    };
-  }
+    thetaContext: thetaNote,
+    greeksContext: greeksNote,
+    expiryRisk: expiryRiskNote,
+    overnightRisk: overnightRiskNote,
 
-  // ----------------------------------
-  // STEP 6: OPTION SELL DECISION
-  // ----------------------------------
-  if (sellerAllowed) {
-    return {
-      status: "OK",
-      decision: "OPTION_SELL_ALLOWED",
-      mode: "OPTIONS_SELLER",
+    reason: sellerReason || "Options seller conditions satisfied",
+    note:
+      "Options SELL allowed. Premium decay works in favour, but risk is unlimited.",
+  };
+}
 
-      // 🔥 UI OUTPUT
-      uiSignal,
-      uiColor,
-      uiIcon,
+// STEP 6: OPTION BUY DECISION
+if (buyerAllowed) {
+  return {
+    status: "OK",
+    decision: "OPTION_BUY_ALLOWED",
+    mode: "OPTIONS_BUYER",
 
-      trend,
-      regime,
-      strategy: sellerStrategy || "RANGE_SELL",
+    uiSignal,
+    uiColor,
+    uiIcon,
 
-      thetaContext: thetaNote,
-      greeksContext: greeksNote,
-      expiryRisk: expiryRiskNote,
-      overnightRisk: overnightRiskNote,
+    trend,
+    regime,
+    thetaContext: thetaNote,
+    greeksContext: greeksNote,
+    expiryRisk: expiryRiskNote,
+    overnightRisk: overnightRiskNote,
 
-      reason: sellerReason || "Options seller conditions satisfied",
-      note:
-        "Options SELL allowed. Premium decay works in favour, but risk is unlimited.",
-    };
-  }
+    reason: buyerReason || "Options buyer conditions satisfied",
+    note:
+      "Options BUY allowed. Premium decay risk applies. This is NOT equity buying.",
+  };
+}
 
   // ----------------------------------
   // STEP 7: NO TRADE
