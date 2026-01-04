@@ -17,8 +17,8 @@ const { getOptionChain } = require("./optionchain.api");
 const { getOptionsContextApi } = require("./services/options/optionsContext.api");
 
 // ✅ INDEX & COMMODITY APIs (AUDITED – JUST WIRED)
-const { getIndexConfigAPI } = require("./index.api");
-const { getCommodity } = require("./commodity.api");
+const { getIndexConfigAPI } = require("./services/index.api");
+const { getCommodity } = require("./services/commodity.api");
 
 const { loadOptionSymbolMaster } = require("./token.service");
 
