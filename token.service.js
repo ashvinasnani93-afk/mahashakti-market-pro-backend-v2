@@ -17,10 +17,13 @@ let lastLoadCount = 0;
 // ===============================
 function isExpiredOption(symbol) {
   try {
+    if (!symbol) return true;
+
     const match = symbol.match(
       /(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2})/
     );
 
+    // Invalid / unexpected format → ignore safely
     if (!match) return true;
 
     const day = Number(match[1]);
@@ -33,11 +36,14 @@ function isExpiredOption(symbol) {
     };
 
     const expiryDate = new Date(year, MONTH_MAP[monthStr], day);
+    expiryDate.setHours(0, 0, 0, 0);
+
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     return expiryDate < today;
   } catch {
+    // Any parsing error → safest action is ignore
     return true;
   }
 }
@@ -53,6 +59,12 @@ function loadOptionSymbolMaster() {
       .get(
         "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",
         (res) => {
+          if (res.statusCode !== 200) {
+            return reject(
+              new Error(`Angel symbol master HTTP ${res.statusCode}`)
+            );
+          }
+
           let data = "";
 
           res.on("data", (chunk) => (data += chunk));
@@ -60,7 +72,7 @@ function loadOptionSymbolMaster() {
             try {
               const json = JSON.parse(data);
 
-              // 🔥 MEMORY RESET (IMPORTANT)
+              // 🔥 MEMORY RESET (CRITICAL)
               optionSymbolMap = {};
               let added = 0;
               let skippedExpired = 0;
@@ -94,7 +106,7 @@ function loadOptionSymbolMaster() {
                 `✅ OPTION Symbols Loaded: ${added} (expired ignored: ${skippedExpired})`
               );
 
-              if (lastLoadCount > 0) {
+              if (lastLoadCount > 0 && lastLoadCount !== added) {
                 console.log(
                   `🧪 Symbol count change: ${lastLoadCount} → ${added}`
                 );
@@ -121,11 +133,7 @@ function getOptionToken(optionSymbol) {
   const key = optionSymbol.toUpperCase();
 
   // ✅ STRICT MATCH ONLY (RULE-LOCKED)
-  if (optionSymbolMap[key]) {
-    return optionSymbolMap[key];
-  }
-
-  return null;
+  return optionSymbolMap[key] || null;
 }
 
 // ===============================
