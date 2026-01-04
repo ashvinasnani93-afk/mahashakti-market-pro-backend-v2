@@ -41,6 +41,7 @@ function getLongTermEquity(req, res) {
 
     // -----------------------------
     // LONG TERM DECISION ENGINE
+    // (SAFETY CONTEXT PASSED THROUGH)
     // -----------------------------
     const result = decideLongTermAction({
       symbol: body.symbol,
@@ -48,7 +49,16 @@ function getLongTermEquity(req, res) {
       monthlyTrend: body.monthlyTrend,   // UPTREND / DOWNTREND / SIDEWAYS
       entryPrice: body.entryPrice,
       currentPrice: body.currentPrice,
-      timeInTradeDays: body.timeInTradeDays || null,
+
+      // ---- OPTIONAL CONTEXT ----
+      timeInTradeDays:
+        typeof body.timeInTradeDays === "number"
+          ? body.timeInTradeDays
+          : null,
+
+      intradaySignal: body.intradaySignal || null,
+      isResultDay: body.isResultDay === true,
+      isMarketCrash: body.isMarketCrash === true,
     });
 
     // -----------------------------
