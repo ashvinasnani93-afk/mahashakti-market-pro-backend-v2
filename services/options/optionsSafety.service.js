@@ -83,7 +83,7 @@ function getOptionsSafetyContext(context = {}) {
   // POSITIONAL OVERNIGHT RISK
   // ------------------------------
   if (tradeContext === "POSITIONAL_OPTIONS" && overnightRisk === true)
-  ) {
+   {
     return {
       safety: {
         allowTrade: false,
