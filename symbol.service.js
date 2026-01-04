@@ -1,5 +1,6 @@
 // ==========================================
-// OPTION SYMBOL GENERATOR (FINAL – ANGEL READY)
+// OPTION SYMBOL GENERATOR – FINAL (A2.8)
+// ANGEL READY | SINGLE SOURCE FORMAT
 // NIFTY / BANKNIFTY
 // WEEKLY + MONTHLY (EXACT ANGEL FORMAT)
 // ==========================================
@@ -34,10 +35,13 @@ function getLastThursday(year, month) {
 // CHECK MONTHLY EXPIRY
 // ===============================
 function isMonthlyExpiry(date) {
+  if (!(date instanceof Date)) return false;
+
   const lastThursday = getLastThursday(
     date.getFullYear(),
     date.getMonth()
   );
+
   return (
     date.getDate() === lastThursday.getDate() &&
     date.getMonth() === lastThursday.getMonth()
@@ -49,8 +53,9 @@ function isMonthlyExpiry(date) {
 // ===============================
 function normalizeExpiryDate(date, expiryType) {
   const d = new Date(date);
+  if (isNaN(d.getTime())) return null;
 
-  // ✅ SAFETY FALLBACK (future-proof)
+  // ✅ SAFETY FALLBACK (LOCKED)
   const finalExpiryType =
     expiryType === "MONTHLY" || expiryType === "WEEKLY"
       ? expiryType
@@ -77,16 +82,25 @@ function formatOptionSymbol({
   type,
   expiryType = "WEEKLY",
 }) {
+  // -------------------------------
+  // HARD VALIDATION
+  // -------------------------------
+  if (!index || !strike || !type) return null;
+  if (typeof strike !== "number") return null;
+
   const d = normalizeExpiryDate(expiryDate, expiryType);
+  if (!d) return null;
+
+  const IDX = index.toUpperCase();
+  const OPT_TYPE = type.toUpperCase(); // CE / PE
 
   const year = d.getFullYear().toString().slice(-2);
   const month = MONTH_MAP[d.getMonth()];
-  const day = d.getDate();
-  const dd = day.toString().padStart(2, "0");
+  const day = d.getDate().toString().padStart(2, "0");
 
   // ✅ ANGEL FINAL FORMAT
   // Example: NIFTY30JAN2524500CE
-  return `${index}${dd}${month}${year}${strike}${type}`;
+  return `${IDX}${day}${month}${year}${strike}${OPT_TYPE}`;
 }
 
 // ===============================
