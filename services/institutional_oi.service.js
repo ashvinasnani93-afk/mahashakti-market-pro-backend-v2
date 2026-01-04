@@ -5,7 +5,8 @@
 
 /**
  * detectBuildup
- * Agar Angel se raw OI data aaye (oiChange + priceChange)
+ * Supports Angel raw OI data:
+ * oiChange + priceChange
  */
 function detectBuildup(item = {}) {
   const oiChange = Number(item.oiChange || 0);
@@ -22,11 +23,21 @@ function detectBuildup(item = {}) {
 /**
  * summarizeOI
  * @param {Array} oiData
- * Supports BOTH:
+ * Supports:
  * 1️⃣ { buildup: "LONG_BUILDUP" }
  * 2️⃣ { oiChange, priceChange }  ← Angel real data
  */
 function summarizeOI(oiData = []) {
+  // -----------------------------
+  // HARD SAFETY – NO DATA
+  // -----------------------------
+  if (!Array.isArray(oiData) || oiData.length === 0) {
+    return {
+      bias: "NEUTRAL",
+      note: "OI data not available – institutional bias unknown",
+    };
+  }
+
   let longBuildUp = 0;
   let shortBuildUp = 0;
   let shortCovering = 0;
@@ -51,24 +62,34 @@ function summarizeOI(oiData = []) {
     }
   });
 
-  // Institutional Bias Logic
-  if (longBuildUp + shortCovering > shortBuildUp + longUnwinding) {
+  const bullishScore = longBuildUp + shortCovering;
+  const bearishScore = shortBuildUp + longUnwinding;
+
+  // -----------------------------
+  // INSTITUTIONAL BIAS LOGIC
+  // -----------------------------
+  if (bullishScore > bearishScore) {
     return {
       bias: "BULLISH",
-      note: "Institutional long buildup / short covering dominance",
+      note:
+        "Institutional long buildup / short covering dominance",
+      strength: bullishScore - bearishScore,
     };
   }
 
-  if (shortBuildUp + longUnwinding > longBuildUp + shortCovering) {
+  if (bearishScore > bullishScore) {
     return {
       bias: "BEARISH",
-      note: "Institutional short buildup / long unwinding dominance",
+      note:
+        "Institutional short buildup / long unwinding dominance",
+      strength: bearishScore - bullishScore,
     };
   }
 
   return {
     bias: "NEUTRAL",
     note: "Institutional activity balanced",
+    strength: 0,
   };
 }
 
