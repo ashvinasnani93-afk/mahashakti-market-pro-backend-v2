@@ -7,15 +7,7 @@
 /**
  * applySafety
  * @param {object} signalResult
- *   { signal: "BUY" | "SELL" | "WAIT", reason?: string, trend?: string }
  * @param {object} context
- *   {
- *     isResultDay: boolean,
- *     isExpiryDay: boolean,
- *     tradeCountToday: number,
- *     tradeType: "INTRADAY" | "EQUITY",
- *     vix?: number
- *   }
  * @returns {object} FINAL SAFE SIGNAL
  */
 function applySafety(signalResult, context = {}) {
@@ -26,6 +18,7 @@ function applySafety(signalResult, context = {}) {
     return {
       signal: "WAIT",
       reason: "Safety: invalid signal input",
+      safety: "FAILED",
     };
   }
 
@@ -45,8 +38,10 @@ function applySafety(signalResult, context = {}) {
   // -------------------------------
   if (isResultDay && signalResult.signal !== "WAIT") {
     return {
+      ...signalResult,
       signal: "WAIT",
       reason: "Result-day safety active",
+      safety: "BLOCKED",
     };
   }
 
@@ -55,8 +50,10 @@ function applySafety(signalResult, context = {}) {
   // -------------------------------
   if (isExpiryDay && signalResult.signal !== "WAIT") {
     return {
+      ...signalResult,
       signal: "WAIT",
       reason: "Expiry-day safety active",
+      safety: "BLOCKED",
     };
   }
 
@@ -65,8 +62,10 @@ function applySafety(signalResult, context = {}) {
   // -------------------------------
   if (tradeCountToday >= 3 && signalResult.signal !== "WAIT") {
     return {
+      ...signalResult,
       signal: "WAIT",
       reason: "Overtrade guard: daily limit reached",
+      safety: "BLOCKED",
     };
   }
 
@@ -75,8 +74,10 @@ function applySafety(signalResult, context = {}) {
   // -------------------------------
   if (tradeType === "EQUITY" && signalResult.signal === "SELL") {
     return {
+      ...signalResult,
       signal: "WAIT",
       reason: "Equity safety: no panic sell allowed",
+      safety: "BLOCKED",
     };
   }
 
