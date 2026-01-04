@@ -16,6 +16,10 @@ const { getOptionChain } = require("./optionchain.api");
 // ✅ OPTIONS CONTEXT API (PHASE-3 START)
 const { getOptionsContextApi } = require("./services/options/optionsContext.api");
 
+// ✅ INDEX & COMMODITY APIs (AUDITED – JUST WIRED)
+const { getIndexConfigAPI } = require("./index.api");
+const { getCommodity } = require("./commodity.api");
+
 const { loadOptionSymbolMaster } = require("./token.service");
 
 const app = express();
@@ -28,16 +32,16 @@ app.use(express.json());
 
 // ROOT CHECK
 app.get("/", (req, res) => {
-res.send("Mahashakti Market Pro API is LIVE 🚀");
+  res.send("Mahashakti Market Pro API is LIVE 🚀");
 });
 
 // HEALTH CHECK (Render / Monitoring)
 app.get("/health", (req, res) => {
-res.json({
-status: "ok",
-uptime: process.uptime(),
-timestamp: Date.now(),
-});
+  res.json({
+    status: "ok",
+    uptime: process.uptime(),
+    timestamp: Date.now(),
+  });
 });
 
 const PORT = process.env.PORT || 3000;
@@ -46,10 +50,10 @@ const PORT = process.env.PORT || 3000;
 // ENV CHECK (IMPORTANT – BEFORE ANGEL)
 // ==========================================
 const {
-ANGEL_API_KEY,
-ANGEL_CLIENT_ID,
-ANGEL_PASSWORD,
-ANGEL_TOTP_SECRET,
+  ANGEL_API_KEY,
+  ANGEL_CLIENT_ID,
+  ANGEL_PASSWORD,
+  ANGEL_TOTP_SECRET,
 } = process.env;
 
 if (!ANGEL_API_KEY) throw new Error("ANGEL_API_KEY missing");
@@ -68,6 +72,16 @@ app.post("/signal", getSignal);
 app.post("/options/context", getOptionsContextApi);
 
 // ==========================================
+// INDEX CONFIG API
+// ==========================================
+app.post("/index/config", getIndexConfigAPI);
+
+// ==========================================
+// COMMODITY API
+// ==========================================
+app.post("/commodity", getCommodity);
+
+// ==========================================
 // GLOBAL STATE
 // ==========================================
 let smartApi;
@@ -84,164 +98,162 @@ let latestLTP = {};
 // LTP DECODER
 // ==========================================
 function decodeLTP(buffer) {
-if (buffer.length !== 51) return null;
-const pricePaise = buffer.readInt32LE(43);
-return pricePaise / 100;
+  if (buffer.length !== 51) return null;
+  const pricePaise = buffer.readInt32LE(43);
+  return pricePaise / 100;
 }
 
 // ==========================================
 // LOAD STOCK SYMBOL MASTER
 // ==========================================
 function loadSymbolMaster() {
-return new Promise((resolve, reject) => {
-console.log("📥 Loading Angel Symbol Master...");
+  return new Promise((resolve, reject) => {
+    console.log("📥 Loading Angel Symbol Master...");
 
-https  
-  .get(  
-    "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",  
-    (res) => {  
-      let data = "";  
-      res.on("data", (c) => (data += c));  
-      res.on("end", () => {  
-        const json = JSON.parse(data);  
+    https
+      .get(
+        "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",
+        (res) => {
+          let data = "";
+          res.on("data", (c) => (data += c));
+          res.on("end", () => {
+            const json = JSON.parse(data);
 
-        json.forEach((item) => {  
-          if (!item.symbol || !item.token) return;  
-          if (item.exch_seg === "NSE" || item.exch_seg === "BSE") {  
-            const symbol = item.symbol.toUpperCase();  
-            const exchangeType = item.exch_seg === "NSE" ? 1 : 3;  
+            json.forEach((item) => {
+              if (!item.symbol || !item.token) return;
+              if (item.exch_seg === "NSE" || item.exch_seg === "BSE") {
+                const symbol = item.symbol.toUpperCase();
+                const exchangeType = item.exch_seg === "NSE" ? 1 : 3;
 
-            symbolTokenMap[symbol] = {  
-              token: item.token,  
-              exchangeType,  
-            };  
-            tokenSymbolMap[item.token] = symbol;  
-          }  
-        });  
+                symbolTokenMap[symbol] = {
+                  token: item.token,
+                  exchangeType,
+                };
+                tokenSymbolMap[item.token] = symbol;
+              }
+            });
 
-        console.log(  
-          "✅ STOCK Symbols Loaded:",  
-          Object.keys(symbolTokenMap).length  
-        );  
-        resolve();  
-      });  
-    }  
-  )  
-  .on("error", reject);
-
-});
+            console.log(
+              "✅ STOCK Symbols Loaded:",
+              Object.keys(symbolTokenMap).length
+            );
+            resolve();
+          });
+        }
+      )
+      .on("error", reject);
+  });
 }
 
 // ==========================================
 // ANGEL LOGIN
 // ==========================================
 async function angelLogin() {
-if (isLoggingIn) return;
-isLoggingIn = true;
+  if (isLoggingIn) return;
+  isLoggingIn = true;
 
-try {
-console.log("🔐 Angel Login Start");
+  try {
+    console.log("🔐 Angel Login Start");
 
-smartApi = new SmartAPI({ api_key: ANGEL_API_KEY });  
-const otp = authenticator.generate(ANGEL_TOTP_SECRET);  
+    smartApi = new SmartAPI({ api_key: ANGEL_API_KEY });
+    const otp = authenticator.generate(ANGEL_TOTP_SECRET);
 
-const session = await smartApi.generateSession(  
-  ANGEL_CLIENT_ID,  
-  ANGEL_PASSWORD,  
-  otp  
-);  
+    const session = await smartApi.generateSession(
+      ANGEL_CLIENT_ID,
+      ANGEL_PASSWORD,
+      otp
+    );
 
-smartApi.setAccessToken(session.data.jwtToken);  
-feedToken = session.data.feedToken;  
+    smartApi.setAccessToken(session.data.jwtToken);
+    feedToken = session.data.feedToken;
 
-console.log("✅ Angel Login SUCCESS");  
-startWebSocket();
-
-} catch (e) {
-console.error("❌ Angel Login Error:", e);
-setTimeout(angelLogin, 5000);
-} finally {
-isLoggingIn = false;
-}
+    console.log("✅ Angel Login SUCCESS");
+    startWebSocket();
+  } catch (e) {
+    console.error("❌ Angel Login Error:", e);
+    setTimeout(angelLogin, 5000);
+  } finally {
+    isLoggingIn = false;
+  }
 }
 
 // ==========================================
 // WEBSOCKET
 // ==========================================
 function startWebSocket() {
-if (!feedToken) return;
+  if (!feedToken) return;
 
-const wsUrl =
-  `wss://smartapisocket.angelone.in/smart-stream` +
-  `?clientCode=${ANGEL_CLIENT_ID}` +
-  `&feedToken=${feedToken}` +
-  `&apiKey=${ANGEL_API_KEY}`;
-ws = new WebSocket(wsUrl);
+  const wsUrl =
+    `wss://smartapisocket.angelone.in/smart-stream` +
+    `?clientCode=${ANGEL_CLIENT_ID}` +
+    `&feedToken=${feedToken}` +
+    `&apiKey=${ANGEL_API_KEY}`;
 
-ws.on("open", () => {
-console.log("🟢 WebSocket Connected");
-subscribedTokens.clear();
-});
+  ws = new WebSocket(wsUrl);
 
-ws.on("message", (data) => {
-if (!Buffer.isBuffer(data)) return;
-if (data.length !== 51) return;
+  ws.on("open", () => {
+    console.log("🟢 WebSocket Connected");
+    subscribedTokens.clear();
+  });
 
-const ltp = decodeLTP(data);  
-const token = data.toString("utf8", 2, 27).replace(/\0/g, "");  
-const symbol = tokenSymbolMap[token];  
-if (symbol && ltp) latestLTP[symbol] = ltp;
+  ws.on("message", (data) => {
+    if (!Buffer.isBuffer(data)) return;
+    if (data.length !== 51) return;
 
-});
+    const ltp = decodeLTP(data);
+    const token = data.toString("utf8", 2, 27).replace(/\0/g, "");
+    const symbol = tokenSymbolMap[token];
+    if (symbol && ltp) latestLTP[symbol] = ltp;
+  });
 
-ws.on("close", () => {
-console.log("🔴 WebSocket Disconnected – reconnecting...");
-setTimeout(startWebSocket, 3000);
-});
+  ws.on("close", () => {
+    console.log("🔴 WebSocket Disconnected – reconnecting...");
+    setTimeout(startWebSocket, 3000);
+  });
 }
 
 // ==========================================
 // SUBSCRIBE SYMBOL
 // ==========================================
 function subscribeSymbol(symbol) {
-const info = symbolTokenMap[symbol];
-if (!info || !ws || ws.readyState !== 1) return;
-if (subscribedTokens.has(info.token)) return;
+  const info = symbolTokenMap[symbol];
+  if (!info || !ws || ws.readyState !== 1) return;
+  if (subscribedTokens.has(info.token)) return;
 
-ws.send(
-JSON.stringify({
-action: 1,
-params: {
-mode: 1,
-tokenList: [{ exchangeType: info.exchangeType, tokens: [info.token] }],
-},
-})
-);
+  ws.send(
+    JSON.stringify({
+      action: 1,
+      params: {
+        mode: 1,
+        tokenList: [{ exchangeType: info.exchangeType, tokens: [info.token] }],
+      },
+    })
+  );
 
-subscribedTokens.add(info.token);
+  subscribedTokens.add(info.token);
 }
 
 // ==========================================
 // STOCK LTP API
 // ==========================================
 app.get("/angel/ltp", (req, res) => {
-const symbol = req.query.symbol?.toUpperCase();
-if (!symbol || !symbolTokenMap[symbol]) {
-return res.json({ status: false, message: "symbol invalid" });
-}
+  const symbol = req.query.symbol?.toUpperCase();
+  if (!symbol || !symbolTokenMap[symbol]) {
+    return res.json({ status: false, message: "symbol invalid" });
+  }
 
-subscribeSymbol(symbol);
+  subscribeSymbol(symbol);
 
-if (latestLTP[symbol]) {
-return res.json({
-status: true,
-symbol,
-ltp: latestLTP[symbol],
-live: true,
-});
-}
+  if (latestLTP[symbol]) {
+    return res.json({
+      status: true,
+      symbol,
+      ltp: latestLTP[symbol],
+      live: true,
+    });
+  }
 
-res.json({ status: false, message: "LTP not ready yet" });
+  res.json({ status: false, message: "LTP not ready yet" });
 });
 
 // ==========================================
@@ -253,13 +265,13 @@ app.get("/option-chain", getOptionChain);
 // START SERVER
 // ==========================================
 app.listen(PORT, async () => {
-console.log("🚀 Server running on port", PORT);
-try {
-await loadSymbolMaster();
-await loadOptionSymbolMaster();
-await angelLogin();
-} catch (e) {
-console.error("❌ Startup failed:", e);
-process.exit(1);
-}
+  console.log("🚀 Server running on port", PORT);
+  try {
+    await loadSymbolMaster();
+    await loadOptionSymbolMaster();
+    await angelLogin();
+  } catch (e) {
+    console.error("❌ Startup failed:", e);
+    process.exit(1);
+  }
 });
