@@ -206,7 +206,7 @@ function finalDecision(data) {
   }
 
   // -------------------------------
-  // ✅ FINAL SIGNAL (UNCHANGED CORE)
+  // ✅ FINAL SIGNAL (CORE LOGIC UNCHANGED)
   // -------------------------------
   const rawSignal = {
     signal: breakoutResult.action, // BUY / SELL
