@@ -5,9 +5,9 @@
 // NO EXECUTION | FRONTEND READY
 // ==========================================
 
-const { getOptionsContext } = require("./optionsMaster.service");
-const { getOptionsSafetyContext } = require("./optionsSafety.service");
-const { decideOptionTrade } = require("./optionDecision.service");
+const { getOptionsContext } = require("./options/optionsMaster.service");
+const { getOptionsSafetyContext } = require("./options/optionsSafety.service");
+const { decideOptionTrade } = require("./options/optionDecision.service");
 
 // ==========================================
 // POST /options
@@ -35,13 +35,12 @@ function getOptions(req, res) {
 
     // -----------------------------
     // STEP 1: OPTIONS MASTER CONTEXT
-    // (mapping aligned with master service)
     // -----------------------------
     const optionsContext = getOptionsContext({
       symbol: body.symbol,
       spotPrice: body.spotPrice,
-      expiry: body.expiry,                 // WEEKLY / MONTHLY
-      tradeType: body.tradeType,           // INTRADAY / POSITIONAL
+      expiry: body.expiry,       // WEEKLY / MONTHLY
+      tradeType: body.tradeType, // INTRADAY / POSITIONAL
     });
 
     if (optionsContext.status !== "READY") {
@@ -52,7 +51,7 @@ function getOptions(req, res) {
     }
 
     // -----------------------------
-    // STEP 2: OPTIONS SAFETY CHECK (MANDATORY)
+    // STEP 2: OPTIONS SAFETY CHECK
     // -----------------------------
     const safetyContext = getOptionsSafetyContext({
       symbol: optionsContext.symbol,
@@ -87,7 +86,7 @@ function getOptions(req, res) {
     });
 
     // -----------------------------
-    // UI SIGNAL MAPPING (LOCKED RULE)
+    // UI SIGNAL MAPPING
     // -----------------------------
     let uiSignal = "WAIT";
     let uiColor = "YELLOW";
@@ -106,7 +105,7 @@ function getOptions(req, res) {
     }
 
     // -----------------------------
-    // FINAL API RESPONSE (FROZEN FORMAT)
+    // FINAL RESPONSE
     // -----------------------------
     return res.json({
       status: true,
