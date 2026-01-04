@@ -16,6 +16,9 @@ const { getOptionChain } = require("./optionchain.api");
 // ✅ OPTIONS CONTEXT API (PHASE-3 START)
 const { getOptionsContextApi } = require("./services/options/optionsContext.api");
 
+// 🆕 OPTIONS FINAL API (PHASE-4)
+const { getOptions } = require("./services/options.api");
+
 // ✅ INDEX & COMMODITY APIs (AUDITED – JUST WIRED)
 const { getIndexConfigAPI } = require("./services/index.api");
 const { getCommodity } = require("./services/commodity.api");
@@ -30,12 +33,10 @@ app.use(express.json());
 // BASIC ROUTES
 // ==========================================
 
-// ROOT CHECK
 app.get("/", (req, res) => {
   res.send("Mahashakti Market Pro API is LIVE 🚀");
 });
 
-// HEALTH CHECK (Render / Monitoring)
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
@@ -47,7 +48,7 @@ app.get("/health", (req, res) => {
 const PORT = process.env.PORT || 3000;
 
 // ==========================================
-// ENV CHECK (IMPORTANT – BEFORE ANGEL)
+// ENV CHECK
 // ==========================================
 const {
   ANGEL_API_KEY,
@@ -62,23 +63,20 @@ if (!ANGEL_PASSWORD) throw new Error("ANGEL_PASSWORD missing");
 if (!ANGEL_TOTP_SECRET) throw new Error("ANGEL_TOTP_SECRET missing");
 
 // ==========================================
-// SIGNAL API (BUY / SELL / WAIT)
+// CORE APIs
 // ==========================================
+
+// SIGNAL
 app.post("/signal", getSignal);
 
-// ==========================================
-// OPTIONS CONTEXT API (PHASE-3)
-// ==========================================
-app.post("/options/context", getOptionsContextApi);
+// OPTIONS
+app.post("/options/context", getOptionsContextApi); // phase-3
+app.post("/options", getOptions);                   // 🆕 phase-4 FINAL
 
-// ==========================================
-// INDEX CONFIG API
-// ==========================================
+// INDEX CONFIG
 app.post("/index/config", getIndexConfigAPI);
 
-// ==========================================
-// COMMODITY API
-// ==========================================
+// COMMODITY
 app.post("/commodity", getCommodity);
 
 // ==========================================
