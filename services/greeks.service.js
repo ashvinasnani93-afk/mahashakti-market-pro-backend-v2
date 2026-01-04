@@ -13,6 +13,9 @@
  *   theta,
  *   vega
  * }
+ *
+ * ⚠️ Context only
+ * ❌ No BUY / SELL enforcement
  */
 function getGreeksContext(greeks = {}) {
   if (!greeks || typeof greeks !== "object") {
@@ -22,35 +25,54 @@ function getGreeksContext(greeks = {}) {
     };
   }
 
-  const { delta, gamma, theta, vega } = greeks;
+  const {
+    delta,
+    gamma,
+    theta,
+    vega,
+  } = greeks;
 
   // -----------------------------
-  // BUYER CONTEXT
-  // -----------------------------
-  if (typeof delta === "number" && delta > 0.6) {
-    return {
-      bias: "BUYER_FAVORABLE",
-      note: "High delta suggests strong directional momentum",
-    };
-  }
-
-  // -----------------------------
-  // SELLER CONTEXT
-  // -----------------------------
-  if (typeof theta === "number" && theta < 0) {
-    return {
-      bias: "SELLER_FAVORABLE",
-      note: "Theta decay dominant – favors option sellers",
-    };
-  }
-
-  // -----------------------------
-  // HIGH RISK CONTEXT
+  // HIGH RISK CONTEXT (PRIORITY)
   // -----------------------------
   if (typeof gamma === "number" && gamma > 0.15) {
     return {
       bias: "HIGH_RISK",
-      note: "High gamma – rapid price sensitivity, caution advised",
+      note:
+        "High gamma – sharp price sensitivity, fast moves possible",
+    };
+  }
+
+  // -----------------------------
+  // SELLER FAVORABLE (THETA)
+  // -----------------------------
+  if (typeof theta === "number" && theta < -0.05) {
+    return {
+      bias: "SELLER_FAVORABLE",
+      note:
+        "Strong theta decay – time working in favor of option sellers",
+    };
+  }
+
+  // -----------------------------
+  // BUYER FAVORABLE (DELTA)
+  // -----------------------------
+  if (typeof delta === "number" && delta > 0.6) {
+    return {
+      bias: "BUYER_FAVORABLE",
+      note:
+        "High delta – strong directional momentum present",
+    };
+  }
+
+  // -----------------------------
+  // VOLATILITY CONTEXT (VEGA)
+  // -----------------------------
+  if (typeof vega === "number" && vega > 0.12) {
+    return {
+      bias: "VOLATILITY_SENSITIVE",
+      note:
+        "High vega – option premium sensitive to volatility changes",
     };
   }
 
