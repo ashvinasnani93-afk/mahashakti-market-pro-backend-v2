@@ -68,8 +68,10 @@ function getValidStrikes({
       expiryType,
     });
 
-    const ceToken = getOptionToken(ceSymbol);
-    const peToken = getOptionToken(peSymbol);
+    if (!ceSymbol && !peSymbol) continue;
+
+    const ceToken = ceSymbol ? getOptionToken(ceSymbol) : null;
+    const peToken = peSymbol ? getOptionToken(peSymbol) : null;
 
     // ✅ ANGEL IS FINAL AUTHORITY
     if (ceToken || peToken) {
