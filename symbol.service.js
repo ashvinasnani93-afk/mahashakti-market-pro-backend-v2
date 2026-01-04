@@ -45,12 +45,18 @@ function isMonthlyExpiry(date) {
 }
 
 // ===============================
-// NORMALIZE EXPIRY DATE
+// NORMALIZE EXPIRY DATE (SAFE)
 // ===============================
 function normalizeExpiryDate(date, expiryType) {
   const d = new Date(date);
 
-  if (expiryType === "MONTHLY") {
+  // ✅ SAFETY FALLBACK (future-proof)
+  const finalExpiryType =
+    expiryType === "MONTHLY" || expiryType === "WEEKLY"
+      ? expiryType
+      : "WEEKLY";
+
+  if (finalExpiryType === "MONTHLY") {
     return getLastThursday(d.getFullYear(), d.getMonth());
   }
 
@@ -78,7 +84,8 @@ function formatOptionSymbol({
   const day = d.getDate();
   const dd = day.toString().padStart(2, "0");
 
-  // ✅ ANGEL FINAL FORMAT (weekly + monthly SAME)
+  // ✅ ANGEL FINAL FORMAT
+  // Example: NIFTY30JAN2524500CE
   return `${index}${dd}${month}${year}${strike}${type}`;
 }
 
