@@ -1,8 +1,7 @@
 // ==========================================
-// STRIKE SERVICE – FINAL (A2.9)
+// STRIKE SERVICE – FINAL (A2.9.1)
 // ANGEL SOURCE OF TRUTH
-// Extract strikes directly from
-// Angel OPTION Symbol Master
+// Extract strikes ONLY if Angel validates
 // ==========================================
 
 const { isMonthlyExpiry, formatOptionSymbol } = require("./symbol.service");
@@ -10,11 +9,13 @@ const { getOptionToken } = require("./token.service");
 
 // ===============================
 // EXTRACT STRIKE FROM ANGEL SYMBOL
+// (UTILITY – SAFE, NON-EXECUTING)
 // Examples:
 // NIFTY30JAN2524500CE      -> 24500
 // BANKNIFTY30JAN2559100PE -> 59100
 // ===============================
 function extractStrikeFromSymbol(symbol, index) {
+  if (!symbol || !index) return null;
   if (!symbol.startsWith(index)) return null;
 
   const match = symbol.match(/(\d+)(CE|PE)$/);
@@ -28,17 +29,18 @@ function getValidStrikes({
   index,       // NIFTY / BANKNIFTY
   expiryDate,  // JS Date
 }) {
+  // -------------------------------
+  // HARD VALIDATION
+  // -------------------------------
+  if (!index || !(expiryDate instanceof Date)) {
+    return [];
+  }
+
   const strikesSet = new Set();
 
   const expiryType = isMonthlyExpiry(expiryDate)
     ? "MONTHLY"
     : "WEEKLY";
-
-  // Angel Option Symbol Master is already loaded
-  // We validate ONLY symbols Angel actually knows
-
-  // Iterate over Angel option symbols via token service cache
-  // (by trying realistic formatted symbols)
 
   // Strike step based on index
   const STEP = index === "BANKNIFTY" ? 100 : 50;
@@ -69,7 +71,7 @@ function getValidStrikes({
     const ceToken = getOptionToken(ceSymbol);
     const peToken = getOptionToken(peSymbol);
 
-    // ✅ ANGEL IS THE BOSS
+    // ✅ ANGEL IS FINAL AUTHORITY
     if (ceToken || peToken) {
       strikesSet.add(strike);
     }
@@ -83,4 +85,5 @@ function getValidStrikes({
 // ===============================
 module.exports = {
   getValidStrikes,
+  extractStrikeFromSymbol, // utility only (future safe)
 };
