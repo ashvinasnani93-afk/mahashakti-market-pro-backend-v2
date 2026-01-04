@@ -1,20 +1,46 @@
 // ==========================================
-// TOKEN SERVICE
+// TOKEN SERVICE (FINAL – MEMORY SAFE)
 // OPTION SYMBOL → ANGEL TOKEN (NFO)
 // ==========================================
 
 const https = require("https");
 
 // ===============================
-// GLOBAL CACHE
+// GLOBAL CACHE (REBUILT EVERY LOAD)
 // ===============================
 let optionSymbolMap = {};
-// {
-//   "NIFTY30JAN2524500CE": {
-//        token: "12345",
-//        exchangeType: 2
-//   }
-// }
+let lastLoadCount = 0;
+
+// ===============================
+// UTILITY: CHECK OPTION EXPIRY
+// Angel format: NIFTY30JAN2524500CE
+// ===============================
+function isExpiredOption(symbol) {
+  try {
+    const match = symbol.match(
+      /(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2})/
+    );
+
+    if (!match) return true;
+
+    const day = Number(match[1]);
+    const monthStr = match[2];
+    const year = Number("20" + match[3]);
+
+    const MONTH_MAP = {
+      JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+      JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
+    };
+
+    const expiryDate = new Date(year, MONTH_MAP[monthStr], day);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return expiryDate < today;
+  } catch {
+    return true;
+  }
+}
 
 // ===============================
 // LOAD SYMBOL MASTER (OPTIONS ONLY)
@@ -34,6 +60,11 @@ function loadOptionSymbolMaster() {
             try {
               const json = JSON.parse(data);
 
+              // 🔥 MEMORY RESET (IMPORTANT)
+              optionSymbolMap = {};
+              let added = 0;
+              let skippedExpired = 0;
+
               json.forEach((item) => {
                 if (
                   item.exch_seg === "NFO" &&
@@ -45,18 +76,31 @@ function loadOptionSymbolMaster() {
 
                   if (!symbol || !token) return;
 
+                  // 🚫 AUTO-IGNORE EXPIRED OPTIONS
+                  if (isExpiredOption(symbol)) {
+                    skippedExpired++;
+                    return;
+                  }
+
                   optionSymbolMap[symbol] = {
                     token,
                     exchangeType: 2, // NFO
                   };
+                  added++;
                 }
               });
 
               console.log(
-                "✅ OPTION Symbols Loaded:",
-                Object.keys(optionSymbolMap).length
+                `✅ OPTION Symbols Loaded: ${added} (expired ignored: ${skippedExpired})`
               );
 
+              if (lastLoadCount > 0) {
+                console.log(
+                  `🧪 Symbol count change: ${lastLoadCount} → ${added}`
+                );
+              }
+
+              lastLoadCount = added;
               resolve();
             } catch (e) {
               reject(e);
@@ -76,14 +120,146 @@ function getOptionToken(optionSymbol) {
 
   const key = optionSymbol.toUpperCase();
 
-  // ✅ 1. Direct exact match (BEST)
+  // ✅ STRICT MATCH ONLY (RULE-LOCKED)
   if (optionSymbolMap[key]) {
     return optionSymbolMap[key];
   }
 
-  // ❌ No unsafe fallback
-  // Angel symbol format must match exactly
-  // If not found → token does NOT exist
+  return null;
+}
+
+// ===============================
+// EXPORTS
+// ===============================
+module.exports = {
+  loadOptionSymbolMaster,
+  getOptionToken,
+};// ==========================================
+// TOKEN SERVICE (FINAL – MEMORY SAFE)
+// OPTION SYMBOL → ANGEL TOKEN (NFO)
+// ==========================================
+
+const https = require("https");
+
+// ===============================
+// GLOBAL CACHE (REBUILT EVERY LOAD)
+// ===============================
+let optionSymbolMap = {};
+let lastLoadCount = 0;
+
+// ===============================
+// UTILITY: CHECK OPTION EXPIRY
+// Angel format: NIFTY30JAN2524500CE
+// ===============================
+function isExpiredOption(symbol) {
+  try {
+    const match = symbol.match(
+      /(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2})/
+    );
+
+    if (!match) return true;
+
+    const day = Number(match[1]);
+    const monthStr = match[2];
+    const year = Number("20" + match[3]);
+
+    const MONTH_MAP = {
+      JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+      JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
+    };
+
+    const expiryDate = new Date(year, MONTH_MAP[monthStr], day);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return expiryDate < today;
+  } catch {
+    return true;
+  }
+}
+
+// ===============================
+// LOAD SYMBOL MASTER (OPTIONS ONLY)
+// ===============================
+function loadOptionSymbolMaster() {
+  return new Promise((resolve, reject) => {
+    console.log("📥 Loading Angel OPTION Symbol Master...");
+
+    https
+      .get(
+        "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",
+        (res) => {
+          let data = "";
+
+          res.on("data", (chunk) => (data += chunk));
+          res.on("end", () => {
+            try {
+              const json = JSON.parse(data);
+
+              // 🔥 MEMORY RESET (IMPORTANT)
+              optionSymbolMap = {};
+              let added = 0;
+              let skippedExpired = 0;
+
+              json.forEach((item) => {
+                if (
+                  item.exch_seg === "NFO" &&
+                  (item.instrumenttype === "OPTIDX" ||
+                    item.instrumenttype === "OPTSTK")
+                ) {
+                  const symbol = item.symbol?.toUpperCase();
+                  const token = item.token;
+
+                  if (!symbol || !token) return;
+
+                  // 🚫 AUTO-IGNORE EXPIRED OPTIONS
+                  if (isExpiredOption(symbol)) {
+                    skippedExpired++;
+                    return;
+                  }
+
+                  optionSymbolMap[symbol] = {
+                    token,
+                    exchangeType: 2, // NFO
+                  };
+                  added++;
+                }
+              });
+
+              console.log(
+                `✅ OPTION Symbols Loaded: ${added} (expired ignored: ${skippedExpired})`
+              );
+
+              if (lastLoadCount > 0) {
+                console.log(
+                  `🧪 Symbol count change: ${lastLoadCount} → ${added}`
+                );
+              }
+
+              lastLoadCount = added;
+              resolve();
+            } catch (e) {
+              reject(e);
+            }
+          });
+        }
+      )
+      .on("error", reject);
+  });
+}
+
+// ===============================
+// GET TOKEN BY OPTION SYMBOL
+// ===============================
+function getOptionToken(optionSymbol) {
+  if (!optionSymbol) return null;
+
+  const key = optionSymbol.toUpperCase();
+
+  // ✅ STRICT MATCH ONLY (RULE-LOCKED)
+  if (optionSymbolMap[key]) {
+    return optionSymbolMap[key];
+  }
 
   return null;
 }
