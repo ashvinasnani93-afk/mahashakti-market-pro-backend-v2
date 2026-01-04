@@ -5,17 +5,26 @@
 
 const express = require("express");
 const cors = require("cors");
+const WebSocket = require("ws");
 const https = require("https");
 const { SmartAPI } = require("smartapi-javascript");
 const { authenticator } = require("otplib");
 
+// ===============================
+// CORE APIs
+// ===============================
 const { getSignal } = require("./signal.api");
 const { getOptionChain } = require("./optionchain.api");
-const { getOptions } = require("./options.api");
-const { getIndexConfigAPI } = require("./index.api");
-const { getCommodity } = require("./commodity.api");
-const { getLongTerm } = require("./longTerm.api");
 
+// ✅ FIXED PATH (IMPORTANT)
+const { getOptions } = require("./services/options.api");
+const { getIndexConfigAPI } = require("./services/index.api");
+const { getCommodity } = require("./services/commodity.api");
+const { getOptionsContextApi } = require("./services/options/optionsContext.api");
+
+// ===============================
+// ANGEL TOKEN MASTER
+// ===============================
 const { loadOptionSymbolMaster } = require("./token.service");
 
 const app = express();
@@ -56,15 +65,26 @@ if (!ANGEL_PASSWORD) throw new Error("ANGEL_PASSWORD missing");
 if (!ANGEL_TOTP_SECRET) throw new Error("ANGEL_TOTP_SECRET missing");
 
 // ==========================================
-// API ROUTES (FINAL WIRING)
+// API ROUTES
 // ==========================================
 
-app.post("/signal", getSignal);              // Equity / Index
-app.post("/options", getOptions);            // Options decision
-app.get("/option-chain", getOptionChain);    // Option chain
-app.post("/commodity", getCommodity);        // Commodity
-app.post("/index/config", getIndexConfigAPI);// Index registry
-app.post("/long-term", getLongTerm);         // Long-term equity
+// Equity / Index Signal
+app.post("/signal", getSignal);
+
+// Index Config
+app.post("/index/config", getIndexConfigAPI);
+
+// Options Context (Phase-3)
+app.post("/options/context", getOptionsContextApi);
+
+// Options Decision
+app.post("/options", getOptions);
+
+// Option Chain
+app.get("/option-chain", getOptionChain);
+
+// Commodity
+app.post("/commodity", getCommodity);
 
 // ==========================================
 // GLOBAL STATE
@@ -168,7 +188,6 @@ async function angelLogin() {
 function startWebSocket() {
   if (!feedToken) return;
 
-  const WebSocket = require("ws");
   const wsUrl =
     `wss://smartapisocket.angelone.in/smart-stream` +
     `?clientCode=${ANGEL_CLIENT_ID}` +
@@ -199,6 +218,27 @@ function startWebSocket() {
 }
 
 // ==========================================
+// SUBSCRIBE SYMBOL
+// ==========================================
+function subscribeSymbol(symbol) {
+  const info = symbolTokenMap[symbol];
+  if (!info || !ws || ws.readyState !== 1) return;
+  if (subscribedTokens.has(info.token)) return;
+
+  ws.send(
+    JSON.stringify({
+      action: 1,
+      params: {
+        mode: 1,
+        tokenList: [{ exchangeType: info.exchangeType, tokens: [info.token] }],
+      },
+    })
+  );
+
+  subscribedTokens.add(info.token);
+}
+
+// ==========================================
 // STOCK LTP API
 // ==========================================
 app.get("/angel/ltp", (req, res) => {
@@ -206,6 +246,8 @@ app.get("/angel/ltp", (req, res) => {
   if (!symbol || !symbolTokenMap[symbol]) {
     return res.json({ status: false, message: "symbol invalid" });
   }
+
+  subscribeSymbol(symbol);
 
   if (latestLTP[symbol]) {
     return res.json({
