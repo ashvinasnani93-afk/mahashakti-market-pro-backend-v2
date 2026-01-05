@@ -184,21 +184,23 @@ function finalDecision(data = {}) {
   // STEP 7: VOLUME VALIDATION (REAL MOVE)
   // =====================================
   const volumeCheck = validateVolume({
-    volume: data.volume,
-    avgVolume: data.avgVolume,
-  });
+  currentVolume: data.volume,
+  averageVolume: data.avgVolume,
+  priceDirection:
+    breakoutResult.action === "BUY" ? "UP" : "DOWN",
+});
 
-  if (!volumeCheck.valid) {
-    return applySafety(
-      {
-        signal: "WAIT",
-        reason: volumeCheck.reason,
-        mode: "VOLUME_BLOCK",
-        riskTag,
-      },
-      safetyContext
-    );
-  }
+if (!volumeCheck.valid) {
+  return applySafety(
+    {
+      signal: "WAIT",
+      reason: volumeCheck.reason,
+      mode: "VOLUME_BLOCK",
+      riskTag,
+    },
+    safetyContext
+  );
+}
 
   // =====================================
   // STEP 8: INTRADAY FAST MOVE (OVERRIDE)
