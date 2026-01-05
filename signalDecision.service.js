@@ -126,44 +126,8 @@ function finalDecision(data = {}) {
     );
   }
 
- // ===============================
-// STEP 4: MARKET BREADTH DIRECTION FILTER
-// ===============================
-  const breadth = analyzeMarketBreadth(data.breadth || {});
-// BUY needs bullish breadth
-if (
-  breakoutResult.action === "BUY" &&
-  breadth.strength !== "BULLISH"
-) {
-  return applySafety(
-    {
-      signal: "WAIT",
-      reason: "Market breadth not bullish",
-      mode: "BREADTH_BLOCK",
-      riskTag,
-    },
-    safetyContext
-  );
-}
-
-// SELL needs bearish breadth
-if (
-  breakoutResult.action === "SELL" &&
-  breadth.strength !== "BEARISH"
-) {
-  return applySafety(
-    {
-      signal: "WAIT",
-      reason: "Market breadth not bearish",
-      mode: "BREADTH_BLOCK",
-      riskTag,
-    },
-    safetyContext
-  );
-}
-
   // =====================================
-  // STEP 5: BREAKOUT / BREAKDOWN (CLOSE BASED)
+  // STEP 4: BREAKOUT / BREAKDOWN (CLOSE BASED)
   // =====================================
   const breakoutResult = checkBreakout({
     close: data.close,
@@ -178,6 +142,43 @@ if (
         signal: "WAIT",
         reason: breakoutResult.reason,
         mode: "NORMAL",
+        riskTag,
+      },
+      safetyContext
+    );
+  }
+
+  // =====================================
+  // STEP 5: MARKET BREADTH DIRECTION FILTER
+  // =====================================
+  const breadth = analyzeMarketBreadth(data.breadth || {});
+
+  // BUY needs bullish breadth
+  if (
+    breakoutResult.action === "BUY" &&
+    breadth.strength !== "BULLISH"
+  ) {
+    return applySafety(
+      {
+        signal: "WAIT",
+        reason: "Market breadth not bullish",
+        mode: "BREADTH_BLOCK",
+        riskTag,
+      },
+      safetyContext
+    );
+  }
+
+  // SELL needs bearish breadth
+  if (
+    breakoutResult.action === "SELL" &&
+    breadth.strength !== "BEARISH"
+  ) {
+    return applySafety(
+      {
+        signal: "WAIT",
+        reason: "Market breadth not bearish",
+        mode: "BREADTH_BLOCK",
         riskTag,
       },
       safetyContext
@@ -204,23 +205,23 @@ if (
   // STEP 7: VOLUME VALIDATION (REAL MOVE)
   // =====================================
   const volumeCheck = validateVolume({
-  currentVolume: data.volume,
-  averageVolume: data.avgVolume,
-  priceDirection:
-    breakoutResult.action === "BUY" ? "UP" : "DOWN",
-});
+    currentVolume: data.volume,
+    averageVolume: data.avgVolume,
+    priceDirection:
+      breakoutResult.action === "BUY" ? "UP" : "DOWN",
+  });
 
-if (!volumeCheck.valid) {
-  return applySafety(
-    {
-      signal: "WAIT",
-      reason: volumeCheck.reason,
-      mode: "VOLUME_BLOCK",
-      riskTag,
-    },
-    safetyContext
-  );
-}
+  if (!volumeCheck.valid) {
+    return applySafety(
+      {
+        signal: "WAIT",
+        reason: volumeCheck.reason,
+        mode: "VOLUME_BLOCK",
+        riskTag,
+      },
+      safetyContext
+    );
+  }
 
   // =====================================
   // STEP 8: INTRADAY FAST MOVE (OVERRIDE)
@@ -242,7 +243,7 @@ if (!volumeCheck.valid) {
           signal: fastMove.signal,
           reason: fastMove.reason,
           mode: "FAST_MOVE",
-          riskTag,
+          riskTag: fastMove.riskTag || riskTag,
         },
         safetyContext
       );
@@ -259,40 +260,40 @@ if (!volumeCheck.valid) {
   // =====================================
   // STEP 10: STRONG BUY / STRONG SELL (RARE)
   // =====================================
- const strong = generateStrongSignal({
-  structure:
-    structure.structure === "UPTREND" ? "UP" :
-    structure.structure === "DOWNTREND" ? "DOWN" : "NONE",
+  const strong = generateStrongSignal({
+    structure:
+      structure.structure === "UPTREND" ? "UP" :
+      structure.structure === "DOWNTREND" ? "DOWN" : "NONE",
 
-  trend: trendResult.trend,
+    trend: trendResult.trend,
 
-  emaAlignment:
-    trendResult.trend === "UPTREND" ? "BULLISH" : "BEARISH",
+    emaAlignment:
+      trendResult.trend === "UPTREND" ? "BULLISH" : "BEARISH",
 
-  priceAction:
-    priceAction.sentiment === "BULLISH" && priceAction.strength === "STRONG"
-      ? "STRONG_BULL"
-      : priceAction.sentiment === "BEARISH" && priceAction.strength === "STRONG"
-      ? "STRONG_BEAR"
-      : "WEAK",
+    priceAction:
+      priceAction.sentiment === "BULLISH" && priceAction.strength === "STRONG"
+        ? "STRONG_BULL"
+        : priceAction.sentiment === "BEARISH" && priceAction.strength === "STRONG"
+        ? "STRONG_BEAR"
+        : "WEAK",
 
-  volumeConfirm: volumeCheck.valid === true,
+    volumeConfirm: volumeCheck.valid === true,
 
-  breakoutQuality:
-    breakoutResult.allowed ? "REAL" : "FAKE",
+    breakoutQuality:
+      breakoutResult.allowed ? "REAL" : "FAKE",
 
-  marketBreadth: breadth.strength || "SIDEWAYS",
+    marketBreadth: breadth.strength || "SIDEWAYS",
 
-  vixLevel:
-    typeof data.vix === "number" && data.vix >= 20
-      ? "HIGH"
-      : typeof data.vix === "number" && data.vix <= 12
-      ? "LOW"
-      : "NORMAL",
+    vixLevel:
+      typeof data.vix === "number" && data.vix >= 20
+        ? "HIGH"
+        : typeof data.vix === "number" && data.vix <= 12
+        ? "LOW"
+        : "NORMAL",
 
-  isResultDay: safetyContext.isResultDay,
-  isExpiryDay: safetyContext.isExpiryDay,
-});
+    isResultDay: safetyContext.isResultDay,
+    isExpiryDay: safetyContext.isExpiryDay,
+  });
 
   if (
     strong.strong &&
@@ -315,13 +316,15 @@ if (!volumeCheck.valid) {
   // =====================================
   // FINAL SIGNAL (PRIORITY)
   // =====================================
-  const finalSignal = strong.strong
-    ? strong.signal
-    : breakoutResult.action;
+  const finalSignal =
+    strong.strong
+      ? strong.signal
+      : breakoutResult.action || "WAIT";
 
-  const finalReason = strong.strong
-    ? strong.reason
-    : "All core + regime + breadth conditions aligned";
+  const finalReason =
+    strong.strong
+      ? strong.reason
+      : "All core + regime + breadth conditions aligned";
 
   return applySafety(
     {
