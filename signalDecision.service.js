@@ -130,7 +130,7 @@ function finalDecision(data = {}) {
   // STEP 4: MARKET BREADTH (PARTICIPATION)
   // =====================================
   const breadth = analyzeMarketBreadth(data.breadth || {});
-  if (!breadth.supportive) {
+ if (breadth.status !== "STRONG") {
     return applySafety(
       {
         signal: "WAIT",
