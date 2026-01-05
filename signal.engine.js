@@ -1,13 +1,12 @@
 // ==========================================
-// SIGNAL ENGINE – CORE CHECKS ONLY
+// SIGNAL ENGINE – CORE CHECKS + STRONG BUY LAYER
 // Trend / RSI / Breakout / Volume
 // ==========================================
 
 // ==========================================
 // STEP 1 – TREND CHECK
-// EMA 20 / EMA 50
+// EMA 20 / EMA 50 (LOCKED)
 // ==========================================
-
 function checkTrend({ closes = [], ema20 = [], ema50 = [] }) {
   if (!closes.length || !ema20.length || !ema50.length) {
     return {
@@ -41,9 +40,8 @@ function checkTrend({ closes = [], ema20 = [], ema50 = [] }) {
 }
 
 // ==========================================
-// STEP 2 – RSI SANITY CHECK
+// STEP 2 – RSI SANITY CHECK (LOCKED)
 // ==========================================
-
 function checkRSI({ rsi, trend }) {
   if (typeof rsi !== "number") {
     return {
@@ -74,9 +72,8 @@ function checkRSI({ rsi, trend }) {
 
 // ==========================================
 // STEP 3 – BREAKOUT / BREAKDOWN
-// CLOSE BASED CONFIRMATION
+// CLOSE BASED CONFIRMATION (LOCKED)
 // ==========================================
-
 function checkBreakout({ close, support, resistance, trend }) {
   if (
     typeof close !== "number" ||
@@ -112,10 +109,8 @@ function checkBreakout({ close, support, resistance, trend }) {
 }
 
 // ==========================================
-// STEP 4 – VOLUME CONFIRMATION
-// FAKE BREAKOUT GUARD
+// STEP 4 – VOLUME CONFIRMATION (LOCKED)
 // ==========================================
-
 function checkVolume({ volume, avgVolume }) {
   if (typeof volume !== "number" || typeof avgVolume !== "number") {
     return {
@@ -138,12 +133,67 @@ function checkVolume({ volume, avgVolume }) {
 }
 
 // ==========================================
-// EXPORTS (ONLY CHECKS – NO FINAL DECISION)
+// 🔥 STEP 5 – STRONG BUY / STRONG SELL CHECK
+// OPERATOR-GRADE CONFIRMATION (NEW – LOCKED)
 // ==========================================
+function checkStrongSignal({
+  trend,
+  breakoutAction,
+  close,
+  prevClose,
+  volume,
+  avgVolume,
+}) {
+  if (!trend || !breakoutAction) {
+    return {
+      strong: false,
+    };
+  }
 
+  // Candle strength
+  const candleBody = Math.abs(close - prevClose);
+  const strongCandle = candleBody > 0 && candleBody >= (close * 0.002); // ~0.2%
+
+  const highVolume = volume >= avgVolume * 1.5;
+
+  if (
+    breakoutAction === "BUY" &&
+    trend === "UPTREND" &&
+    strongCandle &&
+    highVolume
+  ) {
+    return {
+      strong: true,
+      signal: "STRONG_BUY",
+      reason: "Strong bullish candle + high volume in uptrend",
+    };
+  }
+
+  if (
+    breakoutAction === "SELL" &&
+    trend === "DOWNTREND" &&
+    strongCandle &&
+    highVolume
+  ) {
+    return {
+      strong: true,
+      signal: "STRONG_SELL",
+      reason: "Strong bearish candle + high volume in downtrend",
+    };
+  }
+
+  return {
+    strong: false,
+  };
+}
+
+// ==========================================
+// EXPORTS
+// ==========================================
 module.exports = {
   checkTrend,
   checkRSI,
   checkBreakout,
   checkVolume,
+  checkStrongSignal, // 🔥 NEW (USED BY finalDecision)
 };
