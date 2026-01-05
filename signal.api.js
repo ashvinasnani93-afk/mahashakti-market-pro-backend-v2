@@ -1,7 +1,6 @@
 // ==========================================
-// SIGNAL API – FINAL (PHASE-2A + A2 + AUDIT)
-// BUY / SELL / WAIT
-// ANDROID READY + SAFETY + INSTITUTIONAL
+// SIGNAL API – FINAL (UPDATED FOR NEW LOCKS)
+// BUY / SELL / WAIT + STRONG BUY SUPPORT
 // ==========================================
 
 const { finalDecision } = require("./signalDecision.service");
@@ -27,7 +26,8 @@ function getSignal(req, res) {
     if (!Array.isArray(body.closes) || body.closes.length === 0) {
       return res.json({
         status: false,
-        message: "closes array required",
+        signal: "WAIT",
+        reason: "closes array required",
       });
     }
 
@@ -48,34 +48,15 @@ function getSignal(req, res) {
       return res.json({
         status: true,
         signal: "WAIT",
-        reason: "Instrument not supported in app",
+        reason: "Instrument not supported",
       });
     }
 
     const segment = body.segment || "EQUITY";
     const tradeType = body.tradeType || "INTRADAY";
 
-    if (!indexConfig.segments.includes(segment)) {
-      return res.json({
-        status: true,
-        signal: "WAIT",
-        reason: `Segment ${segment} not allowed for ${symbol}`,
-      });
-    }
-
-    if (
-      indexConfig.allowedTradeTypes &&
-      !indexConfig.allowedTradeTypes.includes(tradeType)
-    ) {
-      return res.json({
-        status: true,
-        signal: "WAIT",
-        reason: `Trade type ${tradeType} not allowed for ${symbol}`,
-      });
-    }
-
     // -------------------------------
-    // NORMALIZED ENGINE INPUT
+    // ENGINE INPUT (NORMALIZED)
     // -------------------------------
     const data = {
       symbol,
@@ -105,55 +86,52 @@ function getSignal(req, res) {
     };
 
     // -------------------------------
-    // FINAL DECISION
+    // FINAL DECISION (CORE ENGINE)
     // -------------------------------
     const result = finalDecision(data);
 
     // -------------------------------
-    // RISK TAG (TEXT ONLY)
+    // MARKET REGIME (DERIVED – SAFE)
     // -------------------------------
-    let riskTag = "NORMAL";
-    if (data.isResultDay) riskTag = "RESULT_DAY";
-    else if (data.isExpiryDay) riskTag = "EXPIRY_DAY";
-
-    // -------------------------------
-    // VIX NOTE (DISPLAY ONLY)
-    // -------------------------------
-    let vixNote = null;
-    if (typeof data.vix === "number") {
-      if (data.vix >= 18) {
-        vixNote =
-          "High volatility – reduce position size & expect fast moves";
-      } else if (data.vix <= 12) {
-        vixNote =
-          "Low volatility – breakout follow-through may be slow";
-      } else {
-        vixNote = "Normal volatility conditions";
-      }
+    let marketRegime = "SIDEWAYS";
+    if (result.trend === "UPTREND" || result.trend === "DOWNTREND") {
+      marketRegime = "TRENDING";
+    }
+    if (result.signal === "WAIT") {
+      marketRegime = "NO_TRADE_ZONE";
     }
 
     // -------------------------------
-    // FINAL RESPONSE (EXTENDED – SAFE)
+    // SIGNAL STRENGTH TAG (NEW)
+    // -------------------------------
+    const strengthTag =
+      result.confidence === "HIGH"
+        ? "STRONG"
+        : "NORMAL";
+
+    // -------------------------------
+    // FINAL RESPONSE
     // -------------------------------
     return res.json({
       status: true,
 
       symbol,
+      segment,
       instrumentType: indexConfig.instrumentType,
       exchange: indexConfig.exchange,
-      segment,
 
-      signal: result.signal,      // BUY / SELL / WAIT
+      signal: result.signal,              // BUY / SELL / WAIT
+      signalStrength: strengthTag,        // STRONG / NORMAL
       trend: result.trend || null,
+      marketRegime,                       // TRENDING / SIDEWAYS / NO_TRADE_ZONE
+
       reason: result.reason,
 
-      // 🔥 NEW – NON BREAKING CONTEXT
-      mode: result.mode || "NORMAL",
+      // CONTEXT (TEXT ONLY)
       institutionalBias: result.institutionalBias || null,
       pcrBias: result.pcrBias || null,
       greeksNote: result.greeksNote || null,
-      riskTag,
-      vixNote,
+      vixNote: result.vixNote || null,
     });
   } catch (e) {
     console.error("❌ Signal API Error:", e.message);
