@@ -1,26 +1,11 @@
 // ==================================================
 // PRICE ACTION SERVICE (FINAL – LOCKED)
 // Candle psychology engine
-// Reads strength, rejection, and control
 // ==================================================
 
-/**
- * analyzePriceAction
- * @param {object} candle
- * @returns {object}
- *
- * Required:
- * - open
- * - high
- * - low
- * - close
- */
 function analyzePriceAction(candle = {}) {
   const { open, high, low, close } = candle;
 
-  // -----------------------------
-  // HARD VALIDATION
-  // -----------------------------
   if (
     typeof open !== "number" ||
     typeof high !== "number" ||
@@ -28,100 +13,90 @@ function analyzePriceAction(candle = {}) {
     typeof close !== "number"
   ) {
     return {
+      valid: false,
       sentiment: "UNKNOWN",
-      strength: 0,
+      strength: "NONE",
       reason: "Invalid candle data",
     };
   }
 
-  // -----------------------------
-  // BASIC PARAMETERS
-  // -----------------------------
   const body = Math.abs(close - open);
   const range = high - low;
-  const upperWick = high - Math.max(open, close);
-  const lowerWick = Math.min(open, close) - low;
 
   if (range === 0) {
     return {
+      valid: false,
       sentiment: "UNKNOWN",
-      strength: 0,
+      strength: "NONE",
       reason: "Zero range candle",
     };
   }
+
+  const upperWick = high - Math.max(open, close);
+  const lowerWick = Math.min(open, close) - low;
 
   const bodyPercent = (body / range) * 100;
   const upperWickPercent = (upperWick / range) * 100;
   const lowerWickPercent = (lowerWick / range) * 100;
 
-  // -----------------------------
   // STRONG BULLISH
-  // -----------------------------
   if (close > open && bodyPercent > 60 && upperWickPercent < 20) {
     return {
+      valid: true,
       sentiment: "BULLISH",
       strength: "STRONG",
-      reason: "Big green candle closing near high with small upper wick",
+      reason: "Strong bullish candle with control",
     };
   }
 
-  // -----------------------------
   // STRONG BEARISH
-  // -----------------------------
   if (close < open && bodyPercent > 60 && lowerWickPercent < 20) {
     return {
+      valid: true,
       sentiment: "BEARISH",
       strength: "STRONG",
-      reason: "Big red candle closing near low with small lower wick",
+      reason: "Strong bearish candle with control",
     };
   }
 
-  // -----------------------------
-  // REJECTION FROM SUPPORT (BUY ZONE)
-  // -----------------------------
+  // BUY REJECTION
   if (close > open && lowerWickPercent > 40 && bodyPercent < 40) {
     return {
+      valid: true,
       sentiment: "BULLISH",
       strength: "MEDIUM",
-      reason: "Strong lower wick – buyers rejection visible",
+      reason: "Buyer rejection from support",
     };
   }
 
-  // -----------------------------
-  // REJECTION FROM RESISTANCE (SELL ZONE)
-  // -----------------------------
+  // SELL REJECTION
   if (close < open && upperWickPercent > 40 && bodyPercent < 40) {
     return {
+      valid: true,
       sentiment: "BEARISH",
       strength: "MEDIUM",
-      reason: "Strong upper wick – sellers rejection visible",
+      reason: "Seller rejection from resistance",
     };
   }
 
-  // -----------------------------
-  // SIDEWAYS / INDECISION
-  // -----------------------------
+  // SIDEWAYS / DOJI
   if (bodyPercent < 25) {
     return {
+      valid: false,
       sentiment: "NEUTRAL",
       strength: "WEAK",
-      reason: "Small body / Doji – market indecision",
+      reason: "Indecision candle (Doji / small body)",
     };
   }
 
-  // -----------------------------
-  // DEFAULT SAFE OUTPUT
-  // -----------------------------
   return {
+    valid: false,
     sentiment: "NEUTRAL",
     strength: "UNKNOWN",
-    reason: "No clear candle pattern",
+    reason: "No clear price action edge",
   };
 }
 
-// ==================================================
-// EXPORT
-// ==================================================
 module.exports = {
   analyzePriceAction,
 };
