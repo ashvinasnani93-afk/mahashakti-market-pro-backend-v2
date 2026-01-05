@@ -126,21 +126,41 @@ function finalDecision(data = {}) {
     );
   }
 
-  // =====================================
-  // STEP 4: MARKET BREADTH (PARTICIPATION)
-  // =====================================
+ // ===============================
+// STEP 4: MARKET BREADTH DIRECTION FILTER
+// ===============================
   const breadth = analyzeMarketBreadth(data.breadth || {});
- if (breadth.status !== "STRONG") {
-    return applySafety(
-      {
-        signal: "WAIT",
-        reason: breadth.reason,
-        mode: "BREADTH_BLOCK",
-        riskTag,
-      },
-      safetyContext
-    );
-  }
+// BUY needs bullish breadth
+if (
+  breakoutResult.action === "BUY" &&
+  breadth.strength !== "BULLISH"
+) {
+  return applySafety(
+    {
+      signal: "WAIT",
+      reason: "Market breadth not bullish",
+      mode: "BREADTH_BLOCK",
+      riskTag,
+    },
+    safetyContext
+  );
+}
+
+// SELL needs bearish breadth
+if (
+  breakoutResult.action === "SELL" &&
+  breadth.strength !== "BEARISH"
+) {
+  return applySafety(
+    {
+      signal: "WAIT",
+      reason: "Market breadth not bearish",
+      mode: "BREADTH_BLOCK",
+      riskTag,
+    },
+    safetyContext
+  );
+}
 
   // =====================================
   // STEP 5: BREAKOUT / BREAKDOWN (CLOSE BASED)
