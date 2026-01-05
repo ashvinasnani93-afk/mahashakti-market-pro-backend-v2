@@ -18,7 +18,7 @@ const { analyzeMarketBreadth } = require("./services/marketBreadth.service");
 const { analyzeMarketStructure } = require("./services/marketStructure.service");
 const { analyzePriceAction } = require("./services/priceAction.service");
 const { validateVolume } = require("./services/volumeValidation.service");
-const { evaluateStrongBuy } = require("./services/strongBuy.engine");
+const { generateStrongSignal } = require("./services/strongBuy.engine");
 
 // ---------- INTRADAY FAST MOVE ----------
 const { detectFastMove } = require("./services/intradayFastMove.service");
@@ -239,14 +239,40 @@ if (!volumeCheck.valid) {
   // =====================================
   // STEP 10: STRONG BUY / STRONG SELL (RARE)
   // =====================================
-  const strong = evaluateStrongBuy({
-    trend: trendResult.trend,
-    breakoutAction: breakoutResult.action,
-    priceAction,
-    volumeCheck,
-    breadth,
-    structure,
-  });
+ const strong = generateStrongSignal({
+  structure:
+    structure.structure === "UPTREND" ? "UP" :
+    structure.structure === "DOWNTREND" ? "DOWN" : "NONE",
+
+  trend: trendResult.trend,
+
+  emaAlignment:
+    trendResult.trend === "UPTREND" ? "BULLISH" : "BEARISH",
+
+  priceAction:
+    priceAction.sentiment === "BULLISH" && priceAction.strength === "STRONG"
+      ? "STRONG_BULL"
+      : priceAction.sentiment === "BEARISH" && priceAction.strength === "STRONG"
+      ? "STRONG_BEAR"
+      : "WEAK",
+
+  volumeConfirm: volumeCheck.valid === true,
+
+  breakoutQuality:
+    breakoutResult.allowed ? "REAL" : "FAKE",
+
+  marketBreadth: breadth.strength || "SIDEWAYS",
+
+  vixLevel:
+    typeof data.vix === "number" && data.vix >= 20
+      ? "HIGH"
+      : typeof data.vix === "number" && data.vix <= 12
+      ? "LOW"
+      : "NORMAL",
+
+  isResultDay: safetyContext.isResultDay,
+  isExpiryDay: safetyContext.isExpiryDay,
+});
 
   if (
     strong.strong &&
