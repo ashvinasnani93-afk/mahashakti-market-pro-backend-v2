@@ -1,10 +1,18 @@
 // ==========================================
-// SIGNAL API – FINAL (UPDATED FOR NEW LOCKS)
-// BUY / SELL / WAIT + STRONG BUY SUPPORT
+// SIGNAL API – FINAL (FULLY WIRED)
+// BUY / SELL / STRONG BUY / STRONG SELL / WAIT
 // ==========================================
 
 const { finalDecision } = require("./signalDecision.service");
 const { getIndexConfig } = require("./services/indexMaster.service");
+
+// 🔒 NEW LOCKED MODULES (INPUT ONLY)
+const { getMarketBreadth } = require("./services/marketBreadth.service");
+const { getMarketRegime } = require("./services/marketRegime.service");
+const { analyzeMarketStructure } = require("./services/marketStructure.service");
+const { analyzePriceAction } = require("./services/priceAction.service");
+const { validateVolume } = require("./services/volumeValidation.service");
+const { getStrongBuyContext } = require("./services/strongBuy.engine");
 
 // ==========================================
 // POST /signal
@@ -19,15 +27,16 @@ function getSignal(req, res) {
     if (!body || typeof body !== "object") {
       return res.json({
         status: false,
-        message: "input data missing or invalid",
+        signal: "WAIT",
+        reason: "Invalid input",
       });
     }
 
     if (!Array.isArray(body.closes) || body.closes.length === 0) {
       return res.json({
-        status: false,
+        status: true,
         signal: "WAIT",
-        reason: "closes array required",
+        reason: "Closes data missing",
       });
     }
 
@@ -39,7 +48,7 @@ function getSignal(req, res) {
       return res.json({
         status: true,
         signal: "WAIT",
-        reason: "Instrument symbol missing",
+        reason: "Symbol missing",
       });
     }
 
@@ -56,26 +65,62 @@ function getSignal(req, res) {
     const tradeType = body.tradeType || "INTRADAY";
 
     // -------------------------------
-    // ENGINE INPUT (NORMALIZED)
+    // 🔒 NEW CONTEXT BUILDING
+    // -------------------------------
+    const marketBreadth = getMarketBreadth(body.breadthData || []);
+    const marketStructure = analyzeMarketStructure({
+      highs: body.highs || [],
+      lows: body.lows || [],
+    });
+
+    const marketRegime = getMarketRegime({
+      ema20: body.ema20 || [],
+      ema50: body.ema50 || [],
+      structure: marketStructure.structure,
+    });
+
+    const priceAction = analyzePriceAction({
+      open: body.open,
+      high: body.high,
+      low: body.low,
+      close: body.close,
+    });
+
+    const volumeContext = validateVolume({
+      volume: body.volume,
+      avgVolume: body.avgVolume,
+    });
+
+    const strongBuyContext = getStrongBuyContext({
+      structure: marketStructure,
+      priceAction,
+      volume: volumeContext,
+      regime: marketRegime,
+    });
+
+    // -------------------------------
+    // ENGINE INPUT (FULLY WIRED)
     // -------------------------------
     const data = {
       symbol,
-      instrumentType: indexConfig.instrumentType,
       segment,
+      instrumentType: indexConfig.instrumentType,
 
       closes: body.closes,
       ema20: body.ema20 || [],
       ema50: body.ema50 || [],
       rsi: body.rsi,
       close: body.close,
+      prevClose: body.prevClose,
+
       support: body.support,
       resistance: body.resistance,
+
       volume: body.volume,
       avgVolume: body.avgVolume,
 
       oiData: Array.isArray(body.oiData) ? body.oiData : [],
-      pcrValue:
-        typeof body.pcrValue === "number" ? body.pcrValue : null,
+      pcrValue: typeof body.pcrValue === "number" ? body.pcrValue : null,
 
       isResultDay: body.isResultDay === true,
       isExpiryDay: body.isExpiryDay === true,
@@ -83,31 +128,20 @@ function getSignal(req, res) {
       tradeType,
 
       vix: typeof body.vix === "number" ? body.vix : null,
+
+      // 🔒 NEW LOCKED CONTEXT
+      marketBreadth,
+      marketStructure,
+      marketRegime,
+      priceAction,
+      volumeContext,
+      strongBuyContext,
     };
 
     // -------------------------------
-    // FINAL DECISION (CORE ENGINE)
+    // FINAL DECISION
     // -------------------------------
     const result = finalDecision(data);
-
-    // -------------------------------
-    // MARKET REGIME (DERIVED – SAFE)
-    // -------------------------------
-    let marketRegime = "SIDEWAYS";
-    if (result.trend === "UPTREND" || result.trend === "DOWNTREND") {
-      marketRegime = "TRENDING";
-    }
-    if (result.signal === "WAIT") {
-      marketRegime = "NO_TRADE_ZONE";
-    }
-
-    // -------------------------------
-    // SIGNAL STRENGTH TAG (NEW)
-    // -------------------------------
-    const strengthTag =
-      result.confidence === "HIGH"
-        ? "STRONG"
-        : "NORMAL";
 
     // -------------------------------
     // FINAL RESPONSE
@@ -117,13 +151,12 @@ function getSignal(req, res) {
 
       symbol,
       segment,
-      instrumentType: indexConfig.instrumentType,
       exchange: indexConfig.exchange,
+      instrumentType: indexConfig.instrumentType,
 
-      signal: result.signal,              // BUY / SELL / WAIT
-      signalStrength: strengthTag,        // STRONG / NORMAL
+      signal: result.signal,                // BUY / SELL / STRONG BUY / STRONG SELL / WAIT
       trend: result.trend || null,
-      marketRegime,                       // TRENDING / SIDEWAYS / NO_TRADE_ZONE
+      marketRegime: marketRegime.regime,
 
       reason: result.reason,
 
@@ -137,7 +170,8 @@ function getSignal(req, res) {
     console.error("❌ Signal API Error:", e.message);
     return res.json({
       status: false,
-      message: "signal processing error",
+      signal: "WAIT",
+      reason: "Signal processing failed",
     });
   }
 }
