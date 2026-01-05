@@ -1,6 +1,6 @@
 // ==========================================
-// SIGNAL DECISION ENGINE – FINAL STEP (PHASE-2A + C3.1)
-// Combines Technical + Institutional + Safety
+// SIGNAL DECISION ENGINE – FINAL
+// PHASE-2A + STRONG BUY / STRONG SELL (LOCKED)
 // BUY / SELL / STRONG BUY / STRONG SELL / WAIT
 // ==========================================
 
@@ -9,13 +9,13 @@ const {
   checkRSI,
   checkBreakout,
   checkVolume,
-  checkStrongSignal, // 🔥 NEW
+  checkStrongSignal,
 } = require("./signal.engine");
 
 // ⚡ INTRADAY FAST MOVE ENGINE
 const { detectFastMove } = require("./services/intradayFastMove.service");
 
-// 🔒 SAFETY LAYER (Phase-1 LOCKED)
+// 🔒 SAFETY LAYER (LOCKED)
 const { applySafety } = require("./signalSafety.service");
 
 // 🏦 INSTITUTIONAL CONTEXT
@@ -27,11 +27,13 @@ const { getGreeksContext } = require("./services/greeks.service");
 
 /**
  * finalDecision
+ * @param {object} data
+ * @returns {object}
  */
-function finalDecision(data) {
-  // -------------------------------
-  // SAFETY + RISK CONTEXT
-  // -------------------------------
+function finalDecision(data = {}) {
+  // ----------------------------------
+  // SAFETY CONTEXT
+  // ----------------------------------
   const safetyContext = {
     isResultDay: data.isResultDay || false,
     isExpiryDay: data.isExpiryDay || false,
@@ -44,9 +46,9 @@ function finalDecision(data) {
   if (safetyContext.isResultDay) riskTag = "RESULT_DAY";
   else if (safetyContext.isExpiryDay) riskTag = "EXPIRY_DAY";
 
-  // -------------------------------
+  // ----------------------------------
   // STEP 1: TREND
-  // -------------------------------
+  // ----------------------------------
   const trendResult = checkTrend({
     closes: data.closes,
     ema20: data.ema20,
@@ -55,14 +57,19 @@ function finalDecision(data) {
 
   if (trendResult.trend === "NO_TRADE") {
     return applySafety(
-      { signal: "WAIT", reason: trendResult.reason, mode: "NORMAL", riskTag },
+      {
+        signal: "WAIT",
+        reason: trendResult.reason,
+        mode: "NORMAL",
+        riskTag,
+      },
       safetyContext
     );
   }
 
-  // -------------------------------
+  // ----------------------------------
   // STEP 2: RSI
-  // -------------------------------
+  // ----------------------------------
   const rsiResult = checkRSI({
     rsi: data.rsi,
     trend: trendResult.trend,
@@ -70,14 +77,19 @@ function finalDecision(data) {
 
   if (!rsiResult.allowed) {
     return applySafety(
-      { signal: "WAIT", reason: rsiResult.reason, mode: "NORMAL", riskTag },
+      {
+        signal: "WAIT",
+        reason: rsiResult.reason,
+        mode: "NORMAL",
+        riskTag,
+      },
       safetyContext
     );
   }
 
-  // -------------------------------
+  // ----------------------------------
   // STEP 3: BREAKOUT / BREAKDOWN
-  // -------------------------------
+  // ----------------------------------
   const breakoutResult = checkBreakout({
     close: data.close,
     support: data.support,
@@ -87,14 +99,19 @@ function finalDecision(data) {
 
   if (!breakoutResult.allowed) {
     return applySafety(
-      { signal: "WAIT", reason: breakoutResult.reason, mode: "NORMAL", riskTag },
+      {
+        signal: "WAIT",
+        reason: breakoutResult.reason,
+        mode: "NORMAL",
+        riskTag,
+      },
       safetyContext
     );
   }
 
-  // -------------------------------
-  // STEP 4: VOLUME
-  // -------------------------------
+  // ----------------------------------
+  // STEP 4: VOLUME CONFIRMATION
+  // ----------------------------------
   const volumeResult = checkVolume({
     volume: data.volume,
     avgVolume: data.avgVolume,
@@ -102,14 +119,46 @@ function finalDecision(data) {
 
   if (!volumeResult.allowed) {
     return applySafety(
-      { signal: "WAIT", reason: volumeResult.reason, mode: "NORMAL", riskTag },
+      {
+        signal: "WAIT",
+        reason: volumeResult.reason,
+        mode: "NORMAL",
+        riskTag,
+      },
       safetyContext
     );
   }
 
-  // -------------------------------
-  // STEP 4.8: 🔥 STRONG BUY / STRONG SELL
-  // -------------------------------
+  // ----------------------------------
+  // STEP 4.5: INTRADAY FAST MOVE
+  // ----------------------------------
+  if (data.tradeType === "INTRADAY") {
+    const fastMoveResult = detectFastMove({
+      ltp: data.close,
+      prevLtp: data.prevClose,
+      volume: data.volume,
+      avgVolume: data.avgVolume,
+      trend: trendResult.trend,
+      isExpiryDay: safetyContext.isExpiryDay,
+      isResultDay: safetyContext.isResultDay,
+    });
+
+    if (fastMoveResult.signal && fastMoveResult.signal !== "WAIT") {
+      return applySafety(
+        {
+          signal: fastMoveResult.signal,
+          reason: fastMoveResult.reason,
+          mode: fastMoveResult.mode || "FAST_MOVE",
+          riskTag,
+        },
+        safetyContext
+      );
+    }
+  }
+
+  // ----------------------------------
+  // STEP 4.8: STRONG BUY / STRONG SELL
+  // ----------------------------------
   const strongResult = checkStrongSignal({
     trend: trendResult.trend,
     breakoutAction: breakoutResult.action,
@@ -119,14 +168,14 @@ function finalDecision(data) {
     avgVolume: data.avgVolume,
   });
 
-  // -------------------------------
+  // ----------------------------------
   // STEP 5: INSTITUTIONAL CONTEXT
-  // -------------------------------
+  // ----------------------------------
   const oiSummary = summarizeOI(data.oiData || []);
   const pcrContext = getPCRContext(data.pcrValue);
   const greeksContext = getGreeksContext(data.greeks || {});
 
-  // ❌ Institution conflict block
+  // ❌ INSTITUTIONAL CONFLICT BLOCK
   if (
     (strongResult.signal === "STRONG_BUY" ||
       breakoutResult.action === "BUY") &&
@@ -159,15 +208,15 @@ function finalDecision(data) {
     );
   }
 
-  // -------------------------------
-  // ✅ FINAL SIGNAL PRIORITY
+  // ----------------------------------
+  // FINAL SIGNAL PRIORITY
   // STRONG > NORMAL
-  // -------------------------------
+  // ----------------------------------
   const finalSignal = strongResult.strong
     ? strongResult.signal
     : breakoutResult.action;
 
-  const reason = strongResult.strong
+  const finalReason = strongResult.strong
     ? strongResult.reason
     : "Technical + Institutional conditions aligned";
 
@@ -175,7 +224,7 @@ function finalDecision(data) {
     {
       signal: finalSignal, // BUY / SELL / STRONG BUY / STRONG SELL
       trend: trendResult.trend,
-      reason,
+      reason: finalReason,
 
       institutionalBias: oiSummary.bias,
       pcrBias: pcrContext.bias,
