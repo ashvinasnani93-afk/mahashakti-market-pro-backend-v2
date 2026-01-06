@@ -1,7 +1,10 @@
 // ==================================================
 // TRADE MONITOR SERVICE
-// ROLE: Monitor active paper trade and suggest EXIT
+// ROLE: Monitor active trade and suggest EXIT / HOLD
+// Uses centralized exit rules
 // ==================================================
+
+const { checkExitRules } = require("./exitRules.util");
 
 /**
  * monitorTrade
@@ -44,29 +47,19 @@ function monitorTrade(trade = {}, market = {}) {
   }
 
   // ------------------------------
-  // EXIT CONDITIONS
+  // CENTRALIZED EXIT RULE CHECK
   // ------------------------------
+  const exitCheck = checkExitRules({
+    entryPrice,
+    currentPrice,
+    volume,
+    avgVolume,
+    oppositeStrongCandle,
+    structureBroken,
+    signal,
+  });
 
-  // 1️⃣ Strong opposite candle
-  if (oppositeStrongCandle) {
-    return { status: "EXIT" };
-  }
-
-  // 2️⃣ Structure break
-  if (structureBroken) {
-    return { status: "EXIT" };
-  }
-
-  // 3️⃣ Volume dry + price against trade
-  const volumeWeak = avgVolume > 0 && volume < avgVolume * 0.7;
-
-  if (
-    volumeWeak &&
-    (
-      (signal.includes("BUY") && currentPrice < entryPrice) ||
-      (signal.includes("SELL") && currentPrice > entryPrice)
-    )
-  ) {
+  if (exitCheck.exit) {
     return { status: "EXIT" };
   }
 
