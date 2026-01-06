@@ -225,10 +225,15 @@ function startWebSocket() {
     if (symbol && ltp) latestLTP[symbol] = ltp;
   });
 
-  ws.on("close", () => {
-    console.log("🔴 WebSocket Disconnected – reconnecting...");
-    setTimeout(startWebSocket, 3000);
-  });
+ ws.on("close", () => {
+  console.log("🔴 WebSocket Disconnected – reconnecting...");
+
+  // 🆕 STEP-4.1: cleanup stale state
+  subscribedTokens.clear();
+  latestLTP = {};
+
+  setTimeout(startWebSocket, 3000);
+});
 }
 // ==========================================
 // RESUBSCRIBE ALL SYMBOLS (ON WS RECONNECT)
