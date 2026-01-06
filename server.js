@@ -225,7 +225,7 @@ function startWebSocket() {
     if (symbol && ltp) latestLTP[symbol] = ltp;
   if (symbol) {
   symbolLastSeen[symbol] = Date.now();
-});
+
 }
  ws.on("close", () => {
   console.log("🔴 WebSocket Disconnected – reconnecting...");
