@@ -29,6 +29,9 @@ const momentumScannerApi = require("./services/momentumScanner.api");
 // 🆕 INSTITUTIONAL FLOW API (FII / DII CONTEXT)
 const institutionalFlowApi = require("./services/institutionalFlow.api");
 
+// 🆕🆕 SECTOR PARTICIPATION API (CONTEXT ONLY)
+const sectorParticipationApi = require("./services/sectorParticipation.api");
+
 const { loadOptionSymbolMaster } = require("./token.service");
 
 const app = express();
@@ -90,6 +93,9 @@ app.use("/scanner", momentumScannerApi);
 
 // 🆕 INSTITUTIONAL FLOW (CONTEXT ONLY)
 app.use("/institutional", institutionalFlowApi);
+
+// 🆕🆕 SECTOR PARTICIPATION (CONTEXT ONLY)
+app.use("/sector", sectorParticipationApi);
 
 // ==========================================
 // GLOBAL STATE
