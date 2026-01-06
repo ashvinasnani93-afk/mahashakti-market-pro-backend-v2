@@ -160,7 +160,9 @@ function getSignal(req, res) {
       signal: chat.signal,
       display: chat.display,
       lines: chat.lines,
-
+// 🆕 BACKWARD SAFE (COLOR / EMOJI LOCK)
+  color: chat.display,
+  emoji: chat.display,
       // OPTIONAL RAW FLAGS (UI)
       momentumActive: momentumResult.active === true,
       institutionalTag: institutional.tag,
