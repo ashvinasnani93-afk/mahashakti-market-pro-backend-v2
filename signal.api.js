@@ -1,115 +1,83 @@
 // ==========================================
-// SIGNAL API – FINAL (FULLY WIRED)
+// SIGNAL API – FINAL (MERGED + CHAT READY)
 // BUY / SELL / STRONG BUY / STRONG SELL / WAIT
 // ==========================================
 
 const { finalDecision } = require("./signalDecision.service");
 const { getIndexConfig } = require("./services/indexMaster.service");
 
-// 🔒 NEW LOCKED MODULES (INPUT ONLY)
+// 🔒 EXISTING CONTEXT / LOCKED MODULES
 const { getMarketBreadth } = require("./services/marketBreadth.service");
-const { getMarketRegime } = require("./services/marketRegime.service");
+const { detectMarketRegime } = require("./services/marketRegime.service");
 const { analyzeMarketStructure } = require("./services/marketStructure.service");
 const { analyzePriceAction } = require("./services/priceAction.service");
 const { validateVolume } = require("./services/volumeValidation.service");
-const { getStrongBuyContext } = require("./services/strongBuy.engine");
+const { generateStrongSignal } = require("./services/strongBuy.engine");
+
+// 🆕 CONTEXT ONLY (NO SIGNAL CHANGE)
+const { scanMomentum } = require("./services/momentumScanner.service");
+const { analyzeInstitutionalFlow } = require("./services/institutionalFlow.service");
+
+// 🆕 CHAT FORMATTER (LOCKED UX)
+const { formatSignalMessage } = require("./services/chatFormatter.util");
 
 // ==========================================
 // POST /signal
 // ==========================================
 function getSignal(req, res) {
   try {
-    const body = req.body;
+    const body = req.body || {};
 
     // -------------------------------
-    // BASIC INPUT CHECK
+    // BASIC INPUT CHECK (ORIGINAL)
     // -------------------------------
     if (!body || typeof body !== "object") {
-      return res.json({
-        status: false,
-        signal: "WAIT",
-        reason: "Invalid input",
-      });
+      return res.json({ status: false, signal: "WAIT" });
     }
 
     if (!Array.isArray(body.closes) || body.closes.length === 0) {
-      return res.json({
-        status: true,
-        signal: "WAIT",
-        reason: "Closes data missing",
-      });
+      return res.json({ status: true, signal: "WAIT" });
     }
 
-    // -------------------------------
-    // INSTRUMENT VALIDATION
-    // -------------------------------
     const symbol = body.symbol || body.indexName;
     if (!symbol) {
-      return res.json({
-        status: true,
-        signal: "WAIT",
-        reason: "Symbol missing",
-      });
+      return res.json({ status: true, signal: "WAIT" });
     }
 
     const indexConfig = getIndexConfig(symbol);
     if (!indexConfig) {
-      return res.json({
-        status: true,
-        signal: "WAIT",
-        reason: "Instrument not supported",
-      });
+      return res.json({ status: true, signal: "WAIT" });
     }
 
     const segment = body.segment || "EQUITY";
     const tradeType = body.tradeType || "INTRADAY";
 
     // -------------------------------
-    // 🔒 NEW CONTEXT BUILDING
+    // ORIGINAL CONTEXT BUILDING (UNCHANGED)
     // -------------------------------
-    const marketBreadth = getMarketBreadth(body.breadthData || []);
-    const marketStructure = analyzeMarketStructure({
-      highs: body.highs || [],
-      lows: body.lows || [],
-    });
-
-    const marketRegime = getMarketRegime({
-      ema20: body.ema20 || [],
-      ema50: body.ema50 || [],
-      structure: marketStructure.structure,
-    });
-
-    const priceAction = analyzePriceAction({
-      open: body.open,
-      high: body.high,
-      low: body.low,
-      close: body.close,
-    });
-
+    const marketBreadth = getMarketBreadth(body.breadthData || {});
+    const marketStructure = analyzeMarketStructure(body);
+    const marketRegime = detectMarketRegime(body);
+    const priceAction = analyzePriceAction(body);
     const volumeContext = validateVolume({
-      volume: body.volume,
-      avgVolume: body.avgVolume,
-    });
-
-    const strongBuyContext = getStrongBuyContext({
-      structure: marketStructure,
-      priceAction,
-      volume: volumeContext,
-      regime: marketRegime,
+      currentVolume: body.volume,
+      averageVolume: body.avgVolume,
+      priceDirection: "UP",
     });
 
     // -------------------------------
-    // ENGINE INPUT (FULLY WIRED)
+    // ENGINE INPUT (ORIGINAL FLOW)
     // -------------------------------
-    const data = {
+    const engineData = {
       symbol,
       segment,
       instrumentType: indexConfig.instrumentType,
 
       closes: body.closes,
-      ema20: body.ema20 || [],
-      ema50: body.ema50 || [],
+      ema20: body.ema20,
+      ema50: body.ema50,
       rsi: body.rsi,
+
       close: body.close,
       prevClose: body.prevClose,
 
@@ -118,6 +86,8 @@ function getSignal(req, res) {
 
       volume: body.volume,
       avgVolume: body.avgVolume,
+
+      breadth: marketBreadth,
 
       oiData: Array.isArray(body.oiData) ? body.oiData : [],
       pcrValue: typeof body.pcrValue === "number" ? body.pcrValue : null,
@@ -128,23 +98,44 @@ function getSignal(req, res) {
       tradeType,
 
       vix: typeof body.vix === "number" ? body.vix : null,
-
-      // 🔒 NEW LOCKED CONTEXT
-      marketBreadth,
-      marketStructure,
-      marketRegime,
-      priceAction,
-      volumeContext,
-      strongBuyContext,
     };
 
     // -------------------------------
-    // FINAL DECISION
+    // FINAL DECISION (ENTRY ENGINE)
     // -------------------------------
-    const result = finalDecision(data);
+    const result = finalDecision(engineData);
+
+    // =================================================
+    // 🆕 CONTEXT ADDITION (POST-DECISION, SAFE)
+    // =================================================
+
+    // Momentum (scanner only)
+    const momentumResult = scanMomentum({
+      price: body.close,
+      currentVolume: body.volume,
+      avgVolume: body.avgVolume,
+      rangeHigh: body.rangeHigh,
+      close: body.close,
+    });
+
+    // Institutional (hawaa only)
+    const institutional = analyzeInstitutionalFlow({
+      fiiNet: body.fiiNet,
+      diiNet: body.diiNet,
+    });
 
     // -------------------------------
-    // FINAL RESPONSE
+    // CHAT FORMAT (LOCKED UX RULE)
+    // -------------------------------
+    const chat = formatSignalMessage({
+      symbol,
+      signal: result.signal,
+      momentumActive: momentumResult.active === true,
+      institutionalTag: institutional.tag,
+    });
+
+    // -------------------------------
+    // FINAL RESPONSE (MERGED)
     // -------------------------------
     return res.json({
       status: true,
@@ -154,31 +145,24 @@ function getSignal(req, res) {
       exchange: indexConfig.exchange,
       instrumentType: indexConfig.instrumentType,
 
-      signal: result.signal,                // BUY / SELL / STRONG BUY / STRONG SELL / WAIT
-      trend: result.trend || null,
-      marketRegime: marketRegime.regime,
+      // 🔒 CORE SIGNAL
+      signal: chat.signal,
+      display: chat.display, // 🟢 / 🔴 / 🟡 / 🔥
+      lines: chat.lines,     // Momentum + Institutional
 
-      reason: result.reason,
-
-      // CONTEXT (TEXT ONLY)
-      institutionalBias: result.institutionalBias || null,
-      pcrBias: result.pcrBias || null,
-      greeksNote: result.greeksNote || null,
-      vixNote: result.vixNote || null,
+      // OPTIONAL RAW FLAGS (UI)
+      momentumActive: momentumResult.active === true,
+      institutionalTag: institutional.tag,
     });
   } catch (e) {
     console.error("❌ Signal API Error:", e.message);
     return res.json({
       status: false,
       signal: "WAIT",
-      reason: "Signal processing failed",
     });
   }
 }
 
-// ==========================================
-// EXPORT
-// ==========================================
 module.exports = {
   getSignal,
 };
