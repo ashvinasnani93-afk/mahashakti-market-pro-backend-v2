@@ -235,7 +235,7 @@ function startWebSocket() {
   latestLTP = {};
 setTimeout(startWebSocket, 3000);
 });
-}
+
  // 🆕 STEP-4.2: cleanup unused symbols every 2 minutes
 setInterval(() => {
   const now = Date.now();
