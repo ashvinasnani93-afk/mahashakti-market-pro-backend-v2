@@ -23,27 +23,41 @@ function scanMomentum(data = {}) {
   const close = Number(data.close || 0);
 
   // -----------------------------
-  // BASIC FILTERS
+  // HARD SAFETY
+  // -----------------------------
+  if (!price || !close || !avgVolume) {
+    return { active: false, reason: "Invalid data" };
+  }
+
+  // -----------------------------
+  // FILTER 1: PRICE RANGE
   // -----------------------------
   if (price < 20 || price > 300) {
     return { active: false, reason: "Price out of range" };
   }
 
-  const volumeRatio = avgVolume > 0 ? currentVolume / avgVolume : 0;
+  // -----------------------------
+  // FILTER 2: VOLUME SPIKE
+  // -----------------------------
+  const volumeRatio = currentVolume / avgVolume;
   if (volumeRatio < 2) {
     return { active: false, reason: "No volume spike" };
   }
 
+  // -----------------------------
+  // FILTER 3: RANGE BREAK
+  // -----------------------------
   if (close <= rangeHigh) {
     return { active: false, reason: "No range breakout" };
   }
 
   // -----------------------------
-  // MOMENTUM DETECTED
+  // MOMENTUM DETECTED (NO SIGNAL)
   // -----------------------------
   return {
     active: true,
     state: "MOMENTUM_BUILDING",
+    volumeRatio: Number(volumeRatio.toFixed(2)),
   };
 }
 
