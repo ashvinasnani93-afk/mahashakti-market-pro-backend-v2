@@ -14,7 +14,7 @@ const { analyzeInstitutionalFlow } = require("./institutionalFlow.service");
  * - fiiNet (number)
  * - diiNet (number)
  */
-router.post("/institutional/flow", (req, res) => {
+router.post("/flow", (req, res) => {
   try {
     const result = analyzeInstitutionalFlow(req.body || {});
     return res.json({
