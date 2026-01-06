@@ -133,7 +133,7 @@ let symbolLastSeen = {};
 let wsConnected = false;
 let angelLoggedIn = false;
 // 🆕 ADD: last seen tracking (audit carry)
-let symbolLastSeen = {};
+
 // ==========================================
 // LTP DECODER
 // ==========================================
