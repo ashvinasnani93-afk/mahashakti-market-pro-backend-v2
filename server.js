@@ -110,6 +110,9 @@ let tokenSymbolMap = {};
 let subscribedTokens = new Set();
 let latestLTP = {};
 
+// 🆕 ADD: last seen tracking (audit carry)
+let symbolLastSeen = {};
+
 // ==========================================
 // LTP DECODER
 // ==========================================
@@ -210,6 +213,9 @@ function startWebSocket() {
   ws.on("open", () => {
     console.log("🟢 WebSocket Connected");
     subscribedTokens.clear();
+
+    // 🆕 ADD: auto resubscribe (audit carry)
+    resubscribeAllSymbols();
   });
 
   ws.on("message", (data) => {
@@ -219,12 +225,31 @@ function startWebSocket() {
     const ltp = decodeLTP(data);
     const token = data.toString("utf8", 2, 27).replace(/\0/g, "");
     const symbol = tokenSymbolMap[token];
-    if (symbol && ltp) latestLTP[symbol] = ltp;
+
+    if (symbol && ltp) {
+      latestLTP[symbol] = ltp;
+      symbolLastSeen[symbol] = Date.now(); // 🆕 ADD
+    }
   });
 
   ws.on("close", () => {
     console.log("🔴 WebSocket Disconnected – reconnecting...");
+
+    // 🆕 ADD: cleanup on disconnect
+    subscribedTokens.clear();
+
     setTimeout(startWebSocket, 3000);
+  });
+}
+
+// ==========================================
+// 🆕 ADD: RESUBSCRIBE ALL SYMBOLS (AUDIT CARRY)
+// ==========================================
+function resubscribeAllSymbols() {
+  if (!ws || ws.readyState !== 1) return;
+
+  Object.keys(latestLTP).forEach((symbol) => {
+    subscribeSymbol(symbol);
   });
 }
 
@@ -248,6 +273,26 @@ function subscribeSymbol(symbol) {
 
   subscribedTokens.add(info.token);
 }
+
+// ==========================================
+// 🆕 ADD: IDLE SYMBOL CLEANUP (AUDIT CARRY)
+// ==========================================
+setInterval(() => {
+  const now = Date.now();
+  const MAX_IDLE_TIME = 2 * 60 * 1000; // 2 minutes
+
+  Object.keys(symbolLastSeen).forEach((symbol) => {
+    if (now - symbolLastSeen[symbol] > MAX_IDLE_TIME) {
+      const info = symbolTokenMap[symbol];
+      if (info) subscribedTokens.delete(info.token);
+
+      delete latestLTP[symbol];
+      delete symbolLastSeen[symbol];
+
+      console.log("🧹 Removed inactive symbol:", symbol);
+    }
+  });
+}, 120000);
 
 // ==========================================
 // STOCK LTP API
@@ -278,6 +323,20 @@ app.get("/angel/ltp", (req, res) => {
 app.get("/option-chain", getOptionChain);
 
 // ==========================================
+// 🆕 ADD: SAFE ANGEL LOGIN LOOP (AUDIT CARRY)
+// ==========================================
+function startAngelLoginLoop() {
+  setTimeout(angelLogin, 2000);
+
+  setInterval(() => {
+    if (!feedToken) {
+      console.log("🔁 Retrying Angel login...");
+      angelLogin();
+    }
+  }, 60000);
+}
+
+// ==========================================
 // START SERVER
 // ==========================================
 app.listen(PORT, async () => {
@@ -285,7 +344,9 @@ app.listen(PORT, async () => {
   try {
     await loadSymbolMaster();
     await loadOptionSymbolMaster();
-    await angelLogin();
+
+    // 🆕 ADD: non-blocking login loop
+    startAngelLoginLoop();
   } catch (e) {
     console.error("❌ Startup failed:", e);
     process.exit(1);
