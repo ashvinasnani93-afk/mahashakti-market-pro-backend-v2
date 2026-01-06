@@ -26,6 +26,9 @@ const { getCommodity } = require("./services/commodity.api");
 // 🆕 MOMENTUM SCANNER API
 const momentumScannerApi = require("./services/momentumScanner.api");
 
+// 🆕 INSTITUTIONAL FLOW API (FII / DII CONTEXT)
+const institutionalFlowApi = require("./services/institutionalFlow.api");
+
 const { loadOptionSymbolMaster } = require("./token.service");
 
 const app = express();
@@ -84,6 +87,9 @@ app.post("/commodity", getCommodity);
 
 // 🆕 MOMENTUM SCANNER (NO SIGNAL)
 app.use("/scanner", momentumScannerApi);
+
+// 🆕 INSTITUTIONAL FLOW (CONTEXT ONLY)
+app.use("/institutional", institutionalFlowApi);
 
 // ==========================================
 // GLOBAL STATE
