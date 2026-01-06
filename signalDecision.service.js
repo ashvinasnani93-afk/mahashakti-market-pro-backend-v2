@@ -305,7 +305,7 @@ function finalDecision(data = {}) {
       breakoutResult.allowed ? "REAL" : "FAKE",
 
     marketBreadth: breadth.strength || "SIDEWAYS",
-
+sectorParticipation: sectorParticipation.participation,
     vixLevel:
       typeof data.vix === "number" && data.vix >= 20
         ? "HIGH"
@@ -357,7 +357,7 @@ sectorParticipation: sectorParticipation.participation,
       institutionalBias: oiSummary.bias,
       pcrBias: pcrContext.bias,
       greeksNote: greeksContext.note,
-
+sectorParticipation: sectorParticipation.participation,
       mode: strong.strong ? "STRONG" : "NORMAL",
       riskTag,
     },
