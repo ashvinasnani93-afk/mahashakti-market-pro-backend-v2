@@ -109,7 +109,7 @@ let symbolTokenMap = {};
 let tokenSymbolMap = {};
 let subscribedTokens = new Set();
 let latestLTP = {};
-
+let symbolLastSeen = {};
 // ==========================================
 // LTP DECODER
 // ==========================================
@@ -223,18 +223,39 @@ function startWebSocket() {
     const token = data.toString("utf8", 2, 27).replace(/\0/g, "");
     const symbol = tokenSymbolMap[token];
     if (symbol && ltp) latestLTP[symbol] = ltp;
-  });
-
+  if (symbol) {
+  symbolLastSeen[symbol] = Date.now();
+});
+}
  ws.on("close", () => {
   console.log("🔴 WebSocket Disconnected – reconnecting...");
 
   // 🆕 STEP-4.1: cleanup stale state
   subscribedTokens.clear();
   latestLTP = {};
-
-  setTimeout(startWebSocket, 3000);
+setTimeout(startWebSocket, 3000);
 });
 }
+ // 🆕 STEP-4.2: cleanup unused symbols every 2 minutes
+setInterval(() => {
+  const now = Date.now();
+  const MAX_IDLE_TIME = 2 * 60 * 1000; // 2 minutes
+
+  Object.keys(symbolLastSeen).forEach((symbol) => {
+    if (now - symbolLastSeen[symbol] > MAX_IDLE_TIME) {
+      const info = symbolTokenMap[symbol];
+
+      if (info) {
+        subscribedTokens.delete(info.token);
+      }
+
+      delete latestLTP[symbol];
+      delete symbolLastSeen[symbol];
+
+      console.log("🧹 Removed inactive symbol:", symbol);
+    }
+  });
+}, 120000); 
 // ==========================================
 // RESUBSCRIBE ALL SYMBOLS (ON WS RECONNECT)
 // ==========================================
