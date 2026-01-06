@@ -23,6 +23,9 @@ const { getOptions } = require("./services/options.api");
 const { getIndexConfigAPI } = require("./services/index.api");
 const { getCommodity } = require("./services/commodity.api");
 
+// 🆕 MOMENTUM SCANNER API
+const momentumScannerApi = require("./services/momentumScanner.api");
+
 const { loadOptionSymbolMaster } = require("./token.service");
 
 const app = express();
@@ -70,14 +73,17 @@ if (!ANGEL_TOTP_SECRET) throw new Error("ANGEL_TOTP_SECRET missing");
 app.post("/signal", getSignal);
 
 // OPTIONS
-app.post("/options/context", getOptionsContextApi); // phase-3
-app.post("/options", getOptions);                   // 🆕 phase-4 FINAL
+app.post("/options/context", getOptionsContextApi);
+app.post("/options", getOptions);
 
 // INDEX CONFIG
 app.post("/index/config", getIndexConfigAPI);
 
 // COMMODITY
 app.post("/commodity", getCommodity);
+
+// 🆕 MOMENTUM SCANNER (NO SIGNAL)
+app.use("/scanner", momentumScannerApi);
 
 // ==========================================
 // GLOBAL STATE
