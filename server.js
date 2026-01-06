@@ -207,10 +207,13 @@ function startWebSocket() {
 
   ws = new WebSocket(wsUrl);
 
-  ws.on("open", () => {
-    console.log("🟢 WebSocket Connected");
-    subscribedTokens.clear();
-  });
+ ws.on("open", () => {
+  console.log("🟢 WebSocket Connected");
+  subscribedTokens.clear();
+
+  // 🆕 STEP-3: auto resubscribe
+  resubscribeAllSymbols();
+});
 
   ws.on("message", (data) => {
     if (!Buffer.isBuffer(data)) return;
@@ -227,7 +230,20 @@ function startWebSocket() {
     setTimeout(startWebSocket, 3000);
   });
 }
+// ==========================================
+// RESUBSCRIBE ALL SYMBOLS (ON WS RECONNECT)
+// ==========================================
+function resubscribeAllSymbols() {
+  if (!ws || ws.readyState !== 1) return;
 
+  console.log("🔁 Resubscribing all symbols...");
+
+  subscribedTokens.clear();
+
+  Object.keys(latestLTP).forEach((symbol) => {
+    subscribeSymbol(symbol);
+  });
+}
 // ==========================================
 // SUBSCRIBE SYMBOL
 // ==========================================
@@ -276,7 +292,29 @@ app.get("/angel/ltp", (req, res) => {
 // OPTION CHAIN API
 // ==========================================
 app.get("/option-chain", getOptionChain);
+// ==========================================
+// SAFE ANGEL LOGIN RETRY (NON-BLOCKING)
+// ==========================================
+function startAngelLoginLoop() {
+  const tryLogin = async () => {
+    try {
+      await angelLogin();
+    } catch (e) {
+      console.error("⚠️ Angel login retry failed");
+    }
+  };
 
+  // first try after server start
+  setTimeout(tryLogin, 2000);
+
+  // retry every 60 sec if needed
+  setInterval(() => {
+    if (!feedToken) {
+      console.log("🔁 Retrying Angel login...");
+      tryLogin();
+    }
+  }, 60000);
+}
 // ==========================================
 // START SERVER
 // ==========================================
@@ -285,7 +323,7 @@ app.listen(PORT, async () => {
   try {
     await loadSymbolMaster();
     await loadOptionSymbolMaster();
-    await angelLogin();
+   startAngelLoginLoop();
   } catch (e) {
     console.error("❌ Startup failed:", e);
     process.exit(1);
