@@ -5,6 +5,8 @@
 // Applicable for: STOCKS / OPTIONS / FUTURE MODULES
 // ==================================================
 
+const { v4: uuidv4 } = require("uuid");
+
 /**
  * createPaperTrade
  * @param {object} data
@@ -58,6 +60,7 @@ function createPaperTrade(data = {}) {
   // ------------------------------
   return {
     status: "PAPER_TRADE_CREATED",
+    tradeId: uuidv4(),           // 👈 unique id for monitoring
     tradeMode: "PAPER",
 
     instrumentType,
@@ -70,7 +73,7 @@ function createPaperTrade(data = {}) {
 
     entryTime: new Date().toISOString(),
 
-    // Exit engine will act on this later
+    // Exit engine / monitor will act on this
     tradeState: "ACTIVE",
 
     note: "Paper trade executed using real Mahashakti rules",
