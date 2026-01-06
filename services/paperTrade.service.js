@@ -1,7 +1,8 @@
 // ==================================================
-// OPTIONS PAPER TRADE SERVICE (PHASE-3)
+// PAPER TRADE SERVICE (COMMON – PHASE-3)
 // REAL LOGIC – NO DUMMY
 // Execution = Virtual | Rules = SAME AS REAL TRADE
+// Applicable for: STOCKS / OPTIONS / FUTURE MODULES
 // ==================================================
 
 /**
@@ -11,18 +12,22 @@
  *
  * Required:
  * - symbol
- * - optionType (CE / PE)
  * - entryPrice
  * - quantity
- * - signal (BUY / SELL)
+ * - signal (BUY / SELL / STRONG BUY / STRONG SELL)
+ *
+ * Optional:
+ * - instrumentType (STOCK / OPTION) [default: STOCK]
+ * - optionType (CE / PE)            [only if OPTION]
  */
 function createPaperTrade(data = {}) {
   const {
     symbol,
-    optionType,
     entryPrice,
     quantity,
     signal,
+    instrumentType = "STOCK",
+    optionType = null,
   } = data;
 
   // ------------------------------
@@ -30,7 +35,6 @@ function createPaperTrade(data = {}) {
   // ------------------------------
   if (
     !symbol ||
-    !optionType ||
     typeof entryPrice !== "number" ||
     typeof quantity !== "number" ||
     !signal
@@ -41,19 +45,35 @@ function createPaperTrade(data = {}) {
     };
   }
 
+  // OPTION VALIDATION (ONLY IF REQUIRED)
+  if (instrumentType === "OPTION" && !optionType) {
+    return {
+      status: "REJECTED",
+      reason: "Option type required for option paper trade",
+    };
+  }
+
   // ------------------------------
   // PAPER TRADE OBJECT
   // ------------------------------
   return {
     status: "PAPER_TRADE_CREATED",
     tradeMode: "PAPER",
+
+    instrumentType,
     symbol,
     optionType,
+
     signal,
     entryPrice,
     quantity,
+
     entryTime: new Date().toISOString(),
-    note: "Paper trade executed using real rules",
+
+    // Exit engine will act on this later
+    tradeState: "ACTIVE",
+
+    note: "Paper trade executed using real Mahashakti rules",
   };
 }
 
