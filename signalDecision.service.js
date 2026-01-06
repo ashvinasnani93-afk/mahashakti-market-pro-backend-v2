@@ -191,9 +191,9 @@ function finalDecision(data = {}) {
   // =====================================
   // STEP 5.5: SECTOR PARTICIPATION (NEW – LOCKED)
   // =====================================
-  const sectorParticipation = analyzeSectorParticipation(
-    data.sectors || []
-  );
+ const sectorParticipation = analyzeSectorParticipation(
+  data.sectors || []
+);
 
   if (sectorParticipation.participation === "WEAK") {
     return applySafety(
@@ -312,7 +312,7 @@ function finalDecision(data = {}) {
         : typeof data.vix === "number" && data.vix <= 12
         ? "LOW"
         : "NORMAL",
-
+sectorParticipation: sectorParticipation.participation,
     isResultDay: safetyContext.isResultDay,
     isExpiryDay: safetyContext.isExpiryDay,
   });
