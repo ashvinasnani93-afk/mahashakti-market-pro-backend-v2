@@ -8,18 +8,13 @@ const router = express.Router();
 
 const { analyzeInstitutionalFlow } = require("./institutionalFlow.service");
 
-/**
- * POST /institutional/flow
- * Body:
- * - fiiNet (number)
- * - diiNet (number)
- */
+// ✅ ONLY /flow
 router.post("/flow", (req, res) => {
   try {
     const result = analyzeInstitutionalFlow(req.body || {});
     return res.json({
       status: "OK",
-      data: result, // SUPPORTIVE | AGAINST | MIXED
+      data: result,
     });
   } catch (e) {
     return res.status(500).json({
