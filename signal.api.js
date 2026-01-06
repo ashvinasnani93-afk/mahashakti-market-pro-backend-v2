@@ -18,6 +18,11 @@ const { generateStrongSignal } = require("./services/strongBuy.engine");
 const { scanMomentum } = require("./services/momentumScanner.service");
 const { analyzeInstitutionalFlow } = require("./services/institutionalFlow.service");
 
+// 🆕 SECTOR PARTICIPATION (CONTEXT ONLY)
+const {
+  analyzeSectorParticipation,
+} = require("./services/sectorParticipation.service");
+
 // 🆕 CHAT FORMATTER (LOCKED UX)
 const { formatSignalMessage } = require("./services/chatFormatter.util");
 
@@ -124,6 +129,11 @@ function getSignal(req, res) {
       diiNet: body.diiNet,
     });
 
+    // 🆕 Sector Participation (context only)
+    const sectorParticipation = analyzeSectorParticipation(
+      body.sectors || []
+    );
+
     // -------------------------------
     // CHAT FORMAT (LOCKED UX RULE)
     // -------------------------------
@@ -132,6 +142,7 @@ function getSignal(req, res) {
       signal: result.signal,
       momentumActive: momentumResult.active === true,
       institutionalTag: institutional.tag,
+      sectorTag: sectorParticipation.participation,
     });
 
     // -------------------------------
@@ -147,12 +158,13 @@ function getSignal(req, res) {
 
       // 🔒 CORE SIGNAL
       signal: chat.signal,
-      display: chat.display, // 🟢 / 🔴 / 🟡 / 🔥
-      lines: chat.lines,     // Momentum + Institutional
+      display: chat.display,
+      lines: chat.lines,
 
       // OPTIONAL RAW FLAGS (UI)
       momentumActive: momentumResult.active === true,
       institutionalTag: institutional.tag,
+      sectorParticipation: sectorParticipation.participation,
     });
   } catch (e) {
     console.error("❌ Signal API Error:", e.message);
