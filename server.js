@@ -53,7 +53,26 @@ app.get("/health", (req, res) => {
     timestamp: Date.now(),
   });
 });
+// 🆕 CARRY 0.3: extended health check
+app.get("/health/extended", (req, res) => {
+  res.json({
+    server: "running",
+    uptime: process.uptime(),
 
+    angel: {
+      loggedIn: angelLoggedIn,
+      feedToken: !!feedToken,
+    },
+
+    websocket: {
+      connected: wsConnected,
+      subscribedTokens: subscribedTokens.size,
+      activeSymbols: Object.keys(latestLTP).length,
+    },
+
+    timestamp: Date.now(),
+  });
+});
 const PORT = process.env.PORT || 3000;
 
 // ==========================================
@@ -109,10 +128,12 @@ let symbolTokenMap = {};
 let tokenSymbolMap = {};
 let subscribedTokens = new Set();
 let latestLTP = {};
-
+let symbolLastSeen = {}; 
+// 🆕 CARRY 0.3: runtime status flags
+let wsConnected = false;
+let angelLoggedIn = false;
 // 🆕 ADD: last seen tracking (audit carry)
 let symbolLastSeen = {};
-
 // ==========================================
 // LTP DECODER
 // ==========================================
@@ -185,13 +206,14 @@ async function angelLogin() {
 
     smartApi.setAccessToken(session.data.jwtToken);
     feedToken = session.data.feedToken;
-
-    console.log("✅ Angel Login SUCCESS");
-    startWebSocket();
-  } catch (e) {
-    console.error("❌ Angel Login Error:", e);
-    setTimeout(angelLogin, 5000);
-  } finally {
+console.log("✅ Angel Login SUCCESS");
+angelLoggedIn = true;          // 🆕 CARRY 0.4
+startWebSocket();
+  }catch (e) {
+  angelLoggedIn = false;       // 🆕 CARRY 0.4
+  console.error("❌ Angel Login Error:", e);
+  setTimeout(angelLogin, 5000);
+} finally {
     isLoggingIn = false;
   }
 }
@@ -210,13 +232,13 @@ function startWebSocket() {
 
   ws = new WebSocket(wsUrl);
 
-  ws.on("open", () => {
-    console.log("🟢 WebSocket Connected");
-    subscribedTokens.clear();
+ ws.on("open", () => {
+  console.log("🟢 WebSocket Connected");
+  wsConnected = true;          // 🆕 CARRY 0.4
+  subscribedTokens.clear();
 
-    // 🆕 ADD: auto resubscribe (audit carry)
-    resubscribeAllSymbols();
-  });
+  resubscribeAllSymbols();
+});
 
   ws.on("message", (data) => {
     if (!Buffer.isBuffer(data)) return;
@@ -231,15 +253,17 @@ function startWebSocket() {
       symbolLastSeen[symbol] = Date.now(); // 🆕 ADD
     }
   });
-
+// 🆕 ADD: WebSocket error handler (Carry 0.1)
+ws.on("error", (err) => {
+  console.error("❌ WebSocket error:", err.message);
+});
   ws.on("close", () => {
-    console.log("🔴 WebSocket Disconnected – reconnecting...");
+  console.log("🔴 WebSocket Disconnected – reconnecting...");
+  wsConnected = false;         // 🆕 CARRY 0.4
 
-    // 🆕 ADD: cleanup on disconnect
-    subscribedTokens.clear();
-
-    setTimeout(startWebSocket, 3000);
-  });
+  subscribedTokens.clear();
+  setTimeout(startWebSocket, 3000);
+});
 }
 
 // ==========================================
@@ -351,4 +375,40 @@ app.listen(PORT, async () => {
     console.error("❌ Startup failed:", e);
     process.exit(1);
   }
+});
+// ==========================================
+// 🆕 CARRY 0.2 — SAFE SHUTDOWN HANDLING
+// ==========================================
+
+function gracefulShutdown(signal) {
+  console.log(`🛑 ${signal} received. Shutting down safely...`);
+
+  try {
+    if (ws) {
+      ws.close();
+      console.log("🔌 WebSocket closed");
+    }
+  } catch (e) {
+    console.error("❌ Error closing WebSocket", e);
+  }
+
+  setTimeout(() => {
+    console.log("✅ Process exited cleanly");
+    process.exit(0);
+  }, 1000);
+}
+
+// Render / Linux signals
+process.on("SIGTERM", gracefulShutdown);
+process.on("SIGINT", gracefulShutdown);
+
+// Unexpected crash safety
+process.on("uncaughtException", (err) => {
+  console.error("🔥 Uncaught Exception:", err);
+  gracefulShutdown("uncaughtException");
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("🔥 Unhandled Rejection:", reason);
+  gracefulShutdown("unhandledRejection");
 });
