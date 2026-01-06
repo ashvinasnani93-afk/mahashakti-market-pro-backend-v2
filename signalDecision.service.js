@@ -20,6 +20,11 @@ const { analyzePriceAction } = require("./services/priceAction.service");
 const { validateVolume } = require("./services/volumeValidation.service");
 const { generateStrongSignal } = require("./services/strongBuy.engine");
 
+// 🆕 SECTOR PARTICIPATION (CONTEXT ONLY)
+const {
+  analyzeSectorParticipation,
+} = require("./services/sectorParticipation.service");
+
 // ---------- INTRADAY FAST MOVE ----------
 const { detectFastMove } = require("./services/intradayFastMove.service");
 
@@ -153,7 +158,6 @@ function finalDecision(data = {}) {
   // =====================================
   const breadth = analyzeMarketBreadth(data.breadth || {});
 
-  // BUY needs bullish breadth
   if (
     breakoutResult.action === "BUY" &&
     breadth.strength !== "BULLISH"
@@ -169,7 +173,6 @@ function finalDecision(data = {}) {
     );
   }
 
-  // SELL needs bearish breadth
   if (
     breakoutResult.action === "SELL" &&
     breadth.strength !== "BEARISH"
@@ -179,6 +182,25 @@ function finalDecision(data = {}) {
         signal: "WAIT",
         reason: "Market breadth not bearish",
         mode: "BREADTH_BLOCK",
+        riskTag,
+      },
+      safetyContext
+    );
+  }
+
+  // =====================================
+  // STEP 5.5: SECTOR PARTICIPATION (NEW – LOCKED)
+  // =====================================
+  const sectorParticipation = analyzeSectorParticipation(
+    data.sectors || []
+  );
+
+  if (sectorParticipation.participation === "WEAK") {
+    return applySafety(
+      {
+        signal: "WAIT",
+        reason: "Weak sector participation",
+        mode: "SECTOR_BLOCK",
         riskTag,
       },
       safetyContext
