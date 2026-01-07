@@ -31,12 +31,11 @@ function summarizeOI(oiData = []) {
   // -----------------------------
   // HARD SAFETY – NO DATA
   // -----------------------------
-  if (!Array.isArray(oiData) || oiData.length === 0) {
-    return {
-      bias: "NEUTRAL",
-      note: "OI data not available – institutional bias unknown",
-    };
-  }
+ if (!Array.isArray(oiData) || oiData.length === 0) {
+  return {
+    bias: "NEUTRAL",
+  };
+}
 
   let longBuildUp = 0;
   let shortBuildUp = 0;
@@ -68,29 +67,21 @@ function summarizeOI(oiData = []) {
   // -----------------------------
   // INSTITUTIONAL BIAS LOGIC
   // -----------------------------
-  if (bullishScore > bearishScore) {
-    return {
-      bias: "BULLISH",
-      note:
-        "Institutional long buildup / short covering dominance",
-      strength: bullishScore - bearishScore,
-    };
-  }
+ if (bullishScore > bearishScore) {
+  return {
+    bias: "BULLISH",
+  };
+}
 
   if (bearishScore > bullishScore) {
-    return {
-      bias: "BEARISH",
-      note:
-        "Institutional short buildup / long unwinding dominance",
-      strength: bearishScore - bullishScore,
-    };
-  }
-
   return {
-    bias: "NEUTRAL",
-    note: "Institutional activity balanced",
-    strength: 0,
+    bias: "BEARISH",
   };
+}
+
+ return {
+  bias: "NEUTRAL",
+};
 }
 
 // ==========================================
