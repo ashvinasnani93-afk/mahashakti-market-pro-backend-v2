@@ -70,40 +70,43 @@ function getSignal(req, res) {
       priceDirection: "UP",
     });
 
-    // -------------------------------
-    // ENGINE INPUT (ORIGINAL FLOW)
-    // -------------------------------
-    const engineData = {
-      symbol,
-      segment,
-      instrumentType: indexConfig.instrumentType,
+   // -------------------------------
+// ENGINE INPUT (ORIGINAL FLOW)
+// -------------------------------
+const engineData = {
+  symbol,
+  segment,
+  instrumentType: indexConfig.instrumentType,
 
-      closes: body.closes,
-      ema20: body.ema20,
-      ema50: body.ema50,
-      rsi: body.rsi,
+  closes: body.closes,
+  ema20: body.ema20,
+  ema50: body.ema50,
+  rsi: body.rsi,
 
-      close: body.close,
-      prevClose: body.prevClose,
+  close: body.close,
+  prevClose: body.prevClose,
 
-      support: body.support,
-      resistance: body.resistance,
+  support: body.support,
+  resistance: body.resistance,
 
-      volume: body.volume,
-      avgVolume: body.avgVolume,
+  volume: body.volume,
+  avgVolume: body.avgVolume,
 
-      breadth: marketBreadth,
+  breadth: marketBreadth,
 
-      oiData: Array.isArray(body.oiData) ? body.oiData : [],
-      pcrValue: typeof body.pcrValue === "number" ? body.pcrValue : null,
+  // 🆕 CARRY-1.1: sector data pass to decision engine
+  sectors: Array.isArray(body.sectors) ? body.sectors : [],
 
-      isResultDay: body.isResultDay === true,
-      isExpiryDay: body.isExpiryDay === true,
-      tradeCountToday: Number(body.tradeCountToday || 0),
-      tradeType,
+  oiData: Array.isArray(body.oiData) ? body.oiData : [],
+  pcrValue: typeof body.pcrValue === "number" ? body.pcrValue : null,
 
-      vix: typeof body.vix === "number" ? body.vix : null,
-    };
+  isResultDay: body.isResultDay === true,
+  isExpiryDay: body.isExpiryDay === true,
+  tradeCountToday: Number(body.tradeCountToday || 0),
+  tradeType,
+
+  vix: typeof body.vix === "number" ? body.vix : null,
+};
 
     // -------------------------------
     // FINAL DECISION (ENTRY ENGINE)
