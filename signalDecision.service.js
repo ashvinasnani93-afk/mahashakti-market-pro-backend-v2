@@ -279,13 +279,16 @@ function finalDecision(data = {}) {
   const pcrContext = getPCRContext(data.pcrValue);
   const greeksContext = getGreeksContext(data.greeks || {});
 
-  // =====================================
+ // =====================================
   // STEP 10: STRONG BUY / STRONG SELL (RARE)
   // =====================================
   const strong = generateStrongSignal({
     structure:
-      structure.structure === "UPTREND" ? "UP" :
-      structure.structure === "DOWNTREND" ? "DOWN" : "NONE",
+      structure.structure === "UPTREND"
+        ? "UP"
+        : structure.structure === "DOWNTREND"
+        ? "DOWN"
+        : "NONE",
 
     trend: trendResult.trend,
 
@@ -293,9 +296,11 @@ function finalDecision(data = {}) {
       trendResult.trend === "UPTREND" ? "BULLISH" : "BEARISH",
 
     priceAction:
-      priceAction.sentiment === "BULLISH" && priceAction.strength === "STRONG"
+      priceAction.sentiment === "BULLISH" &&
+      priceAction.strength === "STRONG"
         ? "STRONG_BULL"
-        : priceAction.sentiment === "BEARISH" && priceAction.strength === "STRONG"
+        : priceAction.sentiment === "BEARISH" &&
+          priceAction.strength === "STRONG"
         ? "STRONG_BEAR"
         : "WEAK",
 
@@ -305,14 +310,17 @@ function finalDecision(data = {}) {
       breakoutResult.allowed ? "REAL" : "FAKE",
 
     marketBreadth: breadth.strength || "SIDEWAYS",
-sectorParticipation: sectorParticipation.participation,
+
+    // ✅ FIX: sectorParticipation sirf EK baar
+    sectorParticipation: sectorParticipation.participation,
+
     vixLevel:
       typeof data.vix === "number" && data.vix >= 20
         ? "HIGH"
         : typeof data.vix === "number" && data.vix <= 12
         ? "LOW"
         : "NORMAL",
-sectorParticipation: sectorParticipation.participation,
+
     isResultDay: safetyContext.isResultDay,
     isExpiryDay: safetyContext.isExpiryDay,
   });
@@ -320,9 +328,11 @@ sectorParticipation: sectorParticipation.participation,
   if (
     strong.strong &&
     ((strong.signal === "STRONG_BUY" &&
-      (oiSummary.bias === "BEARISH" || pcrContext.bias === "BEARISH")) ||
-     (strong.signal === "STRONG_SELL" &&
-      (oiSummary.bias === "BULLISH" || pcrContext.bias === "BULLISH")))
+      (oiSummary.bias === "BEARISH" ||
+        pcrContext.bias === "BEARISH")) ||
+      (strong.signal === "STRONG_SELL" &&
+        (oiSummary.bias === "BULLISH" ||
+          pcrContext.bias === "BULLISH")))
   ) {
     return applySafety(
       {
@@ -334,7 +344,6 @@ sectorParticipation: sectorParticipation.participation,
       safetyContext
     );
   }
-
   // =====================================
   // FINAL SIGNAL (PRIORITY)
   // =====================================
