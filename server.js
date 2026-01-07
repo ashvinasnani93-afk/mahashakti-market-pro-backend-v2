@@ -53,19 +53,22 @@ app.get("/health", (req, res) => {
     timestamp: Date.now(),
   });
 });
-// 🆕 CARRY 0.3: extended health check
+
+// 🆕 CARRY 0.5: EXTENDED HEALTH (SYSTEM AWARE)
 app.get("/health/extended", (req, res) => {
   res.json({
     server: "running",
+    systemReady,
     uptime: process.uptime(),
 
     angel: {
       loggedIn: angelLoggedIn,
-      feedToken: !!feedToken,
+      feedToken: Boolean(feedToken),
     },
 
     websocket: {
       connected: wsConnected,
+      starting: wsStarting,
       subscribedTokens: subscribedTokens.size,
       activeSymbols: Object.keys(latestLTP).length,
     },
@@ -117,23 +120,40 @@ app.use("/institutional", institutionalFlowApi);
 app.use("/sector", sectorParticipationApi);
 
 // ==========================================
-// GLOBAL STATE
+// GLOBAL STATE (CARRY 0.4 – SAFE & SINGLE)
 // ==========================================
+
 let smartApi;
 let ws;
 let feedToken = null;
 let isLoggingIn = false;
 
+// ---- market state ----
 let symbolTokenMap = {};
 let tokenSymbolMap = {};
 let subscribedTokens = new Set();
 let latestLTP = {};
-let symbolLastSeen = {}; 
-// 🆕 CARRY 0.3: runtime status flags
+let symbolLastSeen = {}; // ✅ SINGLE SOURCE (locked)
+
+// ---- runtime flags (Carry 0.4 hardened) ----
 let wsConnected = false;
 let angelLoggedIn = false;
-// 🆕 ADD: last seen tracking (audit carry)
+// ==========================================
+// 🆕 CARRY 0.5 — RUNTIME CONTROLLER
+// ==========================================
 
+let systemReady = false;
+let wsStarting = false;
+
+function markSystemReady() {
+  systemReady = true;
+  console.log("🧠 SYSTEM STATE: READY");
+}
+
+function markSystemDown(reason) {
+  systemReady = false;
+  console.log("🛑 SYSTEM STATE: DOWN →", reason);
+}
 // ==========================================
 // LTP DECODER
 // ==========================================
@@ -186,7 +206,7 @@ function loadSymbolMaster() {
 }
 
 // ==========================================
-// ANGEL LOGIN
+// ANGEL LOGIN (CARRY 0.5 SYNCED)
 // ==========================================
 async function angelLogin() {
   if (isLoggingIn) return;
@@ -206,23 +226,33 @@ async function angelLogin() {
 
     smartApi.setAccessToken(session.data.jwtToken);
     feedToken = session.data.feedToken;
-console.log("✅ Angel Login SUCCESS");
-angelLoggedIn = true;          // 🆕 CARRY 0.4
-startWebSocket();
-  }catch (e) {
-  angelLoggedIn = false;       // 🆕 CARRY 0.4
-  console.error("❌ Angel Login Error:", e);
-  setTimeout(angelLogin, 5000);
-} finally {
+
+    angelLoggedIn = true;
+    console.log("✅ Angel Login SUCCESS");
+
+    // 🆕 CARRY 0.5: start WS only once
+    if (!wsConnected && !wsStarting) {
+      startWebSocket();
+    }
+
+    markSystemReady();
+  } catch (e) {
+    angelLoggedIn = false;
+    markSystemDown("ANGEL_LOGIN_FAILED");
+    console.error("❌ Angel Login Error:", e);
+    setTimeout(angelLogin, 5000);
+  } finally {
     isLoggingIn = false;
   }
 }
 
 // ==========================================
-// WEBSOCKET
+// WEBSOCKET (CARRY 0.5 SYNCED)
 // ==========================================
 function startWebSocket() {
-  if (!feedToken) return;
+  if (!feedToken || wsConnected || wsStarting) return;
+
+  wsStarting = true;
 
   const wsUrl =
     `wss://smartapisocket.angelone.in/smart-stream` +
@@ -232,13 +262,14 @@ function startWebSocket() {
 
   ws = new WebSocket(wsUrl);
 
- ws.on("open", () => {
-  console.log("🟢 WebSocket Connected");
-  wsConnected = true;          // 🆕 CARRY 0.4
-  subscribedTokens.clear();
+  ws.on("open", () => {
+    console.log("🟢 WebSocket Connected");
+    wsConnected = true;
+    wsStarting = false;
 
-  resubscribeAllSymbols();
-});
+    subscribedTokens.clear();
+    resubscribeAllSymbols();
+  });
 
   ws.on("message", (data) => {
     if (!Buffer.isBuffer(data)) return;
@@ -250,20 +281,27 @@ function startWebSocket() {
 
     if (symbol && ltp) {
       latestLTP[symbol] = ltp;
-      symbolLastSeen[symbol] = Date.now(); // 🆕 ADD
+      symbolLastSeen[symbol] = Date.now();
     }
   });
-// 🆕 ADD: WebSocket error handler (Carry 0.1)
-ws.on("error", (err) => {
-  console.error("❌ WebSocket error:", err.message);
-});
-  ws.on("close", () => {
-  console.log("🔴 WebSocket Disconnected – reconnecting...");
-  wsConnected = false;         // 🆕 CARRY 0.4
 
-  subscribedTokens.clear();
-  setTimeout(startWebSocket, 3000);
-});
+  ws.on("error", (err) => {
+    console.error("❌ WebSocket error:", err.message);
+    wsConnected = false;
+    wsStarting = false;
+    markSystemDown("WS_ERROR");
+  });
+
+  ws.on("close", () => {
+    console.log("🔴 WebSocket Disconnected");
+    wsConnected = false;
+    wsStarting = false;
+    markSystemDown("WS_CLOSED");
+
+    if (angelLoggedIn) {
+      setTimeout(startWebSocket, 3000);
+    }
+  });
 }
 
 // ==========================================
