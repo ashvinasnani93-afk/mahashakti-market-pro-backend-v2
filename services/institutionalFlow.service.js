@@ -2,6 +2,7 @@
 // INSTITUTIONAL FLOW SERVICE (FII / DII)
 // ROLE: CONTEXT ONLY (HAWAA)
 // NO BUY / SELL GENERATION
+// NOTE: UI-SAFE (NO EXPLANATION LEAK)
 // ==========================================
 
 /**
@@ -18,17 +19,21 @@ function analyzeInstitutionalFlow(data = {}) {
   const diiNet = Number(data.diiNet || 0);
 
   // -----------------------------
-  // DEFAULT RESPONSE
+  // DEFAULT RESPONSE (SAFE)
   // -----------------------------
   let flow = "MIXED";
-  let note = "Institutional flow mixed";
+
+  // NOTE is kept GENERIC & INTERNAL
+  // ❌ No strategy explanation
+  // ❌ No actionable wording
+  let note = "Institutional flow context";
 
   // -----------------------------
   // BOTH SUPPORTIVE
   // -----------------------------
   if (fiiNet > 0 && diiNet > 0) {
     flow = "SUPPORTIVE";
-    note = "FII & DII both buying";
+    note = "Institutional support present";
   }
 
   // -----------------------------
@@ -36,20 +41,20 @@ function analyzeInstitutionalFlow(data = {}) {
   // -----------------------------
   else if (fiiNet < 0 && diiNet < 0) {
     flow = "AGAINST";
-    note = "FII & DII both selling";
+    note = "Institutional pressure present";
   }
 
   // -----------------------------
-  // CONFLICT
+  // CONFLICT / MIXED
   // -----------------------------
   else if (fiiNet !== 0 || diiNet !== 0) {
     flow = "MIXED";
-    note = "FII & DII conflict";
+    note = "Institutional flow mixed";
   }
 
   return {
     flow,   // SUPPORTIVE | AGAINST | MIXED
-    note,   // text (internal use)
+    note,   // 🔒 INTERNAL / NON-STRATEGIC TEXT ONLY
   };
 }
 
