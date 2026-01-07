@@ -344,34 +344,19 @@ function finalDecision(data = {}) {
       safetyContext
     );
   }
-  // =====================================
-  // FINAL SIGNAL (PRIORITY)
+
+ // =====================================
+  // FINAL SIGNAL (UI-SAFE – LOCKED)
   // =====================================
   const finalSignal =
     strong.strong
       ? strong.signal
       : breakoutResult.action || "WAIT";
 
-  const finalReason =
-    strong.strong
-      ? strong.reason
-      : "All core + regime + breadth conditions aligned";
-
-  return applySafety(
-    {
-      signal: finalSignal,
-      trend: trendResult.trend,
-      reason: finalReason,
-
-      institutionalBias: oiSummary.bias,
-      pcrBias: pcrContext.bias,
-      greeksNote: greeksContext.note,
-sectorParticipation: sectorParticipation.participation,
-      mode: strong.strong ? "STRONG" : "NORMAL",
-      riskTag,
-    },
-    safetyContext
-  );
+  // 🔒 UI SAFE RETURN — NO REASON / NO TEXT
+  return {
+    signal: finalSignal,
+  };
 }
 
 module.exports = {
