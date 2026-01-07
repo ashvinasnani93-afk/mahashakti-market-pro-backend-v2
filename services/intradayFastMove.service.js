@@ -43,7 +43,7 @@ function detectFastMove(data = {}) {
   ) {
     return {
       signal: "WAIT",
-      reason: "Fast-move: insufficient or invalid data",
+      
     };
   }
 
@@ -53,7 +53,7 @@ function detectFastMove(data = {}) {
   if (trend !== "UPTREND" && trend !== "DOWNTREND") {
     return {
       signal: "WAIT",
-      reason: "Fast-move blocked: trend not clear",
+      
     };
   }
 
@@ -63,14 +63,14 @@ function detectFastMove(data = {}) {
   if (isResultDay) {
     return {
       signal: "WAIT",
-      reason: "Fast-move blocked on result day",
+    
     };
   }
 
   if (isExpiryDay) {
     return {
       signal: "WAIT",
-      reason: "Fast-move blocked on expiry day",
+     
     };
   }
 
@@ -84,11 +84,9 @@ function detectFastMove(data = {}) {
   // EXTREME SPIKE SAFETY (CAPITAL PROTECT)
   // -------------------------------
   if (absChange > 1.8) {
-    return {
-      signal: "HOLD",
-      reason: "Extreme spike detected – capital protection mode",
-      mode: "FAST_MOVE",
-    };
+   return {
+  signal: "WAIT",
+};
   }
 
   // -------------------------------
@@ -100,7 +98,7 @@ function detectFastMove(data = {}) {
   if (!priceBurst || !volumeBurst) {
     return {
       signal: "WAIT",
-      reason: "No intraday fast-move confirmation",
+     
     };
   }
 
@@ -110,27 +108,23 @@ function detectFastMove(data = {}) {
   if (changePercent > 0 && trend === "UPTREND") {
     return {
       signal: "BUY",
-      reason: "Intraday fast bullish move with volume confirmation",
-      mode: "FAST_MOVE",
+      
     };
   }
 
   if (changePercent < 0 && trend === "DOWNTREND") {
     return {
       signal: "SELL",
-      reason: "Intraday fast bearish move with volume confirmation",
-      mode: "FAST_MOVE",
+     
     };
   }
 
   // -------------------------------
   // MISALIGNED MOVE
   // -------------------------------
-  return {
-    signal: "HOLD",
-    reason: "Fast move detected but higher trend misaligned",
-    mode: "FAST_MOVE",
-  };
+ return {
+  signal: "WAIT",
+};
 }
 
 // ==========================================
