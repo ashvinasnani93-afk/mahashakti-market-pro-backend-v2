@@ -1,6 +1,7 @@
 // ==========================================
 // PCR SERVICE – INSTITUTIONAL CONTEXT (PHASE-2A)
 // Put Call Ratio interpretation (TEXT ONLY)
+// NOTE: UI-SAFE (NO STRATEGY / NO EXPLANATION)
 // ==========================================
 
 /**
@@ -10,6 +11,7 @@
  *
  * ⚠️ Context only
  * ❌ No BUY / SELL enforcement
+ * 🔒 No reasoning leak to UI
  */
 function getPCRContext(pcrValue) {
   // -----------------------------
@@ -18,7 +20,7 @@ function getPCRContext(pcrValue) {
   if (typeof pcrValue !== "number" || isNaN(pcrValue)) {
     return {
       bias: "NEUTRAL",
-      note: "PCR data unavailable or invalid",
+      note: "PCR context unavailable",
     };
   }
 
@@ -28,8 +30,7 @@ function getPCRContext(pcrValue) {
   if (pcrValue < 0.6) {
     return {
       bias: "BEARISH",
-      note:
-        "Very low PCR → Excessive call writing → Market vulnerable to fall",
+      note: "PCR context: bearish",
     };
   }
 
@@ -39,8 +40,7 @@ function getPCRContext(pcrValue) {
   if (pcrValue >= 0.6 && pcrValue < 0.9) {
     return {
       bias: "BEARISH",
-      note:
-        "Low PCR → Call dominance → Weak institutional support",
+      note: "PCR context: bearish",
     };
   }
 
@@ -50,8 +50,7 @@ function getPCRContext(pcrValue) {
   if (pcrValue >= 0.9 && pcrValue <= 1.2) {
     return {
       bias: "NEUTRAL",
-      note:
-        "Balanced PCR → No strong institutional directional edge",
+      note: "PCR context: neutral",
     };
   }
 
@@ -61,8 +60,7 @@ function getPCRContext(pcrValue) {
   if (pcrValue > 1.2 && pcrValue <= 1.5) {
     return {
       bias: "BULLISH",
-      note:
-        "High PCR → Put writing → Institutional support present",
+      note: "PCR context: bullish",
     };
   }
 
@@ -72,8 +70,7 @@ function getPCRContext(pcrValue) {
   if (pcrValue > 1.5) {
     return {
       bias: "BULLISH",
-      note:
-        "Very high PCR → Heavy put writing → Strong support but reversal risk",
+      note: "PCR context: bullish",
     };
   }
 
@@ -82,7 +79,7 @@ function getPCRContext(pcrValue) {
   // -----------------------------
   return {
     bias: "NEUTRAL",
-    note: "PCR interpretation unclear",
+    note: "PCR context neutral",
   };
 }
 
