@@ -182,15 +182,12 @@ const engineData = {
 // Ensures chat lines are NEVER empty or broken
 // ==========================================
 
-const safeSignal =
+let safeSignal =
   typeof chat?.signal === "string"
     ? chat.signal
     : result.signal || "WAIT";
 
-const safeDisplay =
-  typeof chat?.display === "string"
-    ? chat.display
-    : safeSignal;
+const safeDisplay = safeSignal;
 
 
 // ==========================================
@@ -213,7 +210,7 @@ if (safeSignal === "STRONG_BUY") {
 }
 
 // Lines ko simple rakho (NO REASON)
-const safeLines = ["Trade signal generated"];   
+const safeLines = [];
  // -------------------------------
     // FINAL RESPONSE (MERGED)
     // -------------------------------
