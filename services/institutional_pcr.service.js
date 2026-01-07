@@ -20,7 +20,7 @@ function getPCRContext(pcrValue) {
   if (typeof pcrValue !== "number" || isNaN(pcrValue)) {
     return {
       bias: "NEUTRAL",
-      note: "PCR context unavailable",
+      note: "PCR context",
     };
   }
 
@@ -30,7 +30,7 @@ function getPCRContext(pcrValue) {
   if (pcrValue < 0.6) {
     return {
       bias: "BEARISH",
-      note: "PCR context: bearish",
+      note: "PCR context",
     };
   }
 
@@ -40,7 +40,7 @@ function getPCRContext(pcrValue) {
   if (pcrValue >= 0.6 && pcrValue < 0.9) {
     return {
       bias: "BEARISH",
-      note: "PCR context: bearish",
+      note: "PCR context",
     };
   }
 
@@ -50,7 +50,7 @@ function getPCRContext(pcrValue) {
   if (pcrValue >= 0.9 && pcrValue <= 1.2) {
     return {
       bias: "NEUTRAL",
-      note: "PCR context: neutral",
+      note: "PCR context",
     };
   }
 
@@ -60,7 +60,7 @@ function getPCRContext(pcrValue) {
   if (pcrValue > 1.2 && pcrValue <= 1.5) {
     return {
       bias: "BULLISH",
-      note: "PCR context: bullish",
+      note: "PCR context",
     };
   }
 
@@ -70,7 +70,7 @@ function getPCRContext(pcrValue) {
   if (pcrValue > 1.5) {
     return {
       bias: "BULLISH",
-      note: "PCR context: bullish",
+      note: "PCR context",
     };
   }
 
@@ -79,13 +79,10 @@ function getPCRContext(pcrValue) {
   // -----------------------------
   return {
     bias: "NEUTRAL",
-    note: "PCR context neutral",
+    note: "PCR context",
   };
 }
 
-// ==========================================
-// EXPORT
-// ==========================================
 module.exports = {
   getPCRContext,
 };
