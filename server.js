@@ -149,10 +149,47 @@ function markSystemReady() {
   systemReady = true;
   console.log("🧠 SYSTEM STATE: READY");
 }
-
 function markSystemDown(reason) {
   systemReady = false;
   console.log("🛑 SYSTEM STATE: DOWN →", reason);
+}
+// ==========================================
+// 🆕 RATE LIMIT CHECK (Carry-6.1)
+// ==========================================
+
+function checkRateLimit(req, limit = 20, windowMs = 60 * 1000) {
+  const ip =
+    req.headers["x-forwarded-for"] ||
+    req.socket.remoteAddress ||
+    "unknown";
+
+  const now = Date.now();
+
+  if (!rateLimitMap[ip]) {
+    rateLimitMap[ip] = {
+      count: 1,
+      lastReset: now,
+    };
+    return true;
+  }
+
+  const entry = rateLimitMap[ip];
+
+  // Reset window
+  if (now - entry.lastReset > windowMs) {
+    entry.count = 1;
+    entry.lastReset = now;
+    return true;
+  }
+
+  // Increment count
+  entry.count += 1;
+
+  if (entry.count > limit) {
+    return false;
+  }
+
+  return true;
 }
 // ==========================================
 // LTP DECODER
@@ -450,3 +487,16 @@ process.on("unhandledRejection", (reason) => {
   console.error("🔥 Unhandled Rejection:", reason);
   gracefulShutdown("unhandledRejection");
 });
+// ==========================================
+// 🆕 RATE LIMIT CLEANUP (Carry-6.1.4)
+// ==========================================
+
+setInterval(() => {
+  const now = Date.now();
+
+  for (const ip in rateLimitMap) {
+    if (now - rateLimitMap[ip].lastReset > 5 * 60 * 1000) {
+      delete rateLimitMap[ip];
+    }
+  }
+}, 60 * 1000);
