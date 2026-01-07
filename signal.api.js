@@ -31,8 +31,19 @@ const { formatSignalMessage } = require("./services/chatFormatter.util");
 // ==========================================
 function getSignal(req, res) {
   try {
-    const body = req.body || {};
 
+    // 🔒 RATE LIMIT (Carry-6.1)
+    const allowed = checkRateLimit(req, 20, 60 * 1000);
+    if (!allowed) {
+      return res.json({
+        status: true,
+        signal: "🟡",
+        display: "🟡",
+        lines: ["Trade signal generated"],
+      });
+    }
+
+    const body = req.body || {};
     // -------------------------------
     // BASIC INPUT CHECK (ORIGINAL)
     // -------------------------------
