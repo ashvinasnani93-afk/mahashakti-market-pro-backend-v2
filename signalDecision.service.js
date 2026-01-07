@@ -66,8 +66,6 @@ function finalDecision(data = {}) {
     return applySafety(
       {
         signal: "WAIT",
-        reason: "Sideways market detected",
-        mode: "NO_TRADE",
         riskTag,
       },
       safetyContext
@@ -87,8 +85,6 @@ function finalDecision(data = {}) {
     return applySafety(
       {
         signal: "WAIT",
-        reason: trendResult.reason,
-        mode: "NORMAL",
         riskTag,
       },
       safetyContext
@@ -103,8 +99,6 @@ function finalDecision(data = {}) {
     return applySafety(
       {
         signal: "WAIT",
-        reason: structure.reason,
-        mode: "STRUCTURE_BLOCK",
         riskTag,
       },
       safetyContext
@@ -123,8 +117,6 @@ function finalDecision(data = {}) {
     return applySafety(
       {
         signal: "WAIT",
-        reason: rsiResult.reason,
-        mode: "NORMAL",
         riskTag,
       },
       safetyContext
@@ -145,8 +137,6 @@ function finalDecision(data = {}) {
     return applySafety(
       {
         signal: "WAIT",
-        reason: breakoutResult.reason,
-        mode: "NORMAL",
         riskTag,
       },
       safetyContext
@@ -165,8 +155,6 @@ function finalDecision(data = {}) {
     return applySafety(
       {
         signal: "WAIT",
-        reason: "Market breadth not bullish",
-        mode: "BREADTH_BLOCK",
         riskTag,
       },
       safetyContext
@@ -180,8 +168,6 @@ function finalDecision(data = {}) {
     return applySafety(
       {
         signal: "WAIT",
-        reason: "Market breadth not bearish",
-        mode: "BREADTH_BLOCK",
         riskTag,
       },
       safetyContext
@@ -199,8 +185,6 @@ function finalDecision(data = {}) {
     return applySafety(
       {
         signal: "WAIT",
-        reason: "Weak sector participation",
-        mode: "SECTOR_BLOCK",
         riskTag,
       },
       safetyContext
@@ -215,8 +199,6 @@ function finalDecision(data = {}) {
     return applySafety(
       {
         signal: "WAIT",
-        reason: priceAction.reason,
-        mode: "PRICE_ACTION_BLOCK",
         riskTag,
       },
       safetyContext
@@ -237,8 +219,6 @@ function finalDecision(data = {}) {
     return applySafety(
       {
         signal: "WAIT",
-        reason: volumeCheck.reason,
-        mode: "VOLUME_BLOCK",
         riskTag,
       },
       safetyContext
@@ -263,8 +243,6 @@ function finalDecision(data = {}) {
       return applySafety(
         {
           signal: fastMove.signal,
-          reason: fastMove.reason,
-          mode: "FAST_MOVE",
           riskTag: fastMove.riskTag || riskTag,
         },
         safetyContext
@@ -337,8 +315,6 @@ function finalDecision(data = {}) {
     return applySafety(
       {
         signal: "WAIT",
-        reason: "Strong setup but institutional conflict",
-        mode: "INSTITUTION_BLOCK",
         riskTag,
       },
       safetyContext
