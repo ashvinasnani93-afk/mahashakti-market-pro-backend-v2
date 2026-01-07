@@ -70,56 +70,62 @@ function getSignal(req, res) {
       priceDirection: "UP",
     });
 
- // -------------------------------
-// ENGINE INPUT (ORIGINAL FLOW + CARRY-2.1 FIX)
-// -------------------------------
+// ==========================================
+// ENGINE INPUT (FINAL – SAFE + LOCKED)
+// Carry-2.1 + Carry-2.2 + Carry-2.3
+// ==========================================
+
 const engineData = {
   symbol,
   segment,
   instrumentType: indexConfig.instrumentType,
 
   // ===== CORE PRICE SERIES =====
-  closes: body.closes,
-  highs: Array.isArray(body.highs) ? body.highs : [],      // 🆕 Carry-2.1
-  lows: Array.isArray(body.lows) ? body.lows : [],        // 🆕 Carry-2.1
+  closes: Array.isArray(body.closes) ? body.closes : [],
+  highs: Array.isArray(body.highs) ? body.highs : [],
+  lows: Array.isArray(body.lows) ? body.lows : [],
 
-  open: body.open,                                        // 🆕 Carry-2.1
-  high: body.high,                                        // 🆕 Carry-2.1
-  low: body.low,                                          // 🆕 Carry-2.1
-  close: body.close,
-  prevClose: body.prevClose,
+  // ===== CURRENT CANDLE (PRICE ACTION) =====
+  open: typeof body.open === "number" ? body.open : null,
+  high: typeof body.high === "number" ? body.high : null,
+  low: typeof body.low === "number" ? body.low : null,
+  close: typeof body.close === "number" ? body.close : null,
+  prevClose: typeof body.prevClose === "number" ? body.prevClose : null,
 
   // ===== EMA / RSI =====
-  ema20: body.ema20,
-  ema50: body.ema50,
-  rsi: body.rsi,
+  ema20: Array.isArray(body.ema20) ? body.ema20 : [],
+  ema50: Array.isArray(body.ema50) ? body.ema50 : [],
+  rsi: typeof body.rsi === "number" ? body.rsi : null,
 
   // ===== LEVELS =====
-  support: body.support,
-  resistance: body.resistance,
+  support: typeof body.support === "number" ? body.support : null,
+  resistance: typeof body.resistance === "number" ? body.resistance : null,
 
   // ===== VOLUME =====
-  volume: body.volume,
-  avgVolume: body.avgVolume,
+  volume: typeof body.volume === "number" ? body.volume : null,
+  avgVolume: typeof body.avgVolume === "number" ? body.avgVolume : null,
 
   // ===== MARKET CONTEXT =====
   breadth: marketBreadth,
-// 🆕 CARRY-1.1: sector data pass to decision engine
-  sectors: Array.isArray(body.sectors) ? body.sectors : [],
+
   // ===== REGIME HELPERS (SAFE DEFAULTS) =====
   candleSizePercent:
     typeof body.candleSizePercent === "number"
       ? body.candleSizePercent
-      : 0,                                                 // 🆕 Carry-2.1
+      : 0,
 
   overlapPercent:
     typeof body.overlapPercent === "number"
       ? body.overlapPercent
-      : 0,                                                 // 🆕 Carry-2.1
+      : 0,
 
-  // ===== INSTITUTIONAL (PASS THROUGH) =====
+  // ===== SECTOR PARTICIPATION (Carry-1.1) =====
+  sectors: Array.isArray(body.sectors) ? body.sectors : [],
+
+  // ===== INSTITUTIONAL (PASS-THROUGH) =====
   oiData: Array.isArray(body.oiData) ? body.oiData : [],
-  pcrValue: typeof body.pcrValue === "number" ? body.pcrValue : null,
+  pcrValue:
+    typeof body.pcrValue === "number" ? body.pcrValue : null,
 
   // ===== SAFETY FLAGS =====
   isResultDay: body.isResultDay === true,
@@ -127,7 +133,7 @@ const engineData = {
   tradeCountToday: Number(body.tradeCountToday || 0),
   tradeType,
 
-  // ===== VIX =====
+  // ===== VIX (TEXT CONTEXT ONLY) =====
   vix: typeof body.vix === "number" ? body.vix : null,
 };
 
@@ -171,29 +177,67 @@ const engineData = {
       sectorTag: sectorParticipation.participation,
     });
 
-    // -------------------------------
+// ==========================================
+// 🔒 CARRY-2.5: CHAT TEXT EDGE-CASE SAFETY
+// Ensures chat lines are NEVER empty or broken
+// ==========================================
+
+const safeSignal =
+  typeof chat?.signal === "string"
+    ? chat.signal
+    : result.signal || "WAIT";
+
+const safeDisplay =
+  typeof chat?.display === "string"
+    ? chat.display
+    : safeSignal;
+
+
+// ==========================================
+// 🔒 STEP: SIGNAL-ONLY OUTPUT (NO REASON)
+// ==========================================
+
+let safeSignal = chat && chat.signal ? chat.signal : "WAIT";
+
+// Signal icon mapping (LOCKED)
+if (safeSignal === "STRONG_BUY") {
+  safeSignal = "🟢🔥";
+} else if (safeSignal === "STRONG_SELL") {
+  safeSignal = "🔴🔥";
+} else if (safeSignal === "BUY") {
+  safeSignal = "🟢";
+} else if (safeSignal === "SELL") {
+  safeSignal = "🔴";
+} else {
+  safeSignal = "🟡";
+}
+
+// Lines ko simple rakho (NO REASON)
+const safeLines = ["Trade signal generated"];   
+ // -------------------------------
     // FINAL RESPONSE (MERGED)
     // -------------------------------
-    return res.json({
-      status: true,
+   return res.json({
+  status: true,
+  symbol,
+  segment,
+  exchange: indexConfig.exchange,
+  instrumentType: indexConfig.instrumentType,
 
-      symbol,
-      segment,
-      exchange: indexConfig.exchange,
-      instrumentType: indexConfig.instrumentType,
+  // 🔒 CORE OUTPUT (CARRY-2.4 SAFE)
+  signal: safeSignal,
+  display: safeDisplay,
+  lines: safeLines,
 
-      // 🔒 CORE SIGNAL
-      signal: chat.signal,
-      display: chat.display,
-      lines: chat.lines,
-// 🆕 BACKWARD SAFE (COLOR / EMOJI LOCK)
-  color: chat.display,
-  emoji: chat.display,
-      // OPTIONAL RAW FLAGS (UI)
-      momentumActive: momentumResult.active === true,
-      institutionalTag: institutional.tag,
-      sectorParticipation: sectorParticipation.participation,
-    });
+  // 🔒 BACKWARD SAFE FIELDS (COLOR / EMOJI LOCK)
+  color: safeSignal,
+emoji: safeSignal,
+
+  // OPTIONAL CONTEXT (UI ONLY)
+  momentumActive: momentumResult.active === true,
+  institutionalTag: institutional.tag,
+  sectorParticipation: sectorParticipation.participation,
+});
   } catch (e) {
     console.error("❌ Signal API Error:", e.message);
     return res.json({
