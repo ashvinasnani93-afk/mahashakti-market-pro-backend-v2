@@ -17,8 +17,6 @@ function applySafety(signalResult, context = {}) {
   if (!signalResult || !signalResult.signal) {
     return {
       signal: "WAIT",
-      reason: "Safety: invalid signal input",
-      safety: "FAILED",
     };
   }
 
@@ -40,8 +38,6 @@ function applySafety(signalResult, context = {}) {
     return {
       ...signalResult,
       signal: "WAIT",
-      reason: "Result-day safety active",
-      safety: "BLOCKED",
     };
   }
 
@@ -52,8 +48,6 @@ function applySafety(signalResult, context = {}) {
     return {
       ...signalResult,
       signal: "WAIT",
-      reason: "Expiry-day safety active",
-      safety: "BLOCKED",
     };
   }
 
@@ -64,8 +58,6 @@ function applySafety(signalResult, context = {}) {
     return {
       ...signalResult,
       signal: "WAIT",
-      reason: "Overtrade guard: daily limit reached",
-      safety: "BLOCKED",
     };
   }
 
@@ -76,39 +68,15 @@ function applySafety(signalResult, context = {}) {
     return {
       ...signalResult,
       signal: "WAIT",
-      reason: "Equity safety: no panic sell allowed",
-      safety: "BLOCKED",
     };
-  }
-
-  // -------------------------------
-  // 🟡 VIX BEHAVIOR MESSAGE (C3.2 – NON-BLOCKING)
-  // -------------------------------
-  if (typeof vix === "number") {
-    if (vix >= 20) {
-      return {
-        ...signalResult,
-        note: "High volatility (VIX elevated) – trade with caution",
-        safety: "PASSED",
-      };
-    }
-
-    if (vix <= 12) {
-      return {
-        ...signalResult,
-        note: "Low volatility – stable market conditions",
-        safety: "PASSED",
-      };
-    }
   }
 
   // -------------------------------
   // SAFE PASS THROUGH
   // -------------------------------
-  return {
-    ...signalResult,
-    safety: "PASSED",
-  };
+ return {
+  signal: signalResult.signal,
+};
 }
 
 // ==========================================
