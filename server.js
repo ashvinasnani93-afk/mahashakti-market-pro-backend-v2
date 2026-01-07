@@ -133,7 +133,10 @@ let symbolTokenMap = {};
 let tokenSymbolMap = {};
 let subscribedTokens = new Set();
 let latestLTP = {};
-let symbolLastSeen = {}; // ✅ SINGLE SOURCE (locked)
+let symbolLastSeen = {}; // SINGLE SOURCE (locked)
+
+// 🔒 RATE LIMIT STATE (Carry-6.1)
+const rateLimitMap = {};
 
 // ---- runtime flags (Carry 0.4 hardened) ----
 let wsConnected = false;
