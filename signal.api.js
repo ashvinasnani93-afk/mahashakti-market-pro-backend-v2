@@ -70,41 +70,64 @@ function getSignal(req, res) {
       priceDirection: "UP",
     });
 
-   // -------------------------------
-// ENGINE INPUT (ORIGINAL FLOW)
+ // -------------------------------
+// ENGINE INPUT (ORIGINAL FLOW + CARRY-2.1 FIX)
 // -------------------------------
 const engineData = {
   symbol,
   segment,
   instrumentType: indexConfig.instrumentType,
 
+  // ===== CORE PRICE SERIES =====
   closes: body.closes,
+  highs: Array.isArray(body.highs) ? body.highs : [],      // 🆕 Carry-2.1
+  lows: Array.isArray(body.lows) ? body.lows : [],        // 🆕 Carry-2.1
+
+  open: body.open,                                        // 🆕 Carry-2.1
+  high: body.high,                                        // 🆕 Carry-2.1
+  low: body.low,                                          // 🆕 Carry-2.1
+  close: body.close,
+  prevClose: body.prevClose,
+
+  // ===== EMA / RSI =====
   ema20: body.ema20,
   ema50: body.ema50,
   rsi: body.rsi,
 
-  close: body.close,
-  prevClose: body.prevClose,
-
+  // ===== LEVELS =====
   support: body.support,
   resistance: body.resistance,
 
+  // ===== VOLUME =====
   volume: body.volume,
   avgVolume: body.avgVolume,
 
+  // ===== MARKET CONTEXT =====
   breadth: marketBreadth,
-
-  // 🆕 CARRY-1.1: sector data pass to decision engine
+// 🆕 CARRY-1.1: sector data pass to decision engine
   sectors: Array.isArray(body.sectors) ? body.sectors : [],
+  // ===== REGIME HELPERS (SAFE DEFAULTS) =====
+  candleSizePercent:
+    typeof body.candleSizePercent === "number"
+      ? body.candleSizePercent
+      : 0,                                                 // 🆕 Carry-2.1
 
+  overlapPercent:
+    typeof body.overlapPercent === "number"
+      ? body.overlapPercent
+      : 0,                                                 // 🆕 Carry-2.1
+
+  // ===== INSTITUTIONAL (PASS THROUGH) =====
   oiData: Array.isArray(body.oiData) ? body.oiData : [],
   pcrValue: typeof body.pcrValue === "number" ? body.pcrValue : null,
 
+  // ===== SAFETY FLAGS =====
   isResultDay: body.isResultDay === true,
   isExpiryDay: body.isExpiryDay === true,
   tradeCountToday: Number(body.tradeCountToday || 0),
   tradeType,
 
+  // ===== VIX =====
   vix: typeof body.vix === "number" ? body.vix : null,
 };
 
