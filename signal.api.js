@@ -197,7 +197,7 @@ const safeDisplay =
 // 🔒 STEP: SIGNAL-ONLY OUTPUT (NO REASON)
 // ==========================================
 
-let safeSignal = chat && chat.signal ? chat.signal : "WAIT";
+
 
 // Signal icon mapping (LOCKED)
 if (safeSignal === "STRONG_BUY") {
