@@ -24,63 +24,12 @@ function evaluateBuyerContext(data = {}) {
   } = data;
 
   // -----------------------------------
-  // HARD SAFETY
-  // -----------------------------------
-  if (!safety) {
-    return {
-      buyerAllowed: false,
-      reason: "Buyer blocked: safety context missing",
-    };
-  }
-
-  if (safety.isExpiryDay || safety.isResultDay) {
-    return {
-      buyerAllowed: false,
-      reason: "Buyer blocked: expiry / result day risk",
-    };
-  }
-
-  // -----------------------------------
   // TREND REQUIREMENT (LOCKED)
   // -----------------------------------
   if (trend !== "UPTREND" && trend !== "DOWNTREND") {
     return {
       buyerAllowed: false,
       reason: "Buyer blocked: market not in strong trend",
-    };
-  }
-
-  // -----------------------------------
-  // RSI SANITY
-  // -----------------------------------
-  if (typeof rsi !== "number") {
-    return {
-      buyerAllowed: false,
-      reason: "Buyer blocked: RSI data missing",
-    };
-  }
-
-  if (rsi >= 70) {
-    return {
-      buyerAllowed: false,
-      reason: "Buyer blocked: RSI overbought",
-    };
-  }
-
-  if (rsi <= 30) {
-    return {
-      buyerAllowed: false,
-      reason: "Buyer blocked: RSI oversold",
-    };
-  }
-
-  // -----------------------------------
-  // VIX SAFETY (LOCKED – SOFT)
-  // -----------------------------------
-  if (typeof vix === "number" && vix >= 18) {
-    return {
-      buyerAllowed: false,
-      reason: "Buyer blocked: high volatility (VIX)",
     };
   }
 
