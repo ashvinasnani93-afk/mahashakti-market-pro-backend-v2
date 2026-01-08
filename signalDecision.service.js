@@ -42,7 +42,13 @@ const { getGreeksContext } = require("./services/greeks.service");
  * finalDecision
  */
 function finalDecision(data = {}) {
-
+// 🧪 TEMP TEST – FORCE BUY (ENGINE BYPASS)
+  return {
+    status: true,
+    signal: "BUY",
+    display: "🟢 BUY",
+    reason: "TEMP FORCE BUY TEST"
+  };
   // =====================================
   // SAFETY CONTEXT (LOCKED)
   // =====================================
