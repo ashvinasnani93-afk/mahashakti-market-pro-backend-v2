@@ -12,8 +12,7 @@ const { detectMarketRegime } = require("./services/marketRegime.service");
 const { analyzeMarketStructure } = require("./services/marketStructure.service");
 const { analyzePriceAction } = require("./services/priceAction.service");
 const { validateVolume } = require("./services/volumeValidation.service");
-const { generateStrongSignal } = require("./services/strongBuy.engine");
-
+const { checkRateLimit } = require("./services/rateLimit.util");
 // 🆕 CONTEXT ONLY (NO SIGNAL CHANGE)
 const { scanMomentum } = require("./services/momentumScanner.service");
 const { analyzeInstitutionalFlow } = require("./services/institutionalFlow.service");
@@ -187,32 +186,11 @@ const engineData = {
       institutionalTag: institutional.tag,
       sectorTag: sectorParticipation.participation,
     });
-
-// ==========================================
-// 🔒 CARRY-2.5: CHAT TEXT EDGE-CASE SAFETY
-// Ensures chat lines are NEVER empty or broken
-// ==========================================
-
-let safeSignal =
-  typeof chat?.signal === "string"
-    ? chat.signal
-    : result.signal || "WAIT";
-
-// ==========================================
-// 🔒 STEP: SIGNAL-ONLY OUTPUT (NO REASON)
-// ==========================================
-
+// RAW SIGNAL (SAFE)
 const rawSignal =
   typeof result?.signal === "string"
     ? result.signal
     : "WAIT";
-
-const chat = formatSignalMessage({
-  symbol,
-  signal: rawSignal,
-  momentumActive: momentumResult.active === true,
-  institutionalTag: institutional.tag,
-});
 
 // FINAL RESPONSE
 return res.json({
@@ -227,7 +205,9 @@ return res.json({
   display: chat.display,          // 🟢 BUY / 🔴🔥 STRONG SELL
   lines: chat.lines,
 
-  emoji: chat.display.split(" ")[0], // 🟢 / 🔴🔥
+ emoji: typeof chat.display === "string"
+  ? chat.display.split(" ")[0]
+  : "🟡",
   color: rawSignal,               // frontend map karega
 
   momentumActive: momentumResult.active === true,
