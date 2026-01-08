@@ -61,13 +61,17 @@ function getLongTermEquity(req, res) {
       isMarketCrash: body.isMarketCrash === true,
     });
 
-    // -----------------------------
-    // FINAL RESPONSE
-    // -----------------------------
-    return res.json({
-      status: true,
-      decision: result,
-    });
+   // -----------------------------
+// SANITIZED LONG-TERM RESPONSE
+// -----------------------------
+return res.json({
+  status: true,
+  decision: {
+    action: result.action,
+    confidence: result.confidence || "LOW",
+    note: result.note || "Long-term guidance",
+  },
+});
   } catch (e) {
     console.error("❌ Long Term Equity API Error:", e.message);
 
