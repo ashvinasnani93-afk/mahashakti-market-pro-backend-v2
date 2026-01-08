@@ -54,13 +54,21 @@ function getCommodity(req, res) {
     // -----------------------------
     // FINAL RESPONSE (FRONTEND SAFE)
     // -----------------------------
-    return res.json({
-      status: true,
-      commodity: decisionInput.commodity,
-      price: decisionInput.price,
-      decision: result,
-      note: "Commodity view is advisory only (no execution)",
-    });
+  return res.json({
+  status: true,
+  commodity: decisionInput.commodity,
+  price: decisionInput.price,
+
+  view: {
+    mode: result.mode || "INFO",
+    direction: result.direction || null,
+    zone: result.zone || null,
+    note: result.note || "Commodity advisory",
+    riskNote: result.riskNote || null,
+  },
+
+  disclaimer: "No execution | Capital at risk",
+});
   } catch (e) {
     console.error("❌ Commodity API Error:", e.message);
 
