@@ -43,14 +43,6 @@ const { getGreeksContext } = require("./services/greeks.service");
  */
 function finalDecision(data = {}) {
 
-  // 🔴 TEMP TEST (FORCE BUY)
-  return {
-    status: true,
-    signal: "BUY"
-  };
-
-  // बाकी पूरा code नीचे रहेगा (ignore होगा)
-
   // =====================================
   // SAFETY CONTEXT (LOCKED)
   // =====================================
