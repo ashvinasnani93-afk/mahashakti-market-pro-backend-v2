@@ -181,15 +181,15 @@ function finalDecision(data = {}) {
   data.sectors || []
 );
 
-  if (sectorParticipation.participation === "WEAK") {
-    return applySafety(
-      {
-        signal: "WAIT",
-        riskTag,
-      },
-      safetyContext
-    );
-  }
+// if (sectorParticipation.participation === "WEAK") {
+ //   return applySafety(
+ //     {
+ //       signal: "WAIT",
+ //       riskTag,
+//      },
+//      safetyContext
+//    );
+//  }
 
   // =====================================
   // STEP 6: PRICE ACTION + GAP QUALITY
