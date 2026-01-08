@@ -81,15 +81,15 @@ function finalDecision(data = {}) {
     ema50: data.ema50,
   });
 
-  if (trendResult.trend === "NO_TRADE") {
-    return applySafety(
-      {
-        signal: "WAIT",
-        riskTag,
-      },
-      safetyContext
-    );
-  }
+//  if (trendResult.trend === "NO_TRADE") {
+//    return applySafety(
+//      {
+//        signal: "WAIT",
+//        riskTag,
+//      },
+//      safetyContext
+//    );
+//  }
 
   // =====================================
   // STEP 2: MARKET STRUCTURE (HH/HL / LH/LL)
