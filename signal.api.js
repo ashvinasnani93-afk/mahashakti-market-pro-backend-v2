@@ -58,7 +58,8 @@ function getSignal(req, res) {
     if (!symbol) {
       return res.json({ status: true, signal: "WAIT" });
     }
-
+console.log("SYMBOL RECEIVED:", symbol);
+console.log("INDEX CONFIG:", getIndexConfig(symbol));
     const indexConfig = getIndexConfig(symbol);
     if (!indexConfig) {
       return res.json({ status: true, signal: "WAIT" });
