@@ -51,22 +51,32 @@ function getCommodity(req, res) {
     // -----------------------------
     const result = decideCommodityTrade(decisionInput);
 
-    // -----------------------------
-    // FINAL RESPONSE (FRONTEND SAFE)
-    // -----------------------------
-  return res.json({
+// ==========================================
+// COMMODITY UI SYMBOL (Carry-6.4)
+// ==========================================
+let uiSymbol = "⏸"; // default: NO TRADE / SIDEWAYS
+
+if (result?.status === "READY") {
+ if (result.trend === "UPTREND") uiSymbol = "📈";
+else if (result.trend === "DOWNTREND") uiSymbol = "📉";
+  if (result.zone === "NO_TRADE_ZONE") {
+    uiSymbol = "⏸";
+  }
+}
+
+if (result?.riskNote || result?.status === "WAIT") {
+ uiSymbol = "⚠";
+}
+
+// ==========================================
+// FINAL RESPONSE (FRONTEND SAFE)
+// ==========================================
+return res.json({
   status: true,
   commodity: decisionInput.commodity,
   price: decisionInput.price,
-
-  view: {
-    mode: result.mode || "INFO",
-    direction: result.direction || null,
-    zone: result.zone || null,
-    note: result.note || "Commodity advisory",
-    riskNote: result.riskNote || null,
-  },
-
+  uiSymbol,
+  decision: result,
   disclaimer: "No execution | Capital at risk",
 });
   } catch (e) {
