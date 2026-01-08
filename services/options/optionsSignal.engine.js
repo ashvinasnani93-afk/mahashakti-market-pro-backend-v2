@@ -67,7 +67,6 @@ function generateOptionsSignal(context = {}) {
     return {
       status: "WAIT",
       ...mapUISignal("WAIT"),
-      reason: "Invalid symbol or spot price",
     };
   }
 
@@ -75,7 +74,6 @@ function generateOptionsSignal(context = {}) {
     return {
       status: "WAIT",
       ...mapUISignal("WAIT"),
-      reason: "Missing expiry or trade context",
     };
   }
 
@@ -87,7 +85,6 @@ function generateOptionsSignal(context = {}) {
       status: "WAIT",
       regime: "HIGH_RISK",
       ...mapUISignal("WAIT"),
-      reason: safety?.reason || "Options blocked by safety layer",
     };
   }
 
@@ -98,7 +95,6 @@ function generateOptionsSignal(context = {}) {
     return {
       status: "WAIT",
       ...mapUISignal("WAIT"),
-      reason: "EMA data missing",
     };
   }
 
@@ -127,7 +123,6 @@ function generateOptionsSignal(context = {}) {
       status: "WAIT",
       regime,
       ...mapUISignal("WAIT"),
-      reason: "RSI data missing",
     };
   }
 
@@ -136,7 +131,6 @@ function generateOptionsSignal(context = {}) {
       status: "WAIT",
       regime: "HIGH_RISK",
       ...mapUISignal("WAIT"),
-      reason: "RSI extreme or high volatility",
     };
   }
 
@@ -151,19 +145,14 @@ function generateOptionsSignal(context = {}) {
   });
 
   if (buyerContext.buyerAllowed) {
-    return {
-      status: "READY",
-      engine: "OPTIONS_SIGNAL_ENGINE",
-      symbol,
-      spotPrice,
-      trend,
-      regime: "TRENDING",
-      buyerAllowed: true,
-      buyerReason: buyerContext.reason,
-      sellerAllowed: false,
-      ...mapUISignal("BUY"),
-      note: "Option BUY bias (UI symbol based)",
-    };
+   return {
+  status: "READY",
+  trend,
+  regime: "TRENDING",
+  buyerAllowed: true,
+  sellerAllowed: false,
+  ...mapUISignal("BUY"),
+};
   }
 
   // --------------------------------------------------
@@ -177,20 +166,14 @@ function generateOptionsSignal(context = {}) {
   });
 
   if (sellerContext.sellerAllowed) {
-    return {
-      status: "READY",
-      engine: "OPTIONS_SIGNAL_ENGINE",
-      symbol,
-      spotPrice,
-      trend,
-      regime,
-      buyerAllowed: false,
-      sellerAllowed: true,
-      sellerType: sellerContext.sellerType,
-      sellerReason: sellerContext.reason,
-      ...mapUISignal("SELL"),
-      note: "Option SELL bias (UI symbol based)",
-    };
+   return {
+  status: "READY",
+  trend,
+  regime,
+  buyerAllowed: false,
+  sellerAllowed: true,
+  ...mapUISignal("SELL"),
+};
   }
 
   // --------------------------------------------------
@@ -201,7 +184,6 @@ function generateOptionsSignal(context = {}) {
     trend,
     regime,
     ...mapUISignal("WAIT"),
-    reason: "No buyer or seller edge",
   };
 }
 
