@@ -42,13 +42,7 @@ const { getGreeksContext } = require("./services/greeks.service");
  * finalDecision
  */
 function finalDecision(data = {}) {
-// 🧪 TEMP TEST – FORCE BUY (ENGINE BYPASS)
-  return {
-    status: true,
-    signal: "BUY",
-    display: "🟢 BUY",
-    reason: "TEMP FORCE BUY TEST"
-  };
+
   // =====================================
   // SAFETY CONTEXT (LOCKED)
   // =====================================
@@ -68,15 +62,15 @@ function finalDecision(data = {}) {
   // STEP 0: MARKET REGIME (SIDEWAYS KILL)
   // =====================================
   const regime = detectMarketRegime(data);
-  if (regime.regime === "SIDEWAYS") {
-    return applySafety(
-      {
-        signal: "WAIT",
-        riskTag,
-      },
-      safetyContext
-    );
-  }
+//  if (regime.regime === "SIDEWAYS") {
+//    return applySafety(
+//      {
+//        signal: "WAIT",
+//        riskTag,
+//      },
+//      safetyContext
+//    );
+//  }
 
   // =====================================
   // STEP 1: TREND (EMA 20 / 50)
@@ -188,10 +182,10 @@ function finalDecision(data = {}) {
 );
 
 // if (sectorParticipation.participation === "WEAK") {
- //   return applySafety(
- //     {
- //       signal: "WAIT",
- //       riskTag,
+//    return applySafety(
+//      {
+//        signal: "WAIT",
+//       riskTag,
 //      },
 //      safetyContext
 //    );
