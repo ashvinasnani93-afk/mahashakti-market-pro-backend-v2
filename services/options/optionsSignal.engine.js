@@ -149,8 +149,6 @@ function generateOptionsSignal(context = {}) {
   status: "READY",
   trend,
   regime: "TRENDING",
-  buyerAllowed: true,
-  sellerAllowed: false,
   ...mapUISignal("BUY"),
 };
   }
@@ -170,8 +168,6 @@ function generateOptionsSignal(context = {}) {
   status: "READY",
   trend,
   regime,
-  buyerAllowed: false,
-  sellerAllowed: true,
   ...mapUISignal("SELL"),
 };
   }
