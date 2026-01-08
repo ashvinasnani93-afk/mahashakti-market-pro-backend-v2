@@ -7,7 +7,7 @@ const { finalDecision } = require("./signalDecision.service");
 const { getIndexConfig } = require("./services/indexMaster.service");
 
 // 🔒 EXISTING CONTEXT / LOCKED MODULES
-const { getMarketBreadth } = require("./services/marketBreadth.service");
+const { analyzeMarketBreadth } = require("./services/marketBreadth.service");
 const { detectMarketRegime } = require("./services/marketRegime.service");
 const { analyzeMarketStructure } = require("./services/marketStructure.service");
 const { analyzePriceAction } = require("./services/priceAction.service");
@@ -71,7 +71,7 @@ console.log("INDEX CONFIG:", getIndexConfig(symbol));
     // -------------------------------
     // ORIGINAL CONTEXT BUILDING (UNCHANGED)
     // -------------------------------
-    const marketBreadth = getMarketBreadth(body.breadthData || {});
+ const marketBreadth = analyzeMarketBreadth(body.breadthData || {});   
     const marketStructure = analyzeMarketStructure(body);
     const marketRegime = detectMarketRegime(body);
     const priceAction = analyzePriceAction(body);
