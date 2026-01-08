@@ -198,50 +198,38 @@ let safeSignal =
     ? chat.signal
     : result.signal || "WAIT";
 
-const safeDisplay = safeSignal;
-
-
 // ==========================================
 // 🔒 STEP: SIGNAL-ONLY OUTPUT (NO REASON)
 // ==========================================
 
+const rawSignal =
+  typeof result?.signal === "string"
+    ? result.signal
+    : "WAIT";
 
+const chat = formatSignalMessage({
+  symbol,
+  signal: rawSignal,
+  momentumActive: momentumResult.active === true,
+  institutionalTag: institutional.tag,
+});
 
-// Signal icon mapping (LOCKED)
-if (safeSignal === "STRONG_BUY") {
-  safeSignal = "🟢🔥";
-} else if (safeSignal === "STRONG_SELL") {
-  safeSignal = "🔴🔥";
-} else if (safeSignal === "BUY") {
-  safeSignal = "🟢";
-} else if (safeSignal === "SELL") {
-  safeSignal = "🔴";
-} else {
-  safeSignal = "🟡";
-}
-
-// Lines ko simple rakho (NO REASON)
-const safeLines = [];
- // -------------------------------
-    // FINAL RESPONSE (MERGED)
-    // -------------------------------
-   return res.json({
+// FINAL RESPONSE
+return res.json({
   status: true,
   symbol,
   segment,
   exchange: indexConfig.exchange,
   instrumentType: indexConfig.instrumentType,
 
-  // 🔒 CORE OUTPUT (CARRY-2.4 SAFE)
-  signal: safeSignal,
-  display: safeDisplay,
-  lines: safeLines,
+  // 🔒 LOCKED OUTPUT
+  signal: rawSignal,              // RAW
+  display: chat.display,          // 🟢 BUY / 🔴🔥 STRONG SELL
+  lines: chat.lines,
 
-  // 🔒 BACKWARD SAFE FIELDS (COLOR / EMOJI LOCK)
-  color: safeSignal,
-emoji: safeSignal,
+  emoji: chat.display.split(" ")[0], // 🟢 / 🔴🔥
+  color: rawSignal,               // frontend map karega
 
-  // OPTIONAL CONTEXT (UI ONLY)
   momentumActive: momentumResult.active === true,
   institutionalTag: institutional.tag,
   sectorParticipation: sectorParticipation.participation,
