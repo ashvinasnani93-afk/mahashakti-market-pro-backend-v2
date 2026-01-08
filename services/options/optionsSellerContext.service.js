@@ -30,7 +30,6 @@ function getOptionsSellerContext(data = {}) {
     return {
       sellerAllowed: false,
       sellerType: "NONE",
-      reason: "Incomplete seller context data",
     };
   }
 
@@ -41,7 +40,6 @@ function getOptionsSellerContext(data = {}) {
     return {
       sellerAllowed: false,
       sellerType: "NONE",
-      reason: "Seller blocked on result / expiry day",
     };
   }
 
@@ -49,7 +47,6 @@ function getOptionsSellerContext(data = {}) {
     return {
       sellerAllowed: false,
       sellerType: "NONE",
-      reason: "High risk regime – seller blocked",
     };
   }
 
@@ -57,7 +54,6 @@ function getOptionsSellerContext(data = {}) {
     return {
       sellerAllowed: false,
       sellerType: "NONE",
-      reason: "No-trade zone – seller blocked",
     };
   }
 
@@ -68,7 +64,6 @@ function getOptionsSellerContext(data = {}) {
     return {
       sellerAllowed: false,
       sellerType: "NONE",
-      reason: "Strong trend – option selling avoided",
     };
   }
 
@@ -82,7 +77,6 @@ function getOptionsSellerContext(data = {}) {
         expiryType === "MONTHLY_EXPIRY"
           ? "MONTHLY_STRANGLE"
           : "WEEKLY_PREMIUM_SELL",
-      reason: "Sideways market – option selling allowed",
     };
   }
 
@@ -92,7 +86,6 @@ function getOptionsSellerContext(data = {}) {
   return {
     sellerAllowed: false,
     sellerType: "NONE",
-    reason: "Seller conditions not satisfied",
   };
 }
 
