@@ -224,7 +224,41 @@ function finalDecision(data = {}) {
       safetyContext
     );
   }
+// =====================================
+  // STEP 7.5: MOMENTUM OVERRIDE (INTRADAY ONLY)
+  // PURPOSE: Early entry when momentum is REAL
+  // =====================================
+  if (data.tradeType === "INTRADAY") {
+    const momentumActive =
+      typeof data.prevClose === "number" &&
+      typeof data.close === "number" &&
+      typeof data.volume === "number" &&
+      typeof data.avgVolume === "number" &&
+      Math.abs((data.close - data.prevClose) / data.prevClose) * 100 >= 0.3 &&
+      data.volume >= data.avgVolume * 1.5;
 
+    if (momentumActive) {
+      if (trendResult.trend === "UPTREND") {
+        return applySafety(
+          {
+            signal: "BUY",
+            riskTag,
+          },
+          safetyContext
+        );
+      }
+
+      if (trendResult.trend === "DOWNTREND") {
+        return applySafety(
+          {
+            signal: "SELL",
+            riskTag,
+          },
+          safetyContext
+        );
+      }
+    }
+  }
   // =====================================
   // STEP 8: INTRADAY FAST MOVE (OVERRIDE)
   // =====================================
