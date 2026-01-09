@@ -1,9 +1,232 @@
-// ==========================================
-// SIGNAL DECISION ENGINE – FINAL OPERATOR GRADE
-// PHASE-2A + 6 LOCKED RULES + STRONG BUY CORE
-// BUY / SELL / STRONG BUY / STRONG SELL / WAIT
-// ==========================================
+/*
+====================================================================
+MAHASHAKTI MARKET PRO — SIGNAL DECISION FLOW (LOCKED)
+====================================================================
 
+FINAL OUTPUT POSSIBLE:
+- BUY
+- SELL
+- STRONG_BUY
+- STRONG_SELL
+- WAIT
+
+IMPORTANT:
+- Ye file signal generate karti hai
+- Har step fail hone par signal = WAIT
+- Koi bhi step skip nahi hota
+- ORDER FIXED hai (change = rule break)
+
+====================================================================
+STEP-0 : MARKET REGIME FILTER
+====================================================================
+INPUT:
+- EMA20, EMA50
+- candle overlap
+- price speed
+- optional VIX
+
+LOGIC:
+- Agar market SIDEWAYS detect ho →
+  SIGNAL = WAIT
+
+WHY:
+- Sideways market me breakout fake hote hain
+- Capital protection first priority
+
+====================================================================
+STEP-1 : EMA TREND FILTER (20 / 50)
+====================================================================
+BUY DIRECTION:
+- price > EMA20
+- EMA20 > EMA50
+
+SELL DIRECTION:
+- price < EMA20
+- EMA20 < EMA50
+
+WAIT:
+- EMA overlap
+- price EMA ke beech
+- flat / unclear trend
+
+RULE:
+- EMA sirf trend batata hai
+- EMA akela BUY / SELL nahi deta
+- EMA WAIT → final signal WAIT
+
+====================================================================
+STEP-2 : MARKET STRUCTURE FILTER
+====================================================================
+BUY allowed only if:
+- Higher High
+- Higher Low
+- Structure = UPTREND
+
+SELL allowed only if:
+- Lower High
+- Lower Low
+- Structure = DOWNTREND
+
+FAIL CASE:
+- Structure unclear / sideways
+→ SIGNAL = WAIT
+
+WHY:
+- Trend bina structure ke unreliable hota hai
+
+====================================================================
+STEP-3 : RSI SANITY FILTER
+====================================================================
+BUY BLOCKED if:
+- RSI >= 70 (overbought)
+
+SELL BLOCKED if:
+- RSI <= 30 (oversold)
+
+ALLOWED:
+- RSI normal zone me ho
+- RSI trend ke against extreme na ho
+
+WHY:
+- Late entry avoid karna
+- Exhaustion moves se bachna
+
+====================================================================
+STEP-4 : BREAKOUT / BREAKDOWN CONFIRMATION
+====================================================================
+BUY:
+- Close > Resistance
+- Trend = UPTREND
+
+SELL:
+- Close < Support
+- Trend = DOWNTREND
+
+IMPORTANT:
+- Sirf CLOSE based confirmation
+- Wick / intrabar ignore
+
+FAIL:
+- No clear close breakout
+→ SIGNAL = WAIT
+
+====================================================================
+STEP-5 : MARKET BREADTH FILTER
+====================================================================
+BUY allowed only if:
+- Breadth = BULLISH
+
+SELL allowed only if:
+- Breadth = BEARISH
+
+WHY:
+- Index / stock akela nahi chalna chahiye
+- Market support zaruri
+
+====================================================================
+STEP-5.5 : SECTOR PARTICIPATION FILTER
+====================================================================
+REQUIRED:
+- Active sectors >= threshold
+
+BLOCK:
+- Participation = WEAK
+→ SIGNAL = WAIT
+
+WHY:
+- Sector support bina move fail hota hai
+- Is filter ke bina fake breakouts aate hain
+
+====================================================================
+STEP-6 : PRICE ACTION QUALITY
+====================================================================
+BUY:
+- Strong bullish candle
+- Clear body dominance
+
+SELL:
+- Strong bearish candle
+- Clear seller control
+
+BLOCK:
+- Doji
+- Weak / indecision candle
+
+WHY:
+- Entry candle ka quality critical hai
+
+====================================================================
+STEP-7 : VOLUME VALIDATION
+====================================================================
+CONFIRM:
+- Volume >= Average Volume
+- Direction ke saath volume align
+
+FAIL:
+- Low volume breakout
+→ SIGNAL = WAIT
+
+WHY:
+- Volume bina move = manipulation risk
+
+====================================================================
+STEP-8 : INTRADAY FAST MOVE (OVERRIDE)
+====================================================================
+APPLIES ONLY IF:
+- tradeType = INTRADAY
+
+LOGIC:
+- Sudden price + volume expansion
+- Expiry / Result day rules applied
+
+NOTE:
+- Ye override hai
+- Normal flow ke upar ka safety layer
+
+====================================================================
+STEP-9 : INSTITUTIONAL FILTER (OI + PCR)
+====================================================================
+BLOCK:
+- BUY ke against heavy bearish OI / PCR
+- SELL ke against heavy bullish OI / PCR
+
+WHY:
+- Retail vs institution conflict avoid karna
+
+====================================================================
+STEP-10 : STRONG BUY / STRONG SELL (RARE)
+====================================================================
+ALL MUST ALIGN:
+- Structure
+- Trend
+- EMA alignment
+- Strong price action
+- High volume
+- Real breakout
+- Market breadth
+- Sector participation
+- VIX not high
+- Not result / expiry day
+
+FAIL:
+- Ek bhi mismatch
+→ Normal BUY / SELL or WAIT
+
+WHY:
+- STRONG signals sirf high-conviction ke liye
+
+====================================================================
+FINAL OUTPUT RULE
+====================================================================
+- Agar STRONG signal valid → STRONG_BUY / STRONG_SELL
+- Else agar breakout valid → BUY / SELL
+- Else → WAIT
+
+NO EXCEPTION.
+NO SHORTCUT.
+CAPITAL PROTECTION FIRST.
+====================================================================
+*/
 // ---------- CORE TECHNICAL ----------
 const {
   checkTrend,
