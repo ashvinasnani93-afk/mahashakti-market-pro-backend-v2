@@ -19,7 +19,9 @@ const { analyzeMarketStructure } = require("./services/marketStructure.service")
 const { analyzePriceAction } = require("./services/priceAction.service");
 const { validateVolume } = require("./services/volumeValidation.service");
 const { generateStrongSignal } = require("./services/strongBuy.engine");
-
+const {
+  evaluateMomentumContext,
+} = require("./services/momentumAdapter.service");
 // 🆕 SECTOR PARTICIPATION (CONTEXT ONLY)
 const {
   analyzeSectorParticipation,
@@ -228,40 +230,26 @@ if (
     );
   }
 // =====================================
-  // STEP 7.5: MOMENTUM OVERRIDE (INTRADAY ONLY)
-  // PURPOSE: Early entry when momentum is REAL
-  // =====================================
-  if (data.tradeType === "INTRADAY") {
-    const momentumActive =
-      typeof data.prevClose === "number" &&
-      typeof data.close === "number" &&
-      typeof data.volume === "number" &&
-      typeof data.avgVolume === "number" &&
-      Math.abs((data.close - data.prevClose) / data.prevClose) * 100 >= 0.3 &&
-      data.volume >= data.avgVolume * 1.5;
+// STEP 7.5: CONTEXT MOMENTUM (SAFE)
+// =====================================
+const momentum = evaluateMomentumContext({
+  trend: trendResult.trend,
+  rsi: data.rsi,
+  volume: data.volume,
+  avgVolume: data.avgVolume,
+  breakoutAction: breakoutResult.action,
+  forceMomentum: data.forceMomentum === true,
+});
 
-    if (momentumActive) {
-      if (trendResult.trend === "UPTREND") {
-        return applySafety(
-          {
-            signal: "BUY",
-            riskTag,
-          },
-          safetyContext
-        );
-      }
-
-      if (trendResult.trend === "DOWNTREND") {
-        return applySafety(
-          {
-            signal: "SELL",
-            riskTag,
-          },
-          safetyContext
-        );
-      }
-    }
-  }
+if (!momentum.active) {
+  return applySafety(
+    {
+      signal: "WAIT",
+      riskTag,
+    },
+    safetyContext
+  );
+}
   // =====================================
   // STEP 8: INTRADAY FAST MOVE (OVERRIDE)
   // =====================================
