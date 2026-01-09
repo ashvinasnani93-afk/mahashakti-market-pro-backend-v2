@@ -168,24 +168,7 @@ if (
   );
 }
 
-  // =====================================
-  // STEP 5.5: SECTOR PARTICIPATION (NEW – LOCKED)
-  // =====================================
- const sectorParticipation = analyzeSectorParticipation(
-  data.sectors || []
-);
-
- if (sectorParticipation.participation === "WEAK") {
-    return applySafety(
-      {
-        signal: "WAIT",
-       riskTag,
-      },
-      safetyContext
-    );
-  }
-
-  // =====================================
+// =====================================
   // STEP 6: PRICE ACTION + GAP QUALITY
   // =====================================
   const priceAction = analyzePriceAction(data);
@@ -198,6 +181,32 @@ if (
       safetyContext
     );
   }
+
+ // =====================================
+// STEP 6.5: SECTOR PARTICIPATION (CARRY-3 RELAX)
+// =====================================
+const sectorParticipation = analyzeSectorParticipation(
+  data.sectors || []
+);
+
+// ❗ RELAXATION RULE:
+// Sector WEAK allowed ONLY if price action + breakout are strong
+if (
+  sectorParticipation.participation === "WEAK" &&
+  !(
+    priceAction.valid === true &&
+    priceAction.strength === "STRONG" &&
+    breakoutResult.allowed === true
+  )
+) {
+  return applySafety(
+    {
+      signal: "WAIT",
+      riskTag,
+    },
+    safetyContext
+  );
+}
 
   // =====================================
   // STEP 7: VOLUME VALIDATION (REAL MOVE)
