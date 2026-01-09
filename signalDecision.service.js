@@ -62,15 +62,15 @@ function finalDecision(data = {}) {
   // STEP 0: MARKET REGIME (SIDEWAYS KILL)
   // =====================================
   const regime = detectMarketRegime(data);
-//  if (regime.regime === "SIDEWAYS") {
-//    return applySafety(
-//      {
-//        signal: "WAIT",
-//        riskTag,
-//      },
-//      safetyContext
-//    );
-//  }
+  if (regime.regime === "SIDEWAYS") {
+    return applySafety(
+      {
+        signal: "WAIT",
+        riskTag,
+      },
+      safetyContext
+    );
+  }
 
   // =====================================
   // STEP 1: TREND (EMA 20 / 50)
@@ -81,15 +81,15 @@ function finalDecision(data = {}) {
     ema50: data.ema50,
   });
 
-//  if (trendResult.trend === "NO_TRADE") {
-//    return applySafety(
-//      {
-//        signal: "WAIT",
-//        riskTag,
-//      },
-//      safetyContext
-//    );
-//  }
+  if (trendResult.trend === "NO_TRADE") {
+    return applySafety(
+      {
+        signal: "WAIT",
+        riskTag,
+      },
+      safetyContext
+    );
+  }
 
   // =====================================
   // STEP 2: MARKET STRUCTURE (HH/HL / LH/LL)
@@ -181,15 +181,15 @@ function finalDecision(data = {}) {
   data.sectors || []
 );
 
-// if (sectorParticipation.participation === "WEAK") {
-//    return applySafety(
-//      {
-//        signal: "WAIT",
-//       riskTag,
-//      },
-//      safetyContext
-//    );
-//  }
+ if (sectorParticipation.participation === "WEAK") {
+    return applySafety(
+      {
+        signal: "WAIT",
+       riskTag,
+      },
+      safetyContext
+    );
+  }
 
   // =====================================
   // STEP 6: PRICE ACTION + GAP QUALITY
