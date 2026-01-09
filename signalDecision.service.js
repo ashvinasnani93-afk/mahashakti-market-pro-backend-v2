@@ -148,31 +148,25 @@ function finalDecision(data = {}) {
   // =====================================
   const breadth = analyzeMarketBreadth(data.breadth || {});
 
-  if (
-    breakoutResult.action === "BUY" &&
-    breadth.strength !== "BULLISH"
-  ) {
-    return applySafety(
-      {
-        signal: "WAIT",
-        riskTag,
-      },
-      safetyContext
-    );
-  }
+ if (
+  breakoutResult.action === "BUY" &&
+  breadth.strength === "BEARISH"
+) {
+  return applySafety(
+    { signal: "WAIT", riskTag },
+    safetyContext
+  );
+}
 
-  if (
-    breakoutResult.action === "SELL" &&
-    breadth.strength !== "BEARISH"
-  ) {
-    return applySafety(
-      {
-        signal: "WAIT",
-        riskTag,
-      },
-      safetyContext
-    );
-  }
+if (
+  breakoutResult.action === "SELL" &&
+  breadth.strength === "BULLISH"
+) {
+  return applySafety(
+    { signal: "WAIT", riskTag },
+    safetyContext
+  );
+}
 
   // =====================================
   // STEP 5.5: SECTOR PARTICIPATION (NEW – LOCKED)
