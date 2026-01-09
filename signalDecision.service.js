@@ -232,14 +232,21 @@ if (
 // =====================================
 // STEP 7.5: CONTEXT MOMENTUM (SAFE)
 // =====================================
-const momentum = evaluateMomentumContext({
-  trend: trendResult.trend,
-  rsi: data.rsi,
-  volume: data.volume,
-  avgVolume: data.avgVolume,
-  breakoutAction: breakoutResult.action,
-  forceMomentum: data.forceMomentum === true,
-});
+// STEP 7.5: CONTEXT MOMENTUM (SAFE)
+
+const momentum = {
+  active:
+    data.forceMomentum === true ||
+    (
+      typeof data.volume === "number" &&
+      typeof data.avgVolume === "number" &&
+      data.volume >= data.avgVolume * 1.25 &&
+      (
+        (trendResult.trend === "UPTREND" && data.rsi >= 50) ||
+        (trendResult.trend === "DOWNTREND" && data.rsi <= 50)
+      )
+    )
+};
 
 if (!momentum.active) {
   return applySafety(
