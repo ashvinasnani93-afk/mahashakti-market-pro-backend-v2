@@ -138,7 +138,7 @@ rsi: typeof body.rsi === "number" ? body.rsi : null,
   overlapPercent:
     typeof body.overlapPercent === "number"
       ? body.overlapPercent
-      :100,
+      :30,
 
   // ===== SECTOR PARTICIPATION (Carry-1.1) =====
   sectors: Array.isArray(body.sectors) ? body.sectors : [],
