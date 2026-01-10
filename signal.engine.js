@@ -8,7 +8,15 @@
 // EMA 20 / EMA 50 (LOCKED)
 // ==========================================
 function checkTrend({ closes = [], ema20 = [], ema50 = [] }) {
-  if (!closes.length || !ema20.length || !ema50.length) {
+  // ===== SAFETY CHECK =====
+  if (
+    !Array.isArray(closes) ||
+    !Array.isArray(ema20) ||
+    !Array.isArray(ema50) ||
+    !closes.length ||
+    !ema20.length ||
+    !ema50.length
+  ) {
     return {
       trend: "NO_TRADE",
       reason: "insufficient data",
@@ -19,6 +27,19 @@ function checkTrend({ closes = [], ema20 = [], ema50 = [] }) {
   const e20 = ema20[ema20.length - 1];
   const e50 = ema50[ema50.length - 1];
 
+  // ===== NUMBER VALIDATION =====
+  if (
+    typeof price !== "number" ||
+    typeof e20 !== "number" ||
+    typeof e50 !== "number"
+  ) {
+    return {
+      trend: "NO_TRADE",
+      reason: "invalid EMA / price data",
+    };
+  }
+
+  // ===== UPTREND =====
   if (price > e20 && e20 > e50) {
     return {
       trend: "UPTREND",
@@ -26,6 +47,7 @@ function checkTrend({ closes = [], ema20 = [], ema50 = [] }) {
     };
   }
 
+  // ===== DOWNTREND =====
   if (price < e20 && e20 < e50) {
     return {
       trend: "DOWNTREND",
@@ -33,6 +55,7 @@ function checkTrend({ closes = [], ema20 = [], ema50 = [] }) {
     };
   }
 
+  // ===== SIDEWAYS / COMPRESSION =====
   return {
     trend: "NO_TRADE",
     reason: "EMA compression / sideways",
