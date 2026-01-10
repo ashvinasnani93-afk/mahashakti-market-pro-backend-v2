@@ -130,15 +130,16 @@ rsi: typeof body.rsi === "number" ? body.rsi : null,
   breadth: marketBreadth,
 
   // ===== REGIME HELPERS (SAFE DEFAULTS) =====
-  candleSizePercent:
-    typeof body.candleSizePercent === "number"
-      ? body.candleSizePercent
-      : 0.3,
+ const candleSizePercent =
+  typeof body.candleSizePercent === "number"
+    ? body.candleSizePercent
+    : ((body.high - body.low) / body.prevClose) * 100;
 
-  overlapPercent:
-    typeof body.overlapPercent === "number"
-      ? body.overlapPercent
-      : 30,
+// Overlap %
+const overlapPercent =
+  typeof body.overlapPercent === "number"
+    ? body.overlapPercent
+    : 30;
 
   // ===== SECTOR PARTICIPATION (Carry-1.1) =====
   sectors: Array.isArray(body.sectors) ? body.sectors : [],
