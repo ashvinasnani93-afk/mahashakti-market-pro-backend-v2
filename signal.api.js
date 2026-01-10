@@ -133,12 +133,12 @@ rsi: typeof body.rsi === "number" ? body.rsi : null,
   candleSizePercent:
     typeof body.candleSizePercent === "number"
       ? body.candleSizePercent
-      : 0,
+      : 0.3;
 
   overlapPercent:
     typeof body.overlapPercent === "number"
       ? body.overlapPercent
-      :30,
+      : 30;
 
   // ===== SECTOR PARTICIPATION (Carry-1.1) =====
   sectors: Array.isArray(body.sectors) ? body.sectors : [],
