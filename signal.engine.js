@@ -61,14 +61,7 @@ function checkTrend({ closes = [], ema20 = [], ema50 = [] }) {
     reason: "EMA compression / sideways",
   };
 }
-// ===== STEP 1 EXECUTION =====
-const trendResult = checkTrend({
-  closes,
-  ema20,
-  ema50,
-});
 
-const trend = trendResult.trend;
 // ==========================================
 // STEP 2 – RSI SANITY CHECK (LOCKED)
 // ==========================================
