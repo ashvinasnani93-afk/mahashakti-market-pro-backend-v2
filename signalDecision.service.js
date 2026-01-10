@@ -83,7 +83,7 @@ function finalDecision(data = {}) {
     ema20: data.ema20,
     ema50: data.ema50,
   });
-
+const trend = trendResult.trend;
  if (trendResult.trend === "NO_TRADE") {
   return applySafety(
     {
