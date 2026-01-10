@@ -45,6 +45,7 @@ const { getGreeksContext } = require("./services/greeks.service");
  * finalDecision
  */
 function finalDecision(data = {}) {
+  console.log("🧪 FINAL DECISION INPUT KEYS:", Object.keys(data));
 
   // =====================================
   // SAFETY CONTEXT (LOCKED)
