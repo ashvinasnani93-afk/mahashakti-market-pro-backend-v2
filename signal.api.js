@@ -128,7 +128,7 @@ const engineData = {
   overlapPercent:
     typeof body.overlapPercent === "number"
       ? body.overlapPercent
-      : 0,
+      :100,
 
   // ===== SECTOR PARTICIPATION (Carry-1.1) =====
   sectors: Array.isArray(body.sectors) ? body.sectors : [],
