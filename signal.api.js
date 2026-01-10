@@ -130,7 +130,10 @@ rsi: typeof body.rsi === "number" ? body.rsi : null,
   breadth: marketBreadth,
 
   // ===== REGIME HELPERS (SAFE DEFAULTS) =====
- const candleSizePercent =
+// ===== CARRY-0 : REGIME INPUT FIX =====
+
+// Candle size %
+const candleSizePercent =
   typeof body.candleSizePercent === "number"
     ? body.candleSizePercent
     : ((body.high - body.low) / body.prevClose) * 100;
