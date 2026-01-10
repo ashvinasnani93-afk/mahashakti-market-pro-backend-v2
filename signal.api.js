@@ -103,10 +103,20 @@ const engineData = {
   close: typeof body.close === "number" ? body.close : null,
   prevClose: typeof body.prevClose === "number" ? body.prevClose : null,
 
-  // ===== EMA / RSI =====
-  ema20: Array.isArray(body.ema20) ? body.ema20 : [],
-  ema50: Array.isArray(body.ema50) ? body.ema50 : [],
-  rsi: typeof body.rsi === "number" ? body.rsi : null,
+ // ===== EMA / RSI (Carry-2 FIX) =====
+ema20: Array.isArray(body.ema20)
+  ? body.ema20
+  : typeof body.ema20 === "number"
+  ? [body.ema20]
+  : [],
+
+ema50: Array.isArray(body.ema50)
+  ? body.ema50
+  : typeof body.ema50 === "number"
+  ? [body.ema50]
+  : [],
+
+rsi: typeof body.rsi === "number" ? body.rsi : null,
 
   // ===== LEVELS =====
   support: typeof body.support === "number" ? body.support : null,
