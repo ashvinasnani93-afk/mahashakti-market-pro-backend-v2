@@ -148,7 +148,7 @@ const structureContext =
   // STEP 3: RSI SANITY
   // =====================================
   const rsiResult = checkRSI({
-    rsi: data.rsi,
+   rsi: data.rsi,
     trend: trendResult.trend,
   });
 
@@ -212,7 +212,7 @@ const breakoutContext =
         bias: "SELL_ALLOWED",
         meaning: "Close below support (confirmed breakdown)",
       }
-    : {
+   : {
         bias: "WAIT_ONLY",
         meaning: "No valid breakout / breakdown",
       };
