@@ -223,7 +223,7 @@ const breakoutContext =
 
  if (
   breakoutResult.action === "BUY" &&
-  breadth.strength === "BEARISH"
+  breadth.strength === "BULLISH"
 ) {
   return applySafety(
     { signal: "WAIT", riskTag },
@@ -232,7 +232,7 @@ const breakoutContext =
 }
 if (
   breakoutResult.action === "SELL" &&
-  breadth.strength === "BULLISH"
+  breadth.strength === "BEARISH"
 ) {
   return applySafety(
     { signal: "WAIT", riskTag },
