@@ -94,34 +94,37 @@ function checkRSI({ rsi, trend }) {
 }
 
 // ==========================================
-// STEP 3 – BREAKOUT / BREAKDOWN
-// CLOSE BASED CONFIRMATION (LOCKED)
+// STEP 3 – BREAKOUT / BREAKDOWN (FIXED)
+// FALLBACK LEVELS ADDED – CARRY-2 FIX
 // ==========================================
 function checkBreakout({ close, support, resistance, trend }) {
-  if (
-    typeof close !== "number" ||
-    typeof support !== "number" ||
-    typeof resistance !== "number"
-  ) {
+  if (typeof close !== "number") {
     return {
       allowed: false,
-      reason: "levels missing",
+      reason: "close missing",
     };
   }
 
-  if (trend === "UPTREND" && close > resistance) {
+  // 🔁 FALLBACK LEVELS (ROOT FIX)
+  const effectiveResistance =
+    typeof resistance === "number" ? resistance : close * 1.002;
+
+  const effectiveSupport =
+    typeof support === "number" ? support : close * 0.998;
+
+  if (trend === "UPTREND" && close > effectiveResistance) {
     return {
       allowed: true,
       action: "BUY",
-      reason: "bullish breakout",
+      reason: "bullish breakout (fallback levels)",
     };
   }
 
-  if (trend === "DOWNTREND" && close < support) {
+  if (trend === "DOWNTREND" && close < effectiveSupport) {
     return {
       allowed: true,
       action: "SELL",
-      reason: "bearish breakdown",
+      reason: "bearish breakdown (fallback levels)",
     };
   }
 
@@ -130,7 +133,6 @@ function checkBreakout({ close, support, resistance, trend }) {
     reason: "no breakout confirmation",
   };
 }
-
 // ==========================================
 // STEP 4 – VOLUME CONFIRMATION (LOCKED)
 // ==========================================
