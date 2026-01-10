@@ -64,16 +64,16 @@ function finalDecision(data = {}) {
   // =====================================
   // STEP 0: MARKET REGIME (SIDEWAYS KILL)
   // =====================================
-  const regime = detectMarketRegime(data);
-  if (regime.regime === "SIDEWAYS") {
-    return applySafety(
-      {
-        signal: "WAIT",
-        riskTag,
-      },
-      safetyContext
-    );
-  }
+//  const regime = detectMarketRegime(data);
+//  if (regime.regime === "SIDEWAYS") {
+//    return applySafety(
+//      {
+//        signal: "WAIT",
+//        riskTag,
+//      },
+//      safetyContext
+//    );
+//  }
 
   // =====================================
   // STEP 1: TREND (EMA 20 / 50)
