@@ -133,7 +133,7 @@ rsi: typeof body.rsi === "number" ? body.rsi : null,
 // ===== CARRY-0 : REGIME INPUT FIX =====
 
 // Candle size %
-const candleSizePercent =
+ candleSizePercent =
   typeof body.candleSizePercent === "number"
     ? body.candleSizePercent
     : ((body.high - body.low) / body.prevClose) * 100;
