@@ -238,7 +238,7 @@ const breakoutContext =
 //    { signal: "WAIT", riskTag },
 //    safetyContext
 //  );
-}
+//}
 // =====================================
 // MARKET BREADTH CONTEXT (EXPLAINABLE)
 // =====================================
