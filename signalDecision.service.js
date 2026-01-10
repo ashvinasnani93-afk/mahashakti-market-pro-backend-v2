@@ -219,44 +219,44 @@ const breakoutContext =
   // =====================================
   // STEP 5: MARKET BREADTH DIRECTION FILTER
   // =====================================
-  const breadth = analyzeMarketBreadth(data.breadth || {});
+//  const breadth = analyzeMarketBreadth(data.breadth || {});
 
- if (
-  breakoutResult.action === "BUY" &&
-  breadth.strength === "BULLISH"
-) {
-  return applySafety(
-    { signal: "WAIT", riskTag },
-    safetyContext
-  );
-}
-if (
-  breakoutResult.action === "SELL" &&
-  breadth.strength === "BEARISH"
-) {
-  return applySafety(
-    { signal: "WAIT", riskTag },
-    safetyContext
-  );
+// if (
+//  breakoutResult.action === "BUY" &&
+//  breadth.strength === "BULLISH"
+//) {
+//  return applySafety(
+//    { signal: "WAIT", riskTag },
+//    safetyContext
+//  );
+//}
+//if (
+//  breakoutResult.action === "SELL" &&
+//  breadth.strength === "BEARISH"
+//) {
+//  return applySafety(
+//    { signal: "WAIT", riskTag },
+//    safetyContext
+//  );
 }
 // =====================================
 // MARKET BREADTH CONTEXT (EXPLAINABLE)
 // =====================================
-const breadthContext =
-  breadth.strength === "BULLISH"
-    ? {
-        bias: "BUY_ALLOWED",
-        meaning: "Majority stocks advancing",
-      }
-    : breadth.strength === "BEARISH"
-    ? {
-        bias: "SELL_ALLOWED",
-        meaning: "Majority stocks declining",
-      }
-    : {
-        bias: "WAIT_ONLY",
-        meaning: "Breadth not supportive",
-      };
+//const breadthContext =
+//  breadth.strength === "BULLISH"
+//    ? {
+//        bias: "BUY_ALLOWED",
+//        meaning: "Majority stocks advancing",
+//      }
+//    : breadth.strength === "BEARISH"
+ //   ? {
+ //       bias: "SELL_ALLOWED",
+ //       meaning: "Majority stocks declining",
+ //     }
+//    : {
+//        bias: "WAIT_ONLY",
+//        meaning: "Breadth not supportive",
+//      };
 // =====================================================
 // STEP 5.1 – STRONG BUY / STRONG SELL (OPERATOR GRADE)
 // =====================================================
