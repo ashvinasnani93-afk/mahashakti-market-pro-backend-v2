@@ -188,7 +188,7 @@ const rsiContext =
     resistance: data.resistance,
     trend: trendResult.trend,
   });
-
+const breakoutAction = breakoutResult.action || null;
   if (!breakoutResult.allowed) {
     return applySafety(
       {
@@ -230,7 +230,6 @@ const breakoutContext =
     safetyContext
   );
 }
-
 if (
   breakoutResult.action === "SELL" &&
   breadth.strength === "BULLISH"
@@ -258,6 +257,30 @@ const breadthContext =
         bias: "WAIT_ONLY",
         meaning: "Breadth not supportive",
       };
+// =====================================================
+// STEP 5.1 – STRONG BUY / STRONG SELL (OPERATOR GRADE)
+// =====================================================
+
+const strongSignalResult = checkStrongSignal({
+  trend: trendResult.trend,
+  breakoutAction,
+  close: data.close,
+  prevClose: data.prevClose,
+  volume: data.volume,
+  avgVolume: data.avgVolume,
+});
+
+// 🚨 STRONG SIGNAL OVERRIDE
+if (strongSignalResult.strong) {
+  return applySafety(
+    {
+      signal: strongSignalResult.signal,
+      reason: strongSignalResult.reason,
+      riskTag,
+    },
+    safetyContext
+  );
+}
 // =====================================
   // STEP 6: PRICE ACTION + GAP QUALITY
   // =====================================
