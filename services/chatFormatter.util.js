@@ -1,3 +1,7 @@
+// ==========================================
+// CHAT FORMATTER (TEXT + SYMBOLS ONLY)
+// ==========================================
+
 function formatSignalMessage(data = {}) {
   const {
     symbol,
@@ -31,7 +35,7 @@ function formatSignalMessage(data = {}) {
   }
 
   // -----------------------------
-  // CONFIDENCE TAG (NEW – SAFE)
+  // CONFIDENCE TAG (SAFE)
   // -----------------------------
   let confidenceNote = "";
   if (
@@ -52,3 +56,6 @@ function formatSignalMessage(data = {}) {
     ].filter(Boolean),
   };
 }
+
+// ✅ THIS LINE WAS MISSING BEFORE
+module.exports = formatSignalMessage;
