@@ -1,165 +1,101 @@
 // ==========================================
-// SIGNAL ENGINE – CORE CHECKS + STRONG BUY LAYER
-// Trend / RSI / Breakout / Volume
+// SIGNAL ENGINE – FOUNDER VERSION
+// DIRECTION HARD | ENTRY SOFT
 // ==========================================
 
 // ==========================================
-// STEP 1 – TREND CHECK
-// EMA 20 / EMA 50 (LOCKED)
+// STEP 1 – TREND CHECK (🟢 HARD – NEVER SOFT)
+// EMA 20 / EMA 50
 // ==========================================
 function checkTrend({ closes = [], ema20 = [], ema50 = [] }) {
-  // ===== SAFETY CHECK =====
   if (
     !Array.isArray(closes) ||
     !Array.isArray(ema20) ||
     !Array.isArray(ema50) ||
-    !closes.length ||
-    !ema20.length ||
-    !ema50.length
+    closes.length === 0 ||
+    ema20.length === 0 ||
+    ema50.length === 0
   ) {
-    return {
-      trend: "NO_TRADE",
-      reason: "insufficient data",
-    };
+    return { trend: "NO_TRADE" };
   }
 
   const price = closes[closes.length - 1];
   const e20 = ema20[ema20.length - 1];
   const e50 = ema50[ema50.length - 1];
 
-  // ===== NUMBER VALIDATION =====
   if (
     typeof price !== "number" ||
     typeof e20 !== "number" ||
     typeof e50 !== "number"
   ) {
-    return {
-      trend: "NO_TRADE",
-      reason: "invalid EMA / price data",
-    };
+    return { trend: "NO_TRADE" };
   }
 
-  // ===== UPTREND =====
   if (price > e20 && e20 > e50) {
-    return {
-      trend: "UPTREND",
-      reason: "price > EMA20 > EMA50",
-    };
+    return { trend: "UPTREND" };
   }
 
-  // ===== DOWNTREND =====
   if (price < e20 && e20 < e50) {
-    return {
-      trend: "DOWNTREND",
-      reason: "price < EMA20 < EMA50",
-    };
+    return { trend: "DOWNTREND" };
   }
 
-  // ===== SIDEWAYS / COMPRESSION =====
-  return {
-    trend: "NO_TRADE",
-    reason: "EMA compression / sideways",
-  };
+  return { trend: "NO_TRADE" };
 }
 
 // ==========================================
-// STEP 2 – RSI SANITY CHECK (LOCKED)
+// STEP 2 – RSI SANITY (🟡 SOFT)
+// Only extreme blocks
 // ==========================================
 function checkRSI({ rsi, trend }) {
-  if (typeof rsi !== "number") {
-    return {
-      allowed: false,
-      reason: "RSI missing",
-    };
-  }
+  if (typeof rsi !== "number") return { allowed: false };
 
-  if (trend === "UPTREND" && rsi >= 70) {
-    return {
-      allowed: false,
-      reason: "RSI overbought",
-    };
-  }
+  if (trend === "UPTREND" && rsi >= 75) return { allowed: false };
+  if (trend === "DOWNTREND" && rsi <= 25) return { allowed: false };
 
-  if (trend === "DOWNTREND" && rsi <= 30) {
-    return {
-      allowed: false,
-      reason: "RSI oversold",
-    };
-  }
-
-  return {
-    allowed: true,
-    reason: "RSI OK",
-  };
+  return { allowed: true };
 }
 
 // ==========================================
-// STEP 3 – BREAKOUT / BREAKDOWN (FIXED)
-// FALLBACK LEVELS ADDED – CARRY-2 FIX
+// STEP 3 – BREAKOUT / BREAKDOWN (🟢 HARD)
+// Support / Resistance mandatory
 // ==========================================
 function checkBreakout({ close, support, resistance, trend }) {
-  if (typeof close !== "number") {
-    return {
-      allowed: false,
-      reason: "close missing",
-    };
+  if (
+    typeof close !== "number" ||
+    typeof support !== "number" ||
+    typeof resistance !== "number"
+  ) {
+    return { allowed: false };
   }
 
-  // 🔁 FALLBACK LEVELS (ROOT FIX)
-  const effectiveResistance =
-    typeof resistance === "number" ? resistance : close * 1.002;
-
-  const effectiveSupport =
-    typeof support === "number" ? support : close * 0.998;
-
-  if (trend === "UPTREND" && close > effectiveResistance) {
-    return {
-      allowed: true,
-      action: "BUY",
-      reason: "bullish breakout (fallback levels)",
-    };
+  if (trend === "UPTREND" && close > resistance) {
+    return { allowed: true, action: "BUY" };
   }
 
-  if (trend === "DOWNTREND" && close < effectiveSupport) {
-    return {
-      allowed: true,
-      action: "SELL",
-      reason: "bearish breakdown (fallback levels)",
-    };
+  if (trend === "DOWNTREND" && close < support) {
+    return { allowed: true, action: "SELL" };
   }
 
-  return {
-    allowed: false,
-    reason: "no breakout confirmation",
-  };
+  return { allowed: false };
 }
+
 // ==========================================
-// STEP 4 – VOLUME CONFIRMATION (LOCKED)
+// STEP 4 – VOLUME CONFIRMATION (🟡 SOFT)
 // ==========================================
 function checkVolume({ volume, avgVolume }) {
   if (typeof volume !== "number" || typeof avgVolume !== "number") {
-    return {
-      allowed: false,
-      reason: "volume data missing",
-    };
+    return { allowed: false };
   }
 
-  if (volume > avgVolume) {
-    return {
-      allowed: true,
-      reason: "volume confirmation OK",
-    };
+  if (volume >= avgVolume * 1.1) {
+    return { allowed: true };
   }
 
-  return {
-    allowed: false,
-    reason: "low volume – fake breakout risk",
-  };
+  return { allowed: false };
 }
 
 // ==========================================
-// 🔥 STEP 5 – STRONG BUY / STRONG SELL CHECK
-// OPERATOR-GRADE CONFIRMATION (NEW – LOCKED)
+// STEP 5 – STRONG SIGNAL CHECK (🔥 RARE)
 // ==========================================
 function checkStrongSignal({
   trend,
@@ -170,15 +106,20 @@ function checkStrongSignal({
   avgVolume,
 }) {
   if (!trend || !breakoutAction) {
-    return {
-      strong: false,
-    };
+    return { strong: false };
   }
 
-  // Candle strength
-  const candleBody = Math.abs(close - prevClose);
-  const strongCandle = candleBody > 0 && candleBody >= (close * 0.002); // ~0.2%
+  if (
+    typeof close !== "number" ||
+    typeof prevClose !== "number" ||
+    typeof volume !== "number" ||
+    typeof avgVolume !== "number"
+  ) {
+    return { strong: false };
+  }
 
+  const candleMove = Math.abs(close - prevClose);
+  const strongCandle = candleMove >= close * 0.002; // ~0.2%
   const highVolume = volume >= avgVolume * 1.5;
 
   if (
@@ -187,11 +128,7 @@ function checkStrongSignal({
     strongCandle &&
     highVolume
   ) {
-    return {
-      strong: true,
-      signal: "STRONG_BUY",
-      reason: "Strong bullish candle + high volume in uptrend",
-    };
+    return { strong: true, signal: "STRONG_BUY" };
   }
 
   if (
@@ -200,16 +137,10 @@ function checkStrongSignal({
     strongCandle &&
     highVolume
   ) {
-    return {
-      strong: true,
-      signal: "STRONG_SELL",
-      reason: "Strong bearish candle + high volume in downtrend",
-    };
+    return { strong: true, signal: "STRONG_SELL" };
   }
 
-  return {
-    strong: false,
-  };
+  return { strong: false };
 }
 
 // ==========================================
@@ -220,5 +151,5 @@ module.exports = {
   checkRSI,
   checkBreakout,
   checkVolume,
-  checkStrongSignal, // 🔥 NEW (USED BY finalDecision)
+  checkStrongSignal,
 };
