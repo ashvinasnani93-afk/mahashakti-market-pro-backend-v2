@@ -56,7 +56,7 @@ function finalDecision(data = {}) {
     return { signal: "WAIT" };
   }
 
-  const breadth = analyzeMarketBreadth(data.breadth || {});
+ const breadth = analyzeMarketBreadth(data.breadthData || {});
   if (
     (trendResult.trend === "UPTREND" && breadth.strength !== "BULLISH") ||
     (trendResult.trend === "DOWNTREND" && breadth.strength !== "BEARISH")
