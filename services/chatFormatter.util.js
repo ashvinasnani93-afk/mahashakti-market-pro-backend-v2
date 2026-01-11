@@ -11,9 +11,6 @@ function formatSignalMessage(data = {}) {
     institutionalTag,
   } = data;
 
-  // -----------------------------
-  // SIGNAL SYMBOLS (LOCKED)
-  // -----------------------------
   const signalMap = {
     BUY: "🟢",
     SELL: "🔴",
@@ -24,16 +21,10 @@ function formatSignalMessage(data = {}) {
 
   const signalIcon = signalMap[signal] || "🟡";
 
-  // -----------------------------
-  // MOMENTUM TEXT
-  // -----------------------------
   const momentumText = momentumActive
     ? "⚡ Momentum Active"
     : "⏳ No momentum";
 
-  // -----------------------------
-  // INSTITUTIONAL CONTEXT
-  // -----------------------------
   let institutionalText = "🏦 Institutions: Neutral";
   if (institutionalTag === "SUPPORTIVE") {
     institutionalText = "🏦 Institutions: Supportive";
@@ -41,9 +32,6 @@ function formatSignalMessage(data = {}) {
     institutionalText = "🏦 Institutions: Against";
   }
 
-  // -----------------------------
-  // FINAL CHAT MESSAGE
-  // -----------------------------
   return {
     symbol,
     signal,
@@ -55,7 +43,6 @@ function formatSignalMessage(data = {}) {
   };
 }
 
-// ✅ THIS IS THE MOST IMPORTANT LINE
 module.exports = {
   formatSignalMessage,
 };
