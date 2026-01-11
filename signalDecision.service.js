@@ -56,7 +56,7 @@ function finalDecision(data = {}) {
     return { signal: "WAIT" };
   }
 
- const breadth = analyzeMarketBreadth(data.breadthData || {});
+  const breadth = analyzeMarketBreadth(data.breadthData || {});
   if (
     (trendResult.trend === "UPTREND" && breadth.strength !== "BULLISH") ||
     (trendResult.trend === "DOWNTREND" && breadth.strength !== "BEARISH")
@@ -76,8 +76,10 @@ function finalDecision(data = {}) {
   }
 
   // ==================================================
-  // 🟡 GROUP-2: ENTRY QUALITY (✅ SOFTENED – MAIN FIX)
-  // Rule: 2 OUT OF 4 REQUIRED
+  // 🟡 GROUP-2: ENTRY QUALITY (INTRADAY SOFT FIX)
+  // Rule:
+  // INTRADAY → 1 OUT OF 4 ALLOWED
+  // OTHERS   → 2 OUT OF 4 REQUIRED
   // ==================================================
 
   let entryScore = 0;
@@ -104,8 +106,13 @@ function finalDecision(data = {}) {
   const sector = analyzeSectorParticipation(data.sectors || []);
   if (sector.participation !== "WEAK") entryScore++;
 
-  // ❌ ENTRY FAIL
-  if (entryScore < 2) {
+  const isIntraday = data.tradeType === "INTRADAY";
+
+  // ❌ ENTRY FAIL (FINAL FIX)
+  if (
+    (!isIntraday && entryScore < 2) ||
+    (isIntraday && entryScore < 1)
+  ) {
     return { signal: "WAIT" };
   }
 
