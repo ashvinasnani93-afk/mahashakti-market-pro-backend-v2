@@ -1,5 +1,6 @@
 // ==========================================
 // CHAT FORMATTER (TEXT + SYMBOLS ONLY)
+// ROLE: Convert engine output to user-friendly chat
 // ==========================================
 
 function formatSignalMessage(data = {}) {
@@ -10,6 +11,9 @@ function formatSignalMessage(data = {}) {
     institutionalTag,
   } = data;
 
+  // -----------------------------
+  // SIGNAL SYMBOLS (LOCKED)
+  // -----------------------------
   const signalMap = {
     BUY: "🟢",
     SELL: "🔴",
@@ -21,12 +25,15 @@ function formatSignalMessage(data = {}) {
   const signalIcon = signalMap[signal] || "🟡";
 
   // -----------------------------
-  // CONTEXT TEXT (EXPLAIN ONLY)
+  // MOMENTUM TEXT
   // -----------------------------
   const momentumText = momentumActive
     ? "⚡ Momentum Active"
-    : "⏳ Momentum Weak";
+    : "⏳ No momentum";
 
+  // -----------------------------
+  // INSTITUTIONAL CONTEXT
+  // -----------------------------
   let institutionalText = "🏦 Institutions: Neutral";
   if (institutionalTag === "SUPPORTIVE") {
     institutionalText = "🏦 Institutions: Supportive";
@@ -35,27 +42,20 @@ function formatSignalMessage(data = {}) {
   }
 
   // -----------------------------
-  // CONFIDENCE TAG (SAFE)
+  // FINAL CHAT MESSAGE
   // -----------------------------
-  let confidenceNote = "";
-  if (
-    signal !== "WAIT" &&
-    (!momentumActive || institutionalTag === "NEUTRAL")
-  ) {
-    confidenceNote = "⚠️ Low confidence";
-  }
-
   return {
     symbol,
     signal,
     display: `${signalIcon} ${signal}`,
     lines: [
-      confidenceNote,
       momentumText,
       institutionalText,
-    ].filter(Boolean),
+    ],
   };
 }
 
-// ✅ THIS LINE WAS MISSING BEFORE
-module.exports = formatSignalMessage;
+// ✅ THIS IS THE MOST IMPORTANT LINE
+module.exports = {
+  formatSignalMessage,
+};
