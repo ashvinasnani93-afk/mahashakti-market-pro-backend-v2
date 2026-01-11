@@ -129,14 +129,17 @@ rsi: typeof body.rsi === "number" ? body.rsi : null,
   // ===== MARKET CONTEXT =====
   breadth: marketBreadth,
 
-  // ===== REGIME HELPERS (SAFE DEFAULTS) =====
-// ===== CARRY-0 : REGIME INPUT FIX =====
-
-// Candle size %
- candleSizePercent:
+// ===== CANDLE SIZE (SAFE FIX) =====
+candleSizePercent:
   typeof body.candleSizePercent === "number"
     ? body.candleSizePercent
-    : ((body.high - body.low) / body.prevClose) * 100,
+    : (
+        typeof body.high === "number" &&
+        typeof body.low === "number" &&
+        typeof body.prevClose === "number"
+      )
+      ? ((body.high - body.low) / body.prevClose) * 100
+      : 0,
 
 // Overlap %
  overlapPercent:
