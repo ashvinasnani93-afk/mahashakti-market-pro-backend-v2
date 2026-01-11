@@ -1,6 +1,6 @@
 // ==================================================
-// MARKET STRUCTURE SERVICE (CORE – LOCKED)
-// Detects UP / DOWN / SIDEWAYS using pure price logic
+// MARKET STRUCTURE SERVICE (FOUNDER-SAFE SOFT VERSION)
+// Direction HARD, Noise Tolerant
 // ==================================================
 
 function analyzeMarketStructure(data = {}) {
@@ -9,53 +9,57 @@ function analyzeMarketStructure(data = {}) {
   if (
     !Array.isArray(highs) ||
     !Array.isArray(lows) ||
-    highs.length < 3 ||
-    lows.length < 3
+    highs.length < 4 ||
+    lows.length < 4
   ) {
     return {
       valid: false,
       structure: "UNKNOWN",
-      reason: "Insufficient swing data",
+      reason: "Insufficient structure data",
     };
   }
 
-  const [h1, h2, h3] = highs.slice(-3);
-  const [l1, l2, l3] = lows.slice(-3);
+  const recentHighs = highs.slice(-4);
+  const recentLows = lows.slice(-4);
 
-  // UPTREND
-  if (h3 > h2 && h2 > h1 && l3 > l2 && l2 > l1) {
+  let higherHighs = 0;
+  let higherLows = 0;
+  let lowerHighs = 0;
+  let lowerLows = 0;
+
+  for (let i = 1; i < recentHighs.length; i++) {
+    if (recentHighs[i] > recentHighs[i - 1]) higherHighs++;
+    if (recentHighs[i] < recentHighs[i - 1]) lowerHighs++;
+  }
+
+  for (let i = 1; i < recentLows.length; i++) {
+    if (recentLows[i] > recentLows[i - 1]) higherLows++;
+    if (recentLows[i] < recentLows[i - 1]) lowerLows++;
+  }
+
+  // 🔼 UPTREND (dominant structure)
+  if (higherHighs >= 2 && higherLows >= 1) {
     return {
       valid: true,
       structure: "UPTREND",
-      reason: "Higher highs and higher lows confirmed",
+      reason: "Dominant higher highs / higher lows",
     };
   }
 
-  // DOWNTREND
-  if (h3 < h2 && h2 < h1 && l3 < l2 && l2 < l1) {
+  // 🔽 DOWNTREND (dominant structure)
+  if (lowerHighs >= 2 && lowerLows >= 1) {
     return {
       valid: true,
       structure: "DOWNTREND",
-      reason: "Lower highs and lower lows confirmed",
+      reason: "Dominant lower highs / lower lows",
     };
   }
 
-  // SIDEWAYS
-  const highRange = Math.abs(h3 - h1) / h1;
-  const lowRange = Math.abs(l3 - l1) / l1;
-
-  if (highRange < 0.002 && lowRange < 0.002) {
-    return {
-      valid: false,
-      structure: "SIDEWAYS",
-      reason: "Price trapped in range (equal highs/lows)",
-    };
-  }
-
+  // SIDEWAYS / NO CLEAR STRUCTURE
   return {
     valid: false,
     structure: "UNCLEAR",
-    reason: "Structure not aligned cleanly",
+    reason: "No dominant price structure",
   };
 }
 
