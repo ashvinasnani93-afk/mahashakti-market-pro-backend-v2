@@ -1,151 +1,71 @@
-// ==========================================
-// INDEX MASTER SERVICE (FOUNDATION)
-// Central registry for all instruments
-// NO SIGNAL | NO INDICATORS | RULE-LOCKED
-// ==========================================
+// ==================================================
+// DYNAMIC INDEX & STOCK MASTER (PRO-VERSION)
+// ROLE: Auto-detecting Midcap/Smallcap Breakouts
+// NO FIXED LIST | NSE-BSE READY
+// ==================================================
 
 /**
- * INDEX / INSTRUMENT REGISTRY
- * Controls:
- * - Allowed symbols
- * - Segment visibility (Equity / Options / Commodity)
- * - Trade type permission
- * - Option chain availability
- * - UI grouping & priority
+ * identifyTradeableStocks
+ * @param {Array} liveMarketData - Sabhi stocks ka live data array (LTP, Volume, Symbol)
+ * @returns {Array} - Sirf woh stocks jo bhagne ke liye taiyaar hain
  */
-const INDEX_REGISTRY = {
-  // ==========================
-  // NSE CORE INDEXES
-  // ==========================
-  NIFTY: {
-    instrumentType: "INDEX",
-    exchange: "NSE",
-    category: "INDEX",
-    uiLabel: "NIFTY 50",
-    priority: 1,
-    isCore: true,
-    segments: ["EQUITY", "OPTIONS"],
-    allowedTradeTypes: ["INTRADAY", "POSITIONAL"],
-    optionChain: true,
-    iconHint: "AUTO",
-  },
+function identifyTradeableStocks(liveMarketData = []) {
+  if (!Array.isArray(liveMarketData) || liveMarketData.length === 0) {
+    return [];
+  }
 
-  BANKNIFTY: {
-    instrumentType: "INDEX",
-    exchange: "NSE",
-    category: "INDEX",
-    uiLabel: "BANK NIFTY",
-    priority: 2,
-    isCore: true,
-    segments: ["EQUITY", "OPTIONS"],
-    allowedTradeTypes: ["INTRADAY", "POSITIONAL"],
-    optionChain: true,
-    iconHint: "AUTO",
-  },
+  // --------------------------------------------------
+  // DYNAMIC SCANNING LOGIC (Real-Profit Filters)
+  // --------------------------------------------------
+  const highPotentialStocks = liveMarketData.filter((stock) => {
+    const {
+      lastPrice,
+      prevClose,
+      currentVolume,
+      avgVolume20Day,
+      symbol
+    } = stock;
 
-  FINNIFTY: {
-    instrumentType: "INDEX",
-    exchange: "NSE",
-    category: "INDEX",
-    uiLabel: "FIN NIFTY",
-    priority: 3,
-    isCore: false,
-    segments: ["EQUITY", "OPTIONS"],
-    allowedTradeTypes: ["INTRADAY"],
-    optionChain: true,
-    iconHint: "AUTO",
-  },
+    // 1. PRICE CHANGE FILTER (At least 2% up to ignore noise)
+    const priceChangePct = ((lastPrice - prevClose) / prevClose) * 100;
+    const isGaining = priceChangePct >= 2.0 && priceChangePct <= 15.0; // 15% tak limit (Upper circuit protection)
 
-  MIDCPNIFTY: {
-    instrumentType: "INDEX",
-    exchange: "NSE",
-    category: "INDEX",
-    uiLabel: "MIDCAP NIFTY",
-    priority: 4,
-    isCore: false,
-    segments: ["EQUITY", "OPTIONS"],
-    allowedTradeTypes: ["INTRADAY"],
-    optionChain: true,
-    iconHint: "AUTO",
-  },
+    // 2. VOLUME SPIKE FILTER (Smart Money Indicator)
+    // Smallcaps mein jab volume average se 2.5 guna hota hai tabhi 10% move aata hai
+    const hasVolumeBurst = currentVolume >= (avgVolume20Day * 2.5);
 
-  // ==========================
-  // BSE INDEX
-  // ==========================
-  SENSEX: {
-    instrumentType: "INDEX",
-    exchange: "BSE",
-    category: "INDEX",
-    uiLabel: "SENSEX",
-    priority: 5,
-    isCore: true,
-    segments: ["EQUITY", "OPTIONS"],
-    allowedTradeTypes: ["INTRADAY", "POSITIONAL"],
-    optionChain: true,
-    iconHint: "AUTO",
-  },
+    // 3. EXCLUSION (Penny stocks ko hatane ke liye - Below ₹20)
+    const isNotPennyStock = lastPrice > 20;
 
-  // ==========================
-  // STOCK OPTIONS (STARTER SET)
-  // ==========================
-  RELIANCE: {
-    instrumentType: "STOCK",
-    exchange: "NSE",
-    category: "STOCK",
-    uiLabel: "RELIANCE",
-    priority: 20,
-    isCore: false,
-    segments: ["EQUITY", "OPTIONS"],
-    allowedTradeTypes: ["INTRADAY", "POSITIONAL"],
-    optionChain: true,
-    iconHint: "AUTO",
-  },
+    return isGaining && hasVolumeBurst && isNotPennyStock;
+  });
 
-  TCS: {
-    instrumentType: "STOCK",
-    exchange: "NSE",
-    category: "STOCK",
-    uiLabel: "TCS",
-    priority: 21,
-    isCore: false,
-    segments: ["EQUITY", "OPTIONS"],
-    allowedTradeTypes: ["INTRADAY", "POSITIONAL"],
-    optionChain: true,
-    iconHint: "AUTO",
-  },
-
-  // ==========================
-  // VOLATILITY INDEX (DISPLAY ONLY)
-  // ==========================
-  VIX: {
-    instrumentType: "INDEX",
-    exchange: "NSE",
-    category: "SYSTEM",
-    uiLabel: "INDIA VIX",
-    priority: 99,
-    isCore: true,
-    segments: ["DISPLAY_ONLY"],
-    allowedTradeTypes: [],
-    optionChain: false,
-    iconHint: "INFO",
-    note: "Used only for risk & safety context (no trading)",
-  },
-};
-
-/**
- * getIndexConfig
- * @param {string} symbol
- * @returns {object|null}
- */
-function getIndexConfig(symbol) {
-  if (!symbol) return null;
-  const key = symbol.toUpperCase();
-  return INDEX_REGISTRY[key] || null;
+  // --------------------------------------------------
+  // SORT BY HIGHEST POTENTIAL
+  // --------------------------------------------------
+  return highPotentialStocks.sort((a, b) => {
+    const changeA = ((a.lastPrice - a.prevClose) / a.prevClose);
+    const changeB = ((b.lastPrice - b.prevClose) / b.prevClose);
+    return changeB - changeA; // Sabse zyada bhagne wala stock sabse upar
+  });
 }
 
-// ==========================================
-// EXPORT
-// ==========================================
+/**
+ * getMarketContext
+ * Return common indices and identified movers
+ */
+function getMarketContext(allData) {
+  const movers = identifyTradeableStocks(allData);
+  
+  return {
+    indices: ["NIFTY 50", "NIFTY MIDCAP 100", "NIFTY SMALLCAP 100"],
+    activeMovers: movers, // Ye list har 1 second mein update hogi
+    totalFound: movers.length,
+    timestamp: new Date().toISOString()
+  };
+}
+
 module.exports = {
-  getIndexConfig,
+  identifyTradeableStocks,
+  getMarketContext
 };
