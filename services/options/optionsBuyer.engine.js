@@ -1,50 +1,31 @@
 // ==================================================
-// OPTIONS BUYER ENGINE (PHASE-3)
-// BUY PERMISSION + CONTEXT ONLY
-// NO EXECUTION | RULE-LOCKED
+// OPTIONS BUYER ENGINE (PRO-PROFIT VERSION)
 // ==================================================
 
-/**
- * evaluateBuyerContext
- * @param {object} data
- * @returns {object}
- *
- * This engine ONLY decides:
- * - Buyer allowed or not
- * - Reason (explainable)
- *
- * It does NOT generate BUY / SELL
- */
 function evaluateBuyerContext(data = {}) {
   const {
-    trend,        // UPTREND / DOWNTREND / SIDEWAYS
-    rsi,          // number
-    vix,          // number (optional)
-    safety,       // safety context
+    trend,        
+    rsi,          
+    vix,          
+    mismatch = false, // To detect if 15min and 5min are opposite
+    volumeSpike = false
   } = data;
 
-  // -----------------------------------
-  // TREND REQUIREMENT (LOCKED)
-  // -----------------------------------
-  if (trend !== "UPTREND" && trend !== "DOWNTREND") {
-    return {
-      buyerAllowed: false,
-      reason: "Buyer blocked: market not in strong trend",
-    };
+  // 1. RULE: Higher Timeframe Alignment
+  if (mismatch) {
+    return { buyerAllowed: false, reason: "Bade trend ke khilaaf trade risky hai" };
   }
 
-  // -----------------------------------
-  // ✅ BUYER ALLOWED
-  // -----------------------------------
-  return {
-    buyerAllowed: true,
-    reason: "Buyer allowed: strong trend + safe conditions",
-  };
+  // 2. RULE: Momentum Confirmation
+  if (rsi > 60 && trend === "UPTREND" && volumeSpike) {
+     return { buyerAllowed: true, reason: "Strong Momentum: Smart money is buying" };
+  }
+
+  if (rsi < 40 && trend === "DOWNTREND" && volumeSpike) {
+     return { buyerAllowed: true, reason: "Strong Panic: Short side momentum" };
+  }
+
+  return { buyerAllowed: false, reason: "Low conviction move" };
 }
 
-// --------------------------------------------------
-// EXPORT
-// --------------------------------------------------
-module.exports = {
-  evaluateBuyerContext,
-};
+module.exports = { evaluateBuyerContext };
