@@ -1,23 +1,7 @@
 // ==========================================
-// INTRADAY FAST-MOVE ENGINE (PHASE-2B)
-// REAL, RULE-LOCKED
-// BUY / SELL / HOLD / WAIT
+// INTRADAY FAST-MOVE ENGINE (PRACTICAL RULES)
 // ==========================================
 
-/**
- * detectFastMove
- * @param {object} data
- * @returns {object}
- *
- * Required data:
- * - ltp
- * - prevLtp
- * - volume
- * - avgVolume
- * - trend (UPTREND / DOWNTREND)
- * - isExpiryDay
- * - isResultDay
- */
 function detectFastMove(data = {}) {
   const {
     ltp,
@@ -29,107 +13,51 @@ function detectFastMove(data = {}) {
     isResultDay = false,
   } = data;
 
-  // -------------------------------
-  // HARD SAFETY – INPUT
-  // -------------------------------
-  if (
-    typeof ltp !== "number" ||
-    typeof prevLtp !== "number" ||
-    prevLtp <= 0 ||
-    typeof volume !== "number" ||
-    typeof avgVolume !== "number" ||
-    volume <= 0 ||
-    avgVolume <= 0
-  ) {
-    return {
-      signal: "WAIT",
-      
-    };
+  // Basic validation
+  if (!ltp || !prevLtp || !volume || !avgVolume) {
+    return { signal: "WAIT" };
   }
 
-  // -------------------------------
-  // TREND SAFETY
-  // -------------------------------
+  // Trend validation
   if (trend !== "UPTREND" && trend !== "DOWNTREND") {
-    return {
-      signal: "WAIT",
-      
-    };
+    return { signal: "WAIT" };
   }
 
   // -------------------------------
-  // RESULT / EXPIRY BLOCK (LOCKED)
-  // -------------------------------
-  if (isResultDay) {
-    return {
-      signal: "WAIT",
-    
-    };
-  }
-
-  if (isExpiryDay) {
-    return {
-      signal: "WAIT",
-     
-    };
-  }
-
-  // -------------------------------
-  // PRICE CHANGE %
+  // PRICE CHANGE % (Optimized to 0.20%)
   // -------------------------------
   const changePercent = ((ltp - prevLtp) / prevLtp) * 100;
   const absChange = Math.abs(changePercent);
 
-  // -------------------------------
-  // EXTREME SPIKE SAFETY (CAPITAL PROTECT)
-  // -------------------------------
-  if (absChange > 1.8) {
-   return {
-  signal: "WAIT",
-};
+  // Sudden Spike Protection (Still active but relaxed to 2.5%)
+  if (absChange > 2.5) {
+    return { signal: "WAIT" };
   }
 
   // -------------------------------
-  // FAST MOVE CONDITIONS
+  // PRACTICAL MOMENTUM CONDITIONS
   // -------------------------------
-  const priceBurst = absChange >= 0.35; // sudden move
-  const volumeBurst = volume >= avgVolume * 1.5;
+  const priceBurst = absChange >= 0.20; // Corrected for practical intraday moves
+  const volumeBurst = volume >= avgVolume * 1.2; // 20% spike is enough to confirm intent
 
   if (!priceBurst || !volumeBurst) {
-    return {
-      signal: "WAIT",
-     
-    };
+    return { signal: "WAIT" };
   }
 
   // -------------------------------
-  // DIRECTIONAL LOGIC
+  // DIRECTIONAL ALIGNMENT
   // -------------------------------
   if (changePercent > 0 && trend === "UPTREND") {
-    return {
-      signal: "BUY",
-      
-    };
+    return { signal: "BUY" };
   }
 
   if (changePercent < 0 && trend === "DOWNTREND") {
-    return {
-      signal: "SELL",
-     
-    };
+    return { signal: "SELL" };
   }
 
-  // -------------------------------
-  // MISALIGNED MOVE
-  // -------------------------------
- return {
-  signal: "WAIT",
-};
+  return { signal: "WAIT" };
 }
 
-// ==========================================
-// EXPORT
-// ==========================================
 module.exports = {
   detectFastMove,
 };
