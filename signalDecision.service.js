@@ -8,7 +8,7 @@
 const { generateOptionsSignal } = require("./services/options/optionsSignal.engine");
 const { summarizeOI } = require("./services/institutional_oi.service");
 const { getPCRContext } = require("./services/institutional_pcr.service");
-const { detectFastMove } = require("./intradayFastMove.service");
+const { detectFastMove } = require("./services/intradayFastMove.service");
 const { getOptionsSafetyContext } = require("./options/optionsSafety.safety");
 const { identifyTradeableStocks } = require("./indexMaster.service");
 
