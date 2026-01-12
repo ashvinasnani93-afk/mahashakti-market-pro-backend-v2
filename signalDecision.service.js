@@ -1,186 +1,125 @@
-// ==========================================
-// SIGNAL DECISION ENGINE – FOUNDER VERSION
-// GROUP-WISE LOGIC (SOFTENED + SAFE)
-// BUY / SELL / STRONG BUY / STRONG SELL / WAIT
-// ==========================================
+// ==================================================
+// FINAL DECISION ENGINE (PHASE-C3 | MASTER BRAIN)
+// ROLE: Harmonizing all services + Midcap/Smallcap Scanner
+// RULES: Practical & Softened for Real Market Profit
+// ==================================================
 
-// ---------- CORE TECH ----------
-const {
-  checkTrend,
-  checkRSI,
-  checkBreakout,
-  checkVolume,
-} = require("./signal.engine");
-
-// ---------- DIRECTION (HARD) ----------
-const { detectMarketRegime } = require("./services/marketRegime.service");
-const { analyzeMarketBreadth } = require("./services/marketBreadth.service");
-const { analyzeMarketStructure } = require("./services/marketStructure.service");
-
-// ---------- ENTRY QUALITY ----------
-const { analyzePriceAction } = require("./services/priceAction.service");
-const { analyzeSectorParticipation } = require("./services/sectorParticipation.service");
-
-// ---------- STRONG SIGNAL ----------
-const { generateStrongSignal } = require("./services/strongBuy.engine");
-
-// ---------- SAFETY (SOFTENED) ----------
-const { applySafety } = require("./signalSafety.service");
+const { generateOptionsSignal } = require("./options/optionsSignal.engine");
+const { summarizeOI } = require("./institutional_oi.service");
+const { getPCRContext } = require("./institutional_pcr.service");
+const { detectFastMove } = require("./intradayFastMove.service");
+const { getOptionsSafetyContext } = require("./options/optionsSafety.safety");
+const { identifyTradeableStocks } = require("./indexMaster.service");
 
 /**
- * FINAL DECISION
+ * getFinalMarketSignal
+ * Inputs: Single stock data OR Array of all market stocks
  */
-function finalDecision(data = {}) {
-
-  // ==================================================
-  // GROUP-1: MARKET DIRECTION (❌ HARD – NEVER SOFT)
-  // ==================================================
-
-  const regime = detectMarketRegime(data);
-  if (regime.regime === "SIDEWAYS") {
-    return { signal: "WAIT" };
+function getFinalMarketSignal(dataInput) {
+  // --------------------------------------------------
+  // MULTI-STOCK SCANNER LOGIC (For 10% Gainers)
+  // --------------------------------------------------
+  if (Array.isArray(dataInput)) {
+    const potentialMovers = identifyTradeableStocks(dataInput);
+    
+    return potentialMovers.map(stock => {
+      // Har gainer stock ke liye decision process call karein
+      return processSingleStockLogic({
+        symbol: stock.symbol,
+        ltp: stock.lastPrice,
+        prevLtp: stock.prevClose,
+        volume: stock.currentVolume,
+        avgVolume: stock.avgVolume20Day,
+        ema20: stock.ema20 || stock.lastPrice * 0.99, // Fallback logic
+        ema50: stock.ema50 || stock.lastPrice * 0.98,
+        rsi: stock.rsi || 60,
+        vix: 15,
+        tradeType: "SCANNER"
+      });
+    }).filter(res => res.signal !== "WAIT"); 
   }
 
-  const trendResult = checkTrend({
-    closes: data.closes,
-    ema20: data.ema20,
-    ema50: data.ema50,
+  // Single Stock Analysis (Standard Postman Request)
+  return processSingleStockLogic(dataInput);
+}
+
+/**
+ * processSingleStockLogic
+ * Core decision logic for a specific symbol
+ */
+function processSingleStockLogic(data = {}) {
+  const {
+    symbol,
+    ltp,
+    prevLtp,
+    volume,
+    avgVolume,
+    ema20,
+    ema50,
+    rsi,
+    vix,
+    oiData = [],
+    pcrValue
+  } = data;
+
+  // 1. SAFETY GATE (PRACTICAL RELAXATION)
+  const safetyContext = getOptionsSafetyContext({
+    vix: vix || 15,
+    isExpiryDay: data.isExpiryDay || false,
+    isResultDay: data.isResultDay || false
   });
 
-  if (trendResult.trend === "NO_TRADE") {
-    return { signal: "WAIT" };
+  if (!safetyContext.safety.allowTrade) {
+    return { symbol, status: "WAIT", signal: "🟡", reason: safetyContext.safety.reason };
   }
 
-  const structure = analyzeMarketStructure(data);
-  if (!structure.valid) {
-    return { signal: "WAIT" };
-  }
-
-  const breadth = analyzeMarketBreadth(data.breadthData || {});
-  if (
-    (trendResult.trend === "UPTREND" && breadth.strength !== "BULLISH") ||
-    (trendResult.trend === "DOWNTREND" && breadth.strength !== "BEARISH")
-  ) {
-    return { signal: "WAIT" };
-  }
-
-  const breakoutResult = checkBreakout({
-    close: data.close,
-    support: data.support,
-    resistance: data.resistance,
-    trend: trendResult.trend,
+  // 2. MOMENTUM CHECK (SOFTENED)
+  const fastMove = detectFastMove({
+    ltp,
+    prevLtp,
+    volume,
+    avgVolume,
+    trend: ema20 > ema50 ? "UPTREND" : "DOWNTREND"
   });
 
-  if (!breakoutResult.allowed) {
-    return { signal: "WAIT" };
+  // 3. INSTITUTIONAL CONFIRMATION
+  const oiAnalysis = summarizeOI(oiData);
+  const pcrAnalysis = getPCRContext(pcrValue);
+
+  // 4. FINAL CONFLUENCE
+  let finalDecision = "WAIT";
+  let uiIcon = "🟡";
+  let confidence = "LOW";
+
+  // BULLISH (🟢) - Softened for Midcap breakouts
+  const isBullishTrend = ema20 > ema50 || (ltp > prevLtp && rsi > 55);
+  const hasMomentum = fastMove.signal === "BUY" || rsi > 60;
+  const hasInstitutionalPush = oiAnalysis.bias === "BULLISH" || pcrAnalysis.bias === "BULLISH" || data.tradeType === "SCANNER";
+
+  if (isBullishTrend && hasMomentum && hasInstitutionalPush) {
+    finalDecision = "BUY";
+    uiIcon = "🟢";
+    confidence = (volume > avgVolume * 2) ? "HIGH (BREAKOUT)" : "MEDIUM";
+  } 
+  // BEARISH (🔴)
+  else if (ema20 < ema50 && (fastMove.signal === "SELL" || rsi < 45)) {
+    finalDecision = "SELL";
+    uiIcon = "🔴";
+    confidence = "MEDIUM";
   }
 
-  // ==================================================
-  // 🟡 GROUP-2: ENTRY QUALITY (INTRADAY SOFT FIX)
-  // Rule:
-  // INTRADAY → 1 OUT OF 4 ALLOWED
-  // OTHERS   → 2 OUT OF 4 REQUIRED
-  // ==================================================
-
-  let entryScore = 0;
-
-  // 1️⃣ RSI sanity
-  const rsiCheck = checkRSI({
-    rsi: data.rsi,
-    trend: trendResult.trend,
-  });
-  if (rsiCheck.allowed) entryScore++;
-
-  // 2️⃣ Volume confirmation
-  const volumeCheck = checkVolume({
-    volume: data.volume,
-    avgVolume: data.avgVolume,
-  });
-  if (volumeCheck.allowed) entryScore++;
-
-  // 3️⃣ Candle quality
-  const priceAction = analyzePriceAction(data);
-  if (priceAction.valid) entryScore++;
-
-  // 4️⃣ Sector participation
-  const sector = analyzeSectorParticipation(data.sectors || []);
-  if (sector.participation !== "WEAK") entryScore++;
-
-  const isIntraday = data.tradeType === "INTRADAY";
-
-  // ❌ ENTRY FAIL (FINAL FIX)
-  if (
-    (!isIntraday && entryScore < 2) ||
-    (isIntraday && entryScore < 1)
-  ) {
-    return { signal: "WAIT" };
-  }
-
-  // ==================================================
-  // 🔥 GROUP-3: STRONG BUY / STRONG SELL (RARE)
-  // ==================================================
-
-  const strong = generateStrongSignal({
-    structure:
-      structure.structure === "UPTREND"
-        ? "UP"
-        : structure.structure === "DOWNTREND"
-        ? "DOWN"
-        : "NONE",
-
-    trend: trendResult.trend,
-
-    emaAlignment:
-      trendResult.trend === "UPTREND" ? "BULLISH" : "BEARISH",
-
-    priceAction:
-      priceAction.sentiment === "BULLISH" &&
-      priceAction.strength === "STRONG"
-        ? "STRONG_BULL"
-        : priceAction.sentiment === "BEARISH" &&
-          priceAction.strength === "STRONG"
-        ? "STRONG_BEAR"
-        : "WEAK",
-
-    volumeConfirm: volumeCheck.allowed === true,
-    breakoutQuality: "REAL",
-    marketBreadth: breadth.strength,
-    vixLevel:
-      typeof data.vix === "number" && data.vix >= 20
-        ? "HIGH"
-        : "NORMAL",
-
-    isResultDay: data.isResultDay === true,
-    isExpiryDay: data.isExpiryDay === true,
-  });
-
-  // ==================================================
-  // 🔴 GROUP-4: PROTECTION (⚠️ SOFT – WARN ONLY)
-  // ==================================================
-
-  const baseSignal = strong.signal
-    ? strong.signal
-    : breakoutResult.action;
-
-  const safeSignal = applySafety(
-    { signal: baseSignal },
-    {
-      isResultDay: data.isResultDay,
-      isExpiryDay: data.isExpiryDay,
-      tradeCountToday: data.tradeCountToday,
-      tradeType: data.tradeType,
-      vix: data.vix,
-    }
-  );
-
-  // ==================================================
-  // ✅ FINAL OUTPUT
-  // ==================================================
   return {
-    signal: safeSignal.signal || "WAIT",
+    status: "OK",
+    symbol,
+    ltp,
+    signal: finalDecision,
+    uiIcon,
+    confidence,
+    volumeSpike: (volume / avgVolume).toFixed(2) + "x",
+    actionableNote: finalDecision === "WAIT" 
+      ? "Consolidating... No clear breakout." 
+      : `${symbol} showing strong momentum. Confidence: ${confidence}`
   };
 }
 
-module.exports = {
-  finalDecision,
-};
+module.exports = { getFinalMarketSignal };
