@@ -10,7 +10,7 @@ const { summarizeOI } = require("./services/institutional_oi.service");
 const { getPCRContext } = require("./services/institutional_pcr.service");
 const { detectFastMove } = require("./services/intradayFastMove.service");
 const { getOptionsSafetyContext } = require("./services/options/optionsSafety.service");
-const { identifyTradeableStocks } = require("./indexMaster.service");
+const { identifyTradeableStocks } = require("./services/indexMaster.service");
 
 /**
  * getFinalMarketSignal
