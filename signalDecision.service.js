@@ -6,7 +6,7 @@
 
 
 const { generateOptionsSignal } = require("./services/options/optionsSignal.engine");
-const { summarizeOI } = require("./institutional_oi.service");
+const { summarizeOI } = require("./services/institutional_oi.service");
 const { getPCRContext } = require("./institutional_pcr.service");
 const { detectFastMove } = require("./intradayFastMove.service");
 const { getOptionsSafetyContext } = require("./options/optionsSafety.safety");
