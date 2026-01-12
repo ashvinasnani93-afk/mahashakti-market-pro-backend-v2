@@ -4,7 +4,8 @@
 // RULES: Practical & Softened for Real Market Profit
 // ==================================================
 
-const { generateOptionsSignal } = require("./options/optionsSignal.engine");
+
+const { generateOptionsSignal } = require("./services/options/optionsSignal.engine");
 const { summarizeOI } = require("./institutional_oi.service");
 const { getPCRContext } = require("./institutional_pcr.service");
 const { detectFastMove } = require("./intradayFastMove.service");
