@@ -55,14 +55,17 @@ function getSignal(req, res) {
       return res.json({ status: false, signal: "WAIT" });
     }
 
-    // 🔓 SAFE INPUT CHECK (INTRADAY + POSTMAN FRIENDLY)
-if (
-  typeof body.close !== "number" &&
-  typeof body.spotPrice !== "number" &&
-  !Array.isArray(body.closes)
-) {
-  return res.json({ status: true, signal: "WAIT" });
-}
+// ✅ INPUT NORMALIZATION (CRITICAL FIX)
+const normalizedClose =
+  typeof body.close === "number"
+    ? body.close
+    : typeof body.spotPrice === "number"
+    ? body.spotPrice
+    : null;
+
+if (typeof normalizedClose !== "number") {
+  return res.json({ status: false, signal: "WAIT" });
+} 
 
     const symbol = body.symbol || body.indexName;
     if (!symbol) {
@@ -112,12 +115,12 @@ const engineData = {
   open: typeof body.open === "number" ? body.open : null,
   high: typeof body.high === "number" ? body.high : null,
   low: typeof body.low === "number" ? body.low : null,
-  close: typeof body.close === "number" ? body.close : null,
+  close: normalizedClose,
   prevClose: typeof body.prevClose === "number" ? body.prevClose : null,
 
  // ===== EMA / RSI (Carry-2 FIX) =====
-ema20: typeof body.ema20 === "number" ? body.ema20 : body.spotPrice,
-ema50: typeof body.ema50 === "number" ? body.ema50 : body.spotPrice,
+ema20: typeof body.ema20 === "number" ? body.ema20 : null,
+ema50: typeof body.ema50 === "number" ? body.ema50 : null,
 
 rsi: typeof body.rsi === "number" ? body.rsi : null,
 
@@ -167,7 +170,16 @@ candleSizePercent:
   // ===== VIX (TEXT CONTEXT ONLY) =====
   vix: typeof body.vix === "number" ? body.vix : null,
 };
-
+// 🔍 STEP-4 DEBUG (ENGINE INPUT CHECK – TEMPORARY)
+console.log("🧠 ENGINE DATA CHECK:", {
+  close: engineData.close,
+  ema20: engineData.ema20,
+  ema50: engineData.ema50,
+  rsi: engineData.rsi,
+  volume: engineData.volume,
+  avgVolume: engineData.avgVolume,
+  tradeType: engineData.tradeType,
+});
     // -------------------------------
     // FINAL DECISION (ENTRY ENGINE)
     // -------------------------------
