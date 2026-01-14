@@ -50,9 +50,14 @@ function getSignal(req, res) {
       return res.json({ status: false, signal: "WAIT" });
     }
 
-    if (!Array.isArray(body.closes) || body.closes.length === 0) {
-      return res.json({ status: true, signal: "WAIT" });
-    }
+    // 🔓 SAFE INPUT CHECK (INTRADAY + POSTMAN FRIENDLY)
+if (
+  typeof body.close !== "number" &&
+  typeof body.spotPrice !== "number" &&
+  !Array.isArray(body.closes)
+) {
+  return res.json({ status: true, signal: "WAIT" });
+}
 
     const symbol = body.symbol || body.indexName;
     if (!symbol) {
@@ -104,17 +109,8 @@ const engineData = {
   prevClose: typeof body.prevClose === "number" ? body.prevClose : null,
 
  // ===== EMA / RSI (Carry-2 FIX) =====
-ema20: Array.isArray(body.ema20)
-  ? body.ema20
-  : typeof body.ema20 === "number"
-  ? [body.ema20]
-  : [],
-
-ema50: Array.isArray(body.ema50)
-  ? body.ema50
-  : typeof body.ema50 === "number"
-  ? [body.ema50]
-  : [],
+ema20: typeof body.ema20 === "number" ? body.ema20 : null,
+ema50: typeof body.ema50 === "number" ? body.ema50 : null,
 
 rsi: typeof body.rsi === "number" ? body.rsi : null,
 
