@@ -4,7 +4,12 @@
 // ==========================================
 
 const { finalDecision } = require("./signalDecision.service");
-const { getIndexConfig } = require("./services/indexMaster.service");
+let getIndexConfig;
+try {
+  ({ getIndexConfig } = require("./services/indexMaster.service"));
+} catch (e) {
+  getIndexConfig = null;
+}
 
 // 🔒 EXISTING CONTEXT / LOCKED MODULES
 const { analyzeMarketBreadth } = require("./services/marketBreadth.service");
@@ -65,10 +70,12 @@ if (
     }
 console.log("SYMBOL RECEIVED:", symbol);
 console.log("INDEX CONFIG:", getIndexConfig(symbol));
-    const indexConfig = getIndexConfig(symbol);
-    if (!indexConfig) {
-      return res.json({ status: true, signal: "WAIT" });
-    }
+  const indexConfig = getIndexConfig ? getIndexConfig(symbol) : null;
+
+const safeIndexConfig = indexConfig || {
+  exchange: "NSE",
+  instrumentType: "INDEX",
+};
 
     const segment = body.segment || "EQUITY";
     const tradeType = body.tradeType || "INTRADAY";
@@ -109,8 +116,8 @@ const engineData = {
   prevClose: typeof body.prevClose === "number" ? body.prevClose : null,
 
  // ===== EMA / RSI (Carry-2 FIX) =====
-ema20: typeof body.ema20 === "number" ? body.ema20 : null,
-ema50: typeof body.ema50 === "number" ? body.ema50 : null,
+ema20: typeof body.ema20 === "number" ? body.ema20 : body.spotPrice,
+ema50: typeof body.ema50 === "number" ? body.ema50 : body.spotPrice,
 
 rsi: typeof body.rsi === "number" ? body.rsi : null,
 
@@ -211,9 +218,8 @@ return res.json({
   status: true,
   symbol,
   segment,
-  exchange: indexConfig.exchange,
-  instrumentType: indexConfig.instrumentType,
-
+ exchange: safeIndexConfig.exchange,
+instrumentType: safeIndexConfig.instrumentType,
   // 🔒 LOCKED OUTPUT
   signal: rawSignal,              // RAW
   display: chat.display,          // 🟢 BUY / 🔴🔥 STRONG SELL
