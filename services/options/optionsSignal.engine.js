@@ -71,7 +71,32 @@ function generateOptionsSignal(context = {}) {
     return { status: "READY", trend, regime, ...mapUISignal("SELL") };
   }
 
-  return { status: "WAIT", trend, regime, ...mapUISignal("WAIT") };
+  // 🔥 FINAL FALLBACK (NO MORE DEAD WAIT)
+if (trend === "UP") {
+  return {
+    status: "READY",
+    trend,
+    regime: "TRENDING",
+    ...mapUISignal("BUY")
+  };
+}
+
+if (trend === "DOWN") {
+  return {
+    status: "READY",
+    trend,
+    regime: "TRENDING",
+    ...mapUISignal("SELL")
+  };
+}
+
+// Agar sach me sideways ho tab hi WAIT
+return {
+  status: "WAIT",
+  trend,
+  regime,
+  ...mapUISignal("WAIT")
+};
 }
 
 module.exports = {
