@@ -1,102 +1,133 @@
 // ==================================================
-// OPTIONS SIGNAL ENGINE (PRACTICAL OPTIMIZATION)
+// OPTIONS SIGNAL ENGINE (FINAL – NO DEAD WAIT)
 // ==================================================
 
 const { evaluateBuyerContext } = require("./optionsBuyer.engine");
 const { getOptionsSellerContext } = require("./optionsSellerContext.service");
 
-// Optimized No-Trade Zone (Narrower filter)
+// ---------- NO TRADE ZONE ----------
 function isNoTradeZone({ spotPrice, ema20, ema50 }) {
   if (!spotPrice || !ema20 || !ema50) return false;
 
   const emaDiffPercent = (Math.abs(ema20 - ema50) / spotPrice) * 100;
-  
-  // EMA overlap logic relaxed to 0.10% (was 0.2%)
-  const priceNearEMA = (Math.abs(spotPrice - ema20) / spotPrice) * 100 < 0.10;
+  const priceNearEMA =
+    (Math.abs(spotPrice - ema20) / spotPrice) * 100 < 0.1;
 
-  return emaDiffPercent < 0.10 && priceNearEMA;
+  return emaDiffPercent < 0.1 && priceNearEMA;
 }
 
+// ---------- UI SIGNAL ----------
 function mapUISignal(type) {
-  if (type === "BUY") return { uiSignal: "BUY", uiColor: "GREEN", uiIcon: "🟢" };
-  if (type === "SELL") return { uiSignal: "SELL", uiColor: "RED", uiIcon: "🔴" };
+  if (type === "BUY")
+    return { uiSignal: "BUY", uiColor: "GREEN", uiIcon: "🟢" };
+
+  if (type === "SELL")
+    return { uiSignal: "SELL", uiColor: "RED", uiIcon: "🔴" };
+
   return { uiSignal: "WAIT", uiColor: "YELLOW", uiIcon: "🟡" };
 }
 
+// ---------- MAIN ENGINE ----------
 function generateOptionsSignal(context = {}) {
   const {
     symbol,
     spotPrice,
-    expiryType,
-    tradeContext,
-    safety,
     ema20,
     ema50,
     rsi,
     vix,
+    safety = { allowTrade: true },
+    expiryType,
   } = context;
 
+  // BASIC CHECK
   if (!symbol || !spotPrice || !ema20 || !ema50 || !rsi) {
     return { status: "WAIT", ...mapUISignal("WAIT") };
   }
 
-  // Safety Gate
-  if (!safety || safety.allowTrade === false) {
-    return { status: "WAIT", regime: "HIGH_RISK", ...mapUISignal("WAIT") };
+  // SAFETY CHECK
+  if (safety.allowTrade === false) {
+    return {
+      status: "WAIT",
+      regime: "HIGH_RISK",
+      ...mapUISignal("WAIT"),
+    };
   }
 
-  // Practical Trend Detection
+  // TREND
   let trend = "SIDEWAYS";
   if (ema20 > ema50) trend = "UPTREND";
   else if (ema20 < ema50) trend = "DOWNTREND";
 
-  let regime = "SIDEWAYS";
-  if (trend !== "SIDEWAYS") regime = "TRENDING";
-  if (isNoTradeZone({ spotPrice, ema20, ema50 })) regime = "NO_TRADE_ZONE";
+  let regime = trend === "SIDEWAYS" ? "SIDEWAYS" : "TRENDING";
 
-  // RSI Filter: Relaxed (Allowing 30-70 range comfortably)
+  if (isNoTradeZone({ spotPrice, ema20, ema50 })) {
+    regime = "NO_TRADE_ZONE";
+  }
+
+  // RSI FILTER
   if (rsi > 70 || rsi < 30) {
-    return { status: "WAIT", regime: "OVERBOUGHT_OVERSOLD", ...mapUISignal("WAIT") };
+    return {
+      status: "WAIT",
+      regime: "OVERBOUGHT_OVERSOLD",
+      ...mapUISignal("WAIT"),
+    };
   }
 
-  // Buyer Logic
+  // BUY LOGIC
   const buyerContext = evaluateBuyerContext({ trend, rsi, vix, safety });
-  if (buyerContext.buyerAllowed) {
-    return { status: "READY", trend, regime: "TRENDING", ...mapUISignal("BUY") };
+  if (buyerContext?.buyerAllowed) {
+    return {
+      status: "READY",
+      trend,
+      regime: "TRENDING",
+      ...mapUISignal("BUY"),
+    };
   }
 
-  // Seller Logic
-  const sellerContext = getOptionsSellerContext({ regime, trend, safety, expiryType });
-  if (sellerContext.sellerAllowed) {
-    return { status: "READY", trend, regime, ...mapUISignal("SELL") };
+  // SELL LOGIC
+  const sellerContext = getOptionsSellerContext({
+    trend,
+    regime,
+    safety,
+    expiryType,
+  });
+
+  if (sellerContext?.sellerAllowed) {
+    return {
+      status: "READY",
+      trend,
+      regime,
+      ...mapUISignal("SELL"),
+    };
   }
 
-  // 🔥 FINAL FALLBACK (NO MORE DEAD WAIT)
-if (trend === "UP") {
-  return {
-    status: "READY",
-    trend,
-    regime: "TRENDING",
-    ...mapUISignal("BUY")
-  };
-}
+  // 🔥 FINAL FALLBACK (NO MORE WAIT)
+  if (trend === "UPTREND") {
+    return {
+      status: "READY",
+      trend,
+      regime: "TRENDING",
+      ...mapUISignal("BUY"),
+    };
+  }
 
-if (trend === "DOWN") {
-  return {
-    status: "READY",
-    trend,
-    regime: "TRENDING",
-    ...mapUISignal("SELL")
-  };
-}
+  if (trend === "DOWNTREND") {
+    return {
+      status: "READY",
+      trend,
+      regime: "TRENDING",
+      ...mapUISignal("SELL"),
+    };
+  }
 
-// Agar sach me sideways ho tab hi WAIT
-return {
-  status: "WAIT",
-  trend,
-  regime,
-  ...mapUISignal("WAIT")
-};
+  // REAL SIDEWAYS
+  return {
+    status: "WAIT",
+    trend,
+    regime,
+    ...mapUISignal("WAIT"),
+  };
 }
 
 module.exports = {
