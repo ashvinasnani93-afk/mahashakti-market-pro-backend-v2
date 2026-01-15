@@ -124,11 +124,7 @@ lows: Array.isArray(body.lows)
   : [normalizedClose],
 
   // ===== CURRENT CANDLE (PRICE ACTION) =====
-  open: typeof body.open === "number" ? body.open : null,
-  high: typeof body.high === "number" ? body.high : null,
-  low: typeof body.low === "number" ? body.low : null,
-  close: normalizedClose,
-  prevClose: typeof body.prevClose === "number" ? body.prevClose : null,
+ 
 // 🔒 SAFE FALLBACKS (TESTING + LIVE SUPPORT)
 open:
   typeof body.open === "number"
@@ -150,17 +146,19 @@ prevClose:
     ? body.prevClose
     : normalizedClose,
  // ===== EMA / RSI (Carry-2 FIX) =====
-ema20: typeof body.ema20 === "number"
-  ? [body.ema20]
-  : Array.isArray(body.ema20)
-  ? body.ema20
-  : [],
+ema20:
+  typeof body.ema20 === "number"
+    ? [body.ema20]
+    : Array.isArray(body.ema20) && body.ema20.length
+    ? body.ema20
+    : [normalizedClose],
 
-ema50: typeof body.ema50 === "number"
-  ? [body.ema50]
-  : Array.isArray(body.ema50)
-  ? body.ema50
-  : [],
+ema50:
+  typeof body.ema50 === "number"
+    ? [body.ema50]
+    : Array.isArray(body.ema50) && body.ema50.length
+    ? body.ema50
+    : [normalizedClose],
 
 rsi: typeof body.rsi === "number" ? body.rsi : null,
 
