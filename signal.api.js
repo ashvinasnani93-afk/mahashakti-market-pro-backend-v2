@@ -209,11 +209,18 @@ candleSizePercent:
   isExpiryDay: body.isExpiryDay === true,
   tradeCountToday: Number(body.tradeCountToday || 0),
   tradeType,
-
-  // ===== VIX (TEXT CONTEXT ONLY) =====
-  vix: typeof body.vix === "number" ? body.vix : null,
+// ===== VIX (TEXT CONTEXT ONLY) =====
+ vix: typeof body.vix === "number" ? body.vix : null,
 };
-// 🔍 STEP-4 DEBUG (ENGINE INPUT CHECK – TEMPORARY)
+
+// 🔧 FIX: Ensure close price exists for engine & momentum
+engineData.close =
+  engineData.close ??
+  (Array.isArray(engineData.closes)
+    ? engineData.closes[engineData.closes.length - 1]
+    : undefined);
+
+// 🔍 STEP_4 DEBUG (ENGINE INPUT CHECK - TEMPORARY)
 console.log("🧠 ENGINE DATA CHECK:", {
   close: engineData.close,
   ema20: engineData.ema20,
