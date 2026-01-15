@@ -104,7 +104,7 @@ const safeIndexConfig = indexConfig || {
 const engineData = {
   symbol,
   segment,
-  instrumentType: indexConfig.instrumentType,
+  instrumentType: safeIndexConfig.instrumentType,
 
   // ===== CORE PRICE SERIES =====
   closes: Array.isArray(body.closes) ? body.closes : [],
