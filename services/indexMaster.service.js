@@ -1,71 +1,105 @@
 // ==================================================
-// DYNAMIC INDEX & STOCK MASTER (PRO-VERSION)
-// ROLE: Auto-detecting Midcap/Smallcap Breakouts
-// NO FIXED LIST | NSE-BSE READY
+// INDEX & STOCK MASTER (FINAL – SIGNAL SAFE)
+// MAHASHAKTI MARKET PRO
 // ==================================================
 
-/**
- * identifyTradeableStocks
- * @param {Array} liveMarketData - Sabhi stocks ka live data array (LTP, Volume, Symbol)
- * @returns {Array} - Sirf woh stocks jo bhagne ke liye taiyaar hain
- */
+// ------------------------------------------
+// INDEX CONFIG MAP (CORE FOR SIGNAL ENGINE)
+// ------------------------------------------
+const INDEX_CONFIG_MAP = {
+  NIFTY: {
+    exchange: "NSE",
+    instrumentType: "INDEX",
+    name: "NIFTY 50",
+  },
+  BANKNIFTY: {
+    exchange: "NSE",
+    instrumentType: "INDEX",
+    name: "BANK NIFTY",
+  },
+  FINNIFTY: {
+    exchange: "NSE",
+    instrumentType: "INDEX",
+    name: "FIN NIFTY",
+  },
+  MIDCPNIFTY: {
+    exchange: "NSE",
+    instrumentType: "INDEX",
+    name: "MIDCAP NIFTY",
+  },
+};
+
+// ------------------------------------------
+// 🔑 CRITICAL FUNCTION (MISSING EARLIER)
+// ------------------------------------------
+function getIndexConfig(symbol) {
+  if (!symbol || typeof symbol !== "string") {
+    return null;
+  }
+
+  const key = symbol.toUpperCase().replace(/\s+/g, "");
+  return INDEX_CONFIG_MAP[key] || null;
+}
+
+// ------------------------------------------
+// STOCK SCANNER (UNCHANGED – SAFE)
+// ------------------------------------------
 function identifyTradeableStocks(liveMarketData = []) {
   if (!Array.isArray(liveMarketData) || liveMarketData.length === 0) {
     return [];
   }
 
-  // --------------------------------------------------
-  // DYNAMIC SCANNING LOGIC (Real-Profit Filters)
-  // --------------------------------------------------
   const highPotentialStocks = liveMarketData.filter((stock) => {
     const {
       lastPrice,
       prevClose,
       currentVolume,
       avgVolume20Day,
-      symbol
     } = stock;
 
-    // 1. PRICE CHANGE FILTER (At least 2% up to ignore noise)
+    if (
+      typeof lastPrice !== "number" ||
+      typeof prevClose !== "number" ||
+      typeof currentVolume !== "number" ||
+      typeof avgVolume20Day !== "number"
+    ) {
+      return false;
+    }
+
     const priceChangePct = ((lastPrice - prevClose) / prevClose) * 100;
-    const isGaining = priceChangePct >= 2.0 && priceChangePct <= 15.0; // 15% tak limit (Upper circuit protection)
+    const isGaining = priceChangePct >= 2 && priceChangePct <= 15;
+    const hasVolumeBurst = currentVolume >= avgVolume20Day * 2.5;
+    const isNotPenny = lastPrice > 20;
 
-    // 2. VOLUME SPIKE FILTER (Smart Money Indicator)
-    // Smallcaps mein jab volume average se 2.5 guna hota hai tabhi 10% move aata hai
-    const hasVolumeBurst = currentVolume >= (avgVolume20Day * 2.5);
-
-    // 3. EXCLUSION (Penny stocks ko hatane ke liye - Below ₹20)
-    const isNotPennyStock = lastPrice > 20;
-
-    return isGaining && hasVolumeBurst && isNotPennyStock;
+    return isGaining && hasVolumeBurst && isNotPenny;
   });
 
-  // --------------------------------------------------
-  // SORT BY HIGHEST POTENTIAL
-  // --------------------------------------------------
   return highPotentialStocks.sort((a, b) => {
-    const changeA = ((a.lastPrice - a.prevClose) / a.prevClose);
-    const changeB = ((b.lastPrice - b.prevClose) / b.prevClose);
-    return changeB - changeA; // Sabse zyada bhagne wala stock sabse upar
+    const ca = (a.lastPrice - a.prevClose) / a.prevClose;
+    const cb = (b.lastPrice - b.prevClose) / b.prevClose;
+    return cb - ca;
   });
 }
 
-/**
- * getMarketContext
- * Return common indices and identified movers
- */
-function getMarketContext(allData) {
+// ------------------------------------------
+// MARKET CONTEXT (OPTIONAL)
+// ------------------------------------------
+function getMarketContext(allData = []) {
   const movers = identifyTradeableStocks(allData);
-  
+
   return {
-    indices: ["NIFTY 50", "NIFTY MIDCAP 100", "NIFTY SMALLCAP 100"],
-    activeMovers: movers, // Ye list har 1 second mein update hogi
+    indices: Object.keys(INDEX_CONFIG_MAP),
+    activeMovers: movers,
     totalFound: movers.length,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 }
 
+// ------------------------------------------
+// EXPORTS (VERY IMPORTANT)
+// ------------------------------------------
 module.exports = {
+  getIndexConfig,          // 🔥 REQUIRED BY signal.api.js
   identifyTradeableStocks,
-  getMarketContext
+  getMarketContext,
 };
