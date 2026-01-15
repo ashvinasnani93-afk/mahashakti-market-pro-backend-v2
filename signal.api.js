@@ -37,15 +37,15 @@ function getSignal(req, res) {
   try {
 
     // 🔒 RATE LIMIT (Carry-6.1)
-    const allowed = checkRateLimit(req, 20, 60 * 1000);
-    if (!allowed) {
-      return res.json({
-        status: true,
-        signal: "🟡",
-        display: "🟡",
-        lines: ["Trade signal generated"],
-      });
-    }
+ //   const allowed = checkRateLimit(req, 20, 60 * 1000);
+//    if (!allowed) {
+//      return res.json({
+//        status: true,
+//        signal: "🟡",
+//        display: "🟡",
+//        lines: ["Trade signal generated"],
+//      });
+//    }
 
     const body = req.body || {};
     // -------------------------------
@@ -93,7 +93,12 @@ const safeIndexConfig = indexConfig || {
     const volumeContext = validateVolume({
       currentVolume: body.volume,
       averageVolume: body.avgVolume,
-      priceDirection: "UP",
+     priceDirection:
+  typeof body.close === "number" &&
+  typeof body.prevClose === "number" &&
+  body.close < body.prevClose
+    ? "DOWN"
+    : "UP",
     });
 
 // ==========================================
@@ -124,7 +129,26 @@ lows: Array.isArray(body.lows)
   low: typeof body.low === "number" ? body.low : null,
   close: normalizedClose,
   prevClose: typeof body.prevClose === "number" ? body.prevClose : null,
+// 🔒 SAFE FALLBACKS (TESTING + LIVE SUPPORT)
+open:
+  typeof body.open === "number"
+    ? body.open
+    : normalizedClose,
 
+high:
+  typeof body.high === "number"
+    ? body.high
+    : normalizedClose,
+
+low:
+  typeof body.low === "number"
+    ? body.low
+    : normalizedClose,
+
+prevClose:
+  typeof body.prevClose === "number"
+    ? body.prevClose
+    : normalizedClose,
  // ===== EMA / RSI (Carry-2 FIX) =====
 ema20: typeof body.ema20 === "number"
   ? [body.ema20]
