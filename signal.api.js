@@ -213,14 +213,26 @@ candleSizePercent:
  vix: typeof body.vix === "number" ? body.vix : null,
 };
 
-// 🔧 FIX: Ensure close price exists for engine & momentum
+// FIX: Ensure close price exists for engine & momentum
 engineData.close =
   engineData.close ??
   (Array.isArray(engineData.closes)
     ? engineData.closes[engineData.closes.length - 1]
     : undefined);
 
-// 🔍 STEP_4 DEBUG (ENGINE INPUT CHECK - TEMPORARY)
+// 🔐 ADD-2: SAFETY GUARD (YAHI ADD KARO)
+if (typeof engineData.close !== "number") {
+  return res.json({
+    status: true,
+    signal: "WAIT",
+    display: "🟡 WAIT",
+    lines: ["Price not stable yet"],
+    emoji: "🟡",
+    color: "WAIT",
+  });
+}
+
+// 🔍 STEP-4 DEBUG (ENGINE INPUT CHECK – TEMPORARY)
 console.log("🧠 ENGINE DATA CHECK:", {
   close: engineData.close,
   ema20: engineData.ema20,
