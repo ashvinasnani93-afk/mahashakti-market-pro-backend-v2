@@ -80,39 +80,7 @@ function identifyTradeableStocks(liveMarketData = []) {
     return cb - ca;
   });
 }
-// ==================================================
-// INDEX CONFIG MAP + LOOKUP
-// REQUIRED BY signal.api.js & index.api.js
-// ==================================================
 
-const INDEX_CONFIG_MAP = {
-  NIFTY: {
-    instrumentType: "INDEX",
-    exchange: "NSE",
-    segments: ["EQUITY", "OPTIONS"],
-    allowedTradeTypes: ["INTRADAY", "EQUITY"],
-    optionChain: true,
-    note: "NIFTY index supported",
-  },
-
-  BANKNIFTY: {
-    instrumentType: "INDEX",
-    exchange: "NSE",
-    segments: ["OPTIONS"],
-    allowedTradeTypes: ["INTRADAY"],
-    optionChain: true,
-    note: "BANKNIFTY supported",
-  },
-
-  FINNIFTY: {
-    instrumentType: "INDEX",
-    exchange: "NSE",
-    segments: ["OPTIONS"],
-    allowedTradeTypes: ["INTRADAY"],
-    optionChain: true,
-    note: "FINNIFTY supported",
-  },
-};
 
 // 🔥 THIS FUNCTION WAS MISSING
 function getIndexConfig(symbol = "") {
