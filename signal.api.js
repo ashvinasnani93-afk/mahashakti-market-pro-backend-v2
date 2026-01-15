@@ -162,10 +162,15 @@ ema50:
 
 rsi: typeof body.rsi === "number" ? body.rsi : null,
 
-  // ===== LEVELS =====
-  support: typeof body.support === "number" ? body.support : null,
-  resistance: typeof body.resistance === "number" ? body.resistance : null,
+ // ===== LEVELS =====
+support: typeof body.support === "number" ? body.support : null,
+resistance: typeof body.resistance === "number" ? body.resistance : null,
 
+// ✅ ADD THIS (CRITICAL)
+rangeHigh:
+  typeof body.rangeHigh === "number"
+    ? body.rangeHigh
+    : null,
   // ===== VOLUME =====
   volume: typeof body.volume === "number" ? body.volume : null,
   avgVolume: typeof body.avgVolume === "number" ? body.avgVolume : null,
@@ -227,15 +232,22 @@ console.log("🧠 ENGINE DATA CHECK:", {
     // 🆕 CONTEXT ADDITION (POST-DECISION, SAFE)
     // =================================================
 
-    // Momentum (scanner only)
-    const momentumResult = scanMomentum({
-      price: body.close,
-      currentVolume: body.volume,
-      avgVolume: body.avgVolume,
-      rangeHigh: body.rangeHigh,
-      close: body.close,
-    });
+   // 🔥 STEP-3 DEBUG (TEMPORARY)
+console.log("🔥 MOMENTUM DEBUG:", {
+  close: engineData.close,
+  rangeHigh: engineData.rangeHigh,
+  volume: engineData.volume,
+  avgVolume: engineData.avgVolume,
+});
 
+// Momentum (scanner only)
+const momentumResult = scanMomentum({
+  price: engineData.close,
+  currentVolume: engineData.volume,
+  avgVolume: engineData.avgVolume,
+  rangeHigh: engineData.rangeHigh,
+  close: engineData.close,
+});
     // Institutional (hawaa only)
     const institutional = analyzeInstitutionalFlow({
       fiiNet: body.fiiNet,
