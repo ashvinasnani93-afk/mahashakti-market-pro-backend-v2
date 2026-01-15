@@ -1,87 +1,78 @@
 // ==========================================
-// SIGNAL SAFETY SERVICE – PHASE 1 + C3.2
-// FINAL SAFETY + CONTEXT LAYER
-// (RULE-LOCKED IMPLEMENTATION)
+// SIGNAL SAFETY SERVICE – FINAL (SOFT + SAFE)
+// MAHASHAKTI MARKET PRO
 // ==========================================
 
 /**
  * applySafety
- * @param {object} signalResult
- * @param {object} context
- * @returns {object} FINAL SAFE SIGNAL
+ * ROLE:
+ * ❌ Do NOT kill BUY / SELL
+ * ✅ Add risk warnings only
  */
 function applySafety(signalResult, context = {}) {
-  // -------------------------------
-  // HARD SAFETY: invalid input
-  // -------------------------------
-  if (!signalResult || !signalResult.signal) {
-    return {
-      signal: "WAIT",
-    };
-  }
 
   // -------------------------------
-  // CONTEXT DEFAULTS
+  // BASIC VALIDATION
   // -------------------------------
+  if (!signalResult || !signalResult.signal) {
+    return { signal: "WAIT" };
+  }
+
+  let finalSignal = signalResult.signal;
+  let warnings = [];
+
   const {
     isResultDay = false,
     isExpiryDay = false,
     tradeCountToday = 0,
     tradeType = "INTRADAY",
-    vix = null, // 🟡 VIX CONTEXT (C3.2)
+    vix = null,
   } = context;
 
   // -------------------------------
-  // RESULT DAY SAFETY (LOCKED)
+  // RESULT DAY (SOFT)
   // -------------------------------
-  if (isResultDay && signalResult.signal !== "WAIT") {
-    return {
-      ...signalResult,
-      signal: "WAIT",
-    };
+  if (isResultDay && finalSignal !== "WAIT") {
+    warnings.push("⚠️ Result day volatility – use strict SL");
   }
 
   // -------------------------------
-  // EXPIRY DAY SAFETY (LOCKED)
+  // EXPIRY DAY (SOFT)
   // -------------------------------
-  if (isExpiryDay && signalResult.signal !== "WAIT") {
-    return {
-      ...signalResult,
-      signal: "WAIT",
-    };
+  if (isExpiryDay && finalSignal !== "WAIT") {
+    warnings.push("⚠️ Expiry day – quick targets only");
   }
 
   // -------------------------------
-  // OVERTRADE GUARD (LOCKED)
+  // OVERTRADE GUARD (SOFT)
   // -------------------------------
-  if (tradeCountToday >= 3 && signalResult.signal !== "WAIT") {
-    return {
-      ...signalResult,
-      signal: "WAIT",
-    };
+  if (tradeCountToday >= 3 && finalSignal !== "WAIT") {
+    warnings.push("⚠️ Overtrading risk – avoid revenge trades");
   }
 
   // -------------------------------
-  // EQUITY vs INTRADAY SAFETY (LOCKED)
+  // EQUITY SELL SAFETY (SOFT)
   // -------------------------------
-  if (tradeType === "EQUITY" && signalResult.signal === "SELL") {
-    return {
-      ...signalResult,
-      signal: "WAIT",
-    };
+  if (tradeType === "EQUITY" && finalSignal === "SELL") {
+    warnings.push("ℹ️ Equity SELL – confirm higher timeframe");
   }
 
   // -------------------------------
-  // SAFE PASS THROUGH
+  // VIX CONTEXT (TEXT ONLY)
   // -------------------------------
- return {
-  signal: signalResult.signal,
-};
+  if (typeof vix === "number" && vix >= 20) {
+    warnings.push("⚠️ High VIX – reduce position size");
+  }
+
+  // -------------------------------
+  // FINAL SAFE OUTPUT
+  // -------------------------------
+  return {
+    signal: finalSignal,
+    warnings,        // UI / chat me dikha sakte ho
+  };
 }
 
-// ==========================================
-// EXPORT
-// ==========================================
 module.exports = {
   applySafety,
 };
