@@ -107,9 +107,16 @@ const engineData = {
   instrumentType: safeIndexConfig.instrumentType,
 
   // ===== CORE PRICE SERIES =====
-  closes: Array.isArray(body.closes) ? body.closes : [],
-  highs: Array.isArray(body.highs) ? body.highs : [],
-  lows: Array.isArray(body.lows) ? body.lows : [],
+ closes: Array.isArray(body.closes)
+  ? body.closes
+  : [normalizedClose],
+ highs: Array.isArray(body.highs)
+  ? body.highs
+  : [normalizedClose],
+
+lows: Array.isArray(body.lows)
+  ? body.lows
+  : [normalizedClose],
 
   // ===== CURRENT CANDLE (PRICE ACTION) =====
   open: typeof body.open === "number" ? body.open : null,
@@ -119,8 +126,17 @@ const engineData = {
   prevClose: typeof body.prevClose === "number" ? body.prevClose : null,
 
  // ===== EMA / RSI (Carry-2 FIX) =====
-ema20: typeof body.ema20 === "number" ? body.ema20 : null,
-ema50: typeof body.ema50 === "number" ? body.ema50 : null,
+ema20: typeof body.ema20 === "number"
+  ? [body.ema20]
+  : Array.isArray(body.ema20)
+  ? body.ema20
+  : [],
+
+ema50: typeof body.ema50 === "number"
+  ? [body.ema50]
+  : Array.isArray(body.ema50)
+  ? body.ema50
+  : [],
 
 rsi: typeof body.rsi === "number" ? body.rsi : null,
 
