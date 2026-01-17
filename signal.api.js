@@ -187,15 +187,24 @@ function getSignal(req, res) {
           ? body.resistance
           : null,
 
-      rangeHigh:
-        typeof body.rangeHigh === "number"
-          ? body.rangeHigh
-          : null,
+     // ✅ RANGE AUTO-FIX (CRITICAL MOMENTUM WIRING)
+rangeHigh:
+  typeof body.rangeHigh === "number"
+    ? body.rangeHigh
+    : (
+        typeof body.high === "number"
+          ? body.high
+          : normalizedClose
+      ),
 
-      rangeLow:
-        typeof body.rangeLow === "number"
-          ? body.rangeLow
-          : null,
+rangeLow:
+  typeof body.rangeLow === "number"
+    ? body.rangeLow
+    : (
+        typeof body.low === "number"
+          ? body.low
+          : normalizedClose
+      ),
 
       // ===== VOLUME =====
       volume:
