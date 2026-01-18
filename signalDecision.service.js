@@ -104,33 +104,47 @@ function checkRSISoft(data) {
 // ==================================================
 function checkBreakoutSoft(data) {
   const close = normalizeValue(data.close);
-  const support = normalizeValue(data.support);
-  const resistance = normalizeValue(data.resistance);
-  const trend = data.trend;
+  const rangeHigh = normalizeValue(data.rangeHigh);
+  const rangeLow = normalizeValue(data.rangeLow);
 
-  if (!close || !support || !resistance) {
-    return { breakout: false, note: "Levels missing" };
+  if (!close) {
+    return { breakout: false, soft: false, note: "Close missing" };
   }
 
-  // Bullish breakout above resistance
-  if (trend === "UPTREND" && close > resistance) {
-    return { 
-      breakout: true, 
-      type: "BULLISH_BREAKOUT",
-      note: "Resistance broken"
-    };
+  let breakout = false;
+  let soft = false;
+  let type = null;
+
+  // HARD breakout
+  if (rangeHigh && close > rangeHigh) {
+    breakout = true;
+    type = "BULLISH_BREAKOUT";
   }
 
-  // Bearish breakdown below support
-  if (trend === "DOWNTREND" && close < support) {
-    return { 
-      breakout: true, 
-      type: "BEARISH_BREAKDOWN",
-      note: "Support broken"
-    };
+  if (rangeLow && close < rangeLow) {
+    breakout = true;
+    type = "BEARISH_BREAKDOWN";
   }
 
-  return { breakout: false, note: "No breakout" };
+  // SOFT breakout (near range)
+  if (!breakout) {
+    if (rangeHigh && close >= rangeHigh * 0.998) {
+      soft = true;
+      type = "BULLISH_BREAKOUT";
+    }
+
+    if (rangeLow && close <= rangeLow * 1.002) {
+      soft = true;
+      type = "BEARISH_BREAKDOWN";
+    }
+  }
+
+  return {
+    breakout,
+    soft,
+    type,
+    note: breakout ? "Hard breakout" : soft ? "Soft breakout" : "No breakout"
+  };
 }
 
 // ==================================================
