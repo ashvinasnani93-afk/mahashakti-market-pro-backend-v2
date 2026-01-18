@@ -376,11 +376,13 @@ function finalDecision(data = {}) {
       reason = `Strong downtrend + breakdown + volume (Score: ${bearScore})`;
     }
     // SELL (Score >= 4)
-    else if (bearScore >= 4 && rsiCheck.allowed) {
-      signal = "SELL";
-      confidence = bearScore >= 5 ? "HIGH" : "MEDIUM";
-      reason = `Bearish trend confirmed (Score: ${bearScore})`;
-    }
+else if (bearScore >= 4) {
+  signal = "SELL";
+  confidence = bearScore >= 5 ? "HIGH" : "MEDIUM";
+  reason = rsiCheck.allowed
+    ? `Bearish trend confirmed (Score: ${bearScore})`
+    : `Bearish trend (RSI neutral, Score: ${bearScore})`;
+}
     // WAIT (No clear direction)
     else {
       signal = "WAIT";
