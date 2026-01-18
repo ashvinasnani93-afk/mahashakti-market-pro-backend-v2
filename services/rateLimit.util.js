@@ -1,31 +1,64 @@
-// ==========================================
-// RATE LIMIT UTILITY (SAFE - SIMPLE)
-// ==========================================
+// ==================================================
+// MAHASHAKTI RATE LIMIT ENGINE
+// COMPATIBLE WITH signal.api.js
+// OBJECT BASED + SYMBOL + TRADETYPE + DEV MODE
+// ==================================================
 
 const requestMap = new Map();
 
-function checkRateLimit(req, limit = 20, windowMs = 60000) {
-  const ip =
-    req.ip ||
-    req.headers["x-forwarded-for"] ||
-    "unknown";
+// CONFIG
+const LIMIT = 20;
+const WINDOW_MS = 60 * 1000; // 1 minute
 
+function checkRateLimit({ ip = "unknown", symbol = "UNKNOWN", tradeType = "INTRADAY" }) {
+  const DEV_MODE = process.env.DEV_MODE === "true";
+  const FOUNDER_IP = process.env.FOUNDER_IP || "";
+
+  const key = `${ip}:${symbol}:${tradeType}`;
   const now = Date.now();
 
-  if (!requestMap.has(ip)) {
-    requestMap.set(ip, []);
+  // 👑 FOUNDER BYPASS
+  if (FOUNDER_IP && ip === FOUNDER_IP) {
+    return {
+      allowed: true,
+      reason: "Founder bypass"
+    };
   }
 
+  // 👨‍💻 DEV MODE BYPASS
+  if (DEV_MODE) {
+    return {
+      allowed: true,
+      reason: "Dev mode"
+    };
+  }
+
+  // INIT
+  if (!requestMap.has(key)) {
+    requestMap.set(key, []);
+  }
+
+  // FILTER WINDOW
   const timestamps = requestMap
-    .get(ip)
-    .filter(ts => now - ts < windowMs);
+    .get(key)
+    .filter(ts => now - ts < WINDOW_MS);
 
   timestamps.push(now);
-  requestMap.set(ip, timestamps);
+  requestMap.set(key, timestamps);
 
-  return timestamps.length <= limit;
+  // LIMIT HIT
+  if (timestamps.length > LIMIT) {
+    return {
+      allowed: false,
+      reason: `Rate limit hit (${LIMIT}/min per symbol)`
+    };
+  }
+
+  return {
+    allowed: true
+  };
 }
 
 module.exports = {
-  checkRateLimit,
+  checkRateLimit
 };
