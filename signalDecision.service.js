@@ -402,7 +402,12 @@ else if (bearScore >= 4) {
     };
 
     const safeSignal = applySafety({ signal }, safetyContext);
-
+// =============================
+// SAFETY DEBUG (CARRY-4)
+// =============================
+console.log("ENGINE SIGNAL:", signal);
+console.log("SAFETY CONTEXT:", safetyContext);
+console.log("SAFETY RESULT:", safeSignal);
     // If safety blocked the signal
     if (safeSignal.signal === "WAIT" && signal !== "WAIT") {
       reason = "Trade blocked by safety rules";
