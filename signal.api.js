@@ -37,20 +37,27 @@ const { formatSignalMessage } = require("./services/chatFormatter.util");
 // ==========================================
 function getSignal(req, res) {
   try {
-    // 🔒 RATE LIMIT (OPTIONAL — UNCOMMENT WHEN LIVE)
-    /*
-    const allowed = checkRateLimit(req, 20, 60 * 1000);
-    if (!allowed) {
-      return res.json({
-        status: true,
-        signal: "WAIT",
-        display: "🟡 WAIT",
-        lines: ["Rate limit active — slow down"],
-        emoji: "🟡",
-        color: "WAIT",
-      });
+   // 🔒 RATE LIMIT (LOCKED – OVERTRADE PROTECTION)
+const rateLimitResult = checkRateLimit({
+  ip: req.ip,
+  symbol: req.body.symbol || "UNKNOWN",
+  tradeType: req.body.tradeType || "INTRADAY"
+});
+
+if (!rateLimitResult.allowed) {
+  return res.status(429).json({
+    status: false,
+    signal: "WAIT",
+    display: "⏳ WAIT",
+    lines: ["Overtrade protection active", rateLimitResult.reason || "Slow down"],
+    emoji: "⏳",
+    color: "WAIT",
+    confidence: "BLOCKED",
+    notes: {
+      safety: "Rate limit / behavior guard triggered"
     }
-    */
+  });
+}
 
     const body = req.body || {};
 
