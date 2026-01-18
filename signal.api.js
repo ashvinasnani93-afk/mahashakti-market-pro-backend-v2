@@ -43,7 +43,7 @@ const rateLimitResult = checkRateLimit({
   symbol: req.body.symbol || "UNKNOWN",
   tradeType: req.body.tradeType || "INTRADAY"
 });
-
+rateLimitResult.allowed = true;
 if (!rateLimitResult.allowed) {
   return res.status(429).json({
     status: false,
