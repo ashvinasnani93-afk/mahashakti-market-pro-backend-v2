@@ -352,7 +352,10 @@ function finalDecision(data = {}) {
     let reason = "Market conditions unclear";
 
     // STRONG BUY (Score >= 6, with breakout)
-    if (bullScore >= 6 && breakoutCheck.breakout && breakoutCheck.type === "BULLISH_BREAKOUT") {
+  if (
+  bullScore >= 6 ||
+  (bullScore >= 5 && breakoutCheck.soft && breakoutCheck.type === "BULLISH_BREAKOUT")
+) {
       signal = "STRONG_BUY";
       confidence = "VERY_HIGH";
       reason = `Strong uptrend + breakout + volume (Score: ${bullScore})`;
@@ -364,7 +367,10 @@ function finalDecision(data = {}) {
       reason = `Bullish trend confirmed (Score: ${bullScore})`;
     }
     // STRONG SELL (Score >= 6, with breakdown)
-    else if (bearScore >= 6 && breakoutCheck.breakout && breakoutCheck.type === "BEARISH_BREAKDOWN") {
+   else if (
+  bearScore >= 6 ||
+  (bearScore >= 5 && breakoutCheck.soft && breakoutCheck.type === "BEARISH_BREAKDOWN")
+) {
       signal = "STRONG_SELL";
       confidence = "VERY_HIGH";
       reason = `Strong downtrend + breakdown + volume (Score: ${bearScore})`;
