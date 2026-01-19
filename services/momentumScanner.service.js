@@ -5,17 +5,87 @@
 // ==========================================
 
 /**
- * scanMomentum
- * @param {Object} data
- * Required:
- * - price
- * - currentVolume
- * - avgVolume
- * - rangeHigh
- * - rangeLow
- * - open
- * - close
- * - direction ("BUY" | "SELL")
+ * NEW ENGINE
+ * Used by signalDecision.service.js
+ */
+function evaluateMomentumContext(data = {}) {
+  try {
+    const close = Number(data.close || 0);
+    const ema20 = Number(data.ema20 || 0);
+    const ema50 = Number(data.ema50 || 0);
+    const rsi = Number(data.rsi || 0);
+    const volume = Number(data.volume || 0);
+    const avgVolume = Number(data.avgVolume || 0);
+
+    if (!close || !ema20 || !ema50 || !rsi || !volume || !avgVolume) {
+      return {
+        active: false,
+        confirmed: false,
+        strength: "WEAK",
+        reason: "INSUFFICIENT_DATA"
+      };
+    }
+
+    // -----------------------------
+    // TREND STRUCTURE
+    // -----------------------------
+    const uptrend = close > ema20 && ema20 > ema50;
+    const downtrend = close < ema20 && ema20 < ema50;
+
+    // -----------------------------
+    // MOMENTUM FILTERS
+    // -----------------------------
+    const rsiBullish = rsi >= 55;
+    const rsiBearish = rsi <= 45;
+    const volumePower = volume >= avgVolume * 1.2;
+
+    let active = false;
+    let confirmed = false;
+    let strength = "WEAK";
+
+    // STRONG MOMENTUM
+    if (uptrend && rsiBullish && volumePower) {
+      active = true;
+      confirmed = true;
+      strength = "STRONG";
+    } else if (downtrend && rsiBearish && volumePower) {
+      active = true;
+      confirmed = true;
+      strength = "STRONG";
+    }
+
+    // WEAK / EARLY MOMENTUM
+    else if (
+      (uptrend && rsiBullish) ||
+      (downtrend && rsiBearish)
+    ) {
+      active = true;
+      confirmed = false;
+      strength = "WEAK";
+    }
+
+    return {
+      active,
+      confirmed,
+      strength,
+      trend: uptrend ? "UPTREND" : downtrend ? "DOWNTREND" : "SIDEWAYS",
+      volumePower,
+      rsi
+    };
+
+  } catch (error) {
+    return {
+      active: false,
+      confirmed: false,
+      strength: "WEAK",
+      reason: "MOMENTUM_ENGINE_ERROR"
+    };
+  }
+}
+
+/**
+ * LEGACY ENGINE
+ * Backward compatible for old modules
  */
 function scanMomentum(data = {}) {
   const price = Number(data.price || 0);
@@ -27,9 +97,6 @@ function scanMomentum(data = {}) {
   const close = Number(data.close || 0);
   const direction = data.direction || "BUY";
 
-  // -----------------------------
-  // HARD SAFETY
-  // -----------------------------
   if (
     !price ||
     !close ||
@@ -40,25 +107,11 @@ function scanMomentum(data = {}) {
     return { active: false, reason: "INVALID_DATA" };
   }
 
-  // -----------------------------
-  // FILTER 1: PRICE SANITY
-  // -----------------------------
-  if (price < 20 || price > 3000) {
-    return { active: false, reason: "PRICE_OUT_OF_RANGE" };
-  }
-
-  // -----------------------------
-  // FILTER 2: VOLUME SPIKE (HARD)
-  // -----------------------------
   const volumeRatio = currentVolume / avgVolume;
   if (volumeRatio < 1.8) {
     return { active: false, reason: "NO_VOLUME_SPIKE" };
   }
 
-  // -----------------------------
-  // FILTER 3: CANDLE QUALITY
-  // Body must be strong (not wick fake)
-  // -----------------------------
   const bodySize = Math.abs(close - open);
   const candleRange = Math.max(
     Math.abs(rangeHigh - rangeLow),
@@ -70,24 +123,14 @@ function scanMomentum(data = {}) {
     return { active: false, reason: "WEAK_CANDLE_BODY" };
   }
 
-  // -----------------------------
-  // FILTER 4: RANGE BREAK LOGIC
-  // -----------------------------
-  if (direction === "BUY") {
-    if (close <= rangeHigh) {
-      return { active: false, reason: "NO_BREAKOUT" };
-    }
+  if (direction === "BUY" && close <= rangeHigh) {
+    return { active: false, reason: "NO_BREAKOUT" };
   }
 
-  if (direction === "SELL") {
-    if (close >= rangeLow) {
-      return { active: false, reason: "NO_BREAKDOWN" };
-    }
+  if (direction === "SELL" && close >= rangeLow) {
+    return { active: false, reason: "NO_BREAKDOWN" };
   }
 
-  // -----------------------------
-  // MOMENTUM CONFIRMED
-  // -----------------------------
   return {
     active: true,
     state: "MOMENTUM_CONFIRMED",
@@ -97,6 +140,10 @@ function scanMomentum(data = {}) {
   };
 }
 
+// ==========================================
+// EXPORTS
+// ==========================================
 module.exports = {
-  scanMomentum,
+  evaluateMomentumContext,
+  scanMomentum
 };
