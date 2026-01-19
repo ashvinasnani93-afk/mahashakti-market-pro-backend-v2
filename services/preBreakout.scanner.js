@@ -12,7 +12,7 @@ function detectPreBreakout(data = {}) {
     lows = [],
     volumes = [],
     avgVolume,
-    resistance,
+    resistance
   } = data;
 
   if (!close || highs.length < 10 || lows.length < 10) {
@@ -52,8 +52,8 @@ function detectPreBreakout(data = {}) {
     nearResistance = dist >= 0 && dist <= 2;
   }
 
-  const last5Lows = last10Lows.slice(-5);
   let higherLows = 0;
+  const last5Lows = last10Lows.slice(-5);
   for (let i = 1; i < last5Lows.length; i++) {
     if (last5Lows[i] > last5Lows[i - 1]) higherLows++;
   }
@@ -65,21 +65,31 @@ function detectPreBreakout(data = {}) {
   if (higherLows >= 2) score += 2;
   if (compressionRatio < 0.5) score += 1;
 
-  if (score >= 6 && volumeBuilding) {
+  if (score >= 6) {
     return {
       preBreakout: true,
       confidence: "HIGH",
       score,
-      compressionRatio: compressionRatio.toFixed(2),
-      note: "Pre-breakout compression with volume",
+      note: "Stock coiling - breakout near",
+      probability: "VERY_HIGH",
+      action: "WATCH_CLOSELY"
     };
   }
 
-  return {
-    preBreakout: false,
-    score,
-    reason: "Weak pre-breakout",
-  };
+  if (score >= 4) {
+    return {
+      preBreakout: true,
+      confidence: "MEDIUM",
+      score,
+      note: "Possible breakout forming",
+      probability: "MEDIUM",
+      action: "MONITOR"
+    };
+  }
+
+  return { preBreakout: false, score, reason: "Low setup strength" };
 }
 
-module.exports = { detectPreBreakout };
+module.exports = {
+  detectPreBreakout
+};
