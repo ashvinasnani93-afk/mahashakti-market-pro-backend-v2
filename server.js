@@ -10,6 +10,7 @@ const https = require("https");
 const { SmartAPI } = require("smartapi-javascript");
 const { authenticator } = require("otplib");
 
+const signalRoutes = require("./routes/signal.routes");
 const { getSignal } = require("./signal.api");
 const { getOptionChain } = require("./optionchain.api");
 
@@ -37,6 +38,8 @@ const { loadOptionSymbolMaster } = require("./token.service");
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+app.use("/api", signalRoutes);
 
 // ==========================================
 // BASIC ROUTES
