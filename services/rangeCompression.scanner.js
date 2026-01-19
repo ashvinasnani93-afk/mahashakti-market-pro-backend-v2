@@ -21,27 +21,48 @@ function detectRangeCompression(data = {}) {
   const avg5 = recent5.reduce((s, r) => s + r, 0) / 5;
 
   const atrRatio = avg20 > 0 ? avg5 / avg20 : 1;
-  const contracting = atrRatio < 0.7;
+  const atrContracting = atrRatio < 0.7;
 
   const hi = Math.max(...h20.slice(-5));
   const lo = Math.min(...l20.slice(-5));
-  const rangePct = ((hi - lo) / c20[c20.length - 1]) * 100;
+  const close = c20[c20.length - 1];
+  const rangePercent = close > 0 ? ((hi - lo) / close) * 100 : 0;
+
+  const tightRange = rangePercent < 2;
 
   let score = 0;
-  if (contracting) score += 3;
-  if (rangePct < 2) score += 2;
+  if (atrContracting) score += 3;
+  if (tightRange) score += 2;
+  if (atrRatio < 0.5) score += 2;
 
-  if (score >= 4) {
+  if (score >= 5) {
     return {
       compressed: true,
-      confidence: score >= 6 ? "HIGH" : "MEDIUM",
-      atrRatio: atrRatio.toFixed(2),
+      confidence: "HIGH",
       score,
-      note: "Volatility squeeze detected",
+      atrRatio: atrRatio.toFixed(2),
+      expectedMove: "BIG_BREAKOUT"
     };
   }
 
-  return { compressed: false, score, atrRatio: atrRatio.toFixed(2) };
+  if (score >= 3) {
+    return {
+      compressed: true,
+      confidence: "MEDIUM",
+      score,
+      atrRatio: atrRatio.toFixed(2),
+      expectedMove: "POSSIBLE_BREAKOUT"
+    };
+  }
+
+  return {
+    compressed: false,
+    score,
+    atrRatio: atrRatio.toFixed(2),
+    reason: "No squeeze"
+  };
 }
 
-module.exports = { detectRangeCompression };
+module.exports = {
+  detectRangeCompression
+};
