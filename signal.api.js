@@ -19,6 +19,9 @@ const { analyzeMarketStructure } = require("./services/marketStructure.service")
 const { analyzePriceAction } = require("./services/priceAction.service");
 const { validateVolume } = require("./services/volumeValidation.service");
 const { checkRateLimit } = require("./services/rateLimit.util");
+const { detectPreBreakout } = require("./services/preBreakout.scanner");
+const { detectVolumeBuildup } = require("./services/volumeBuildup.detector");
+const { detectRangeCompression } = require("./services/rangeCompression.scanner");
 
 // 🆕 CONTEXT ONLY (NO SIGNAL CHANGE)
 const { scanMomentum } = require("./services/momentumScanner.service");
@@ -309,7 +312,32 @@ rangeLow:
     // FINAL DECISION ENGINE
     // -------------------------------
     const result = finalDecision(engineData);
+// ==============================
+// EARLY MOVE SCANNERS
+// ==============================
+const preBreakout = detectPreBreakout({
+  close: engineData.close,
+  high: engineData.high,
+  low: engineData.low,
+  highs: engineData.highs,
+  lows: engineData.lows,
+  volumes: engineData.volumes,
+  avgVolume: engineData.avgVolume,
+  resistance: engineData.resistance
+});
 
+const volumeBuildup = detectVolumeBuildup({
+  volumes: engineData.volumes,
+  avgVolume: engineData.avgVolume,
+  closes: engineData.closes
+});
+
+const compression = detectRangeCompression({
+  highs: engineData.highs,
+  lows: engineData.lows,
+  closes: engineData.closes
+});
+    
     // ==========================================
     // CONTEXT ADDITION (POST DECISION)
     // ==========================================
@@ -354,7 +382,21 @@ rangeLow:
       typeof result?.signal === "string"
         ? result.signal
         : "WAIT";
+// ==============================
+// EARLY SIGNAL UPGRADE
+// ==============================
+let finalSignal = rawSignal;
 
+if (finalSignal === "WAIT") {
+  if (preBreakout.preBreakout && volumeBuildup.buildupDetected) {
+    finalSignal = "BUY";
+  }
+
+  if (compression.compressed && volumeBuildup.buildupDetected) {
+    finalSignal = "STRONG_BUY";
+  }
+}
+    
     // -------------------------------
     // FINAL RESPONSE
     // -------------------------------
@@ -364,21 +406,25 @@ rangeLow:
       segment,
       exchange: safeIndexConfig.exchange,
       instrumentType: safeIndexConfig.instrumentType,
+      
+signal: finalSignal,
+  display: chat.display,
+  lines: chat.lines,
 
-      signal: rawSignal,
-      display: chat.display,
-      lines: chat.lines,
-
-      emoji:
-        typeof chat.display === "string"
-          ? chat.display.split(" ")[0]
-          : "🟡",
+  emoji:
+    typeof chat.display === "string"
+      ? chat.display.split(" ")[0]
+      : "🟡",
 
       color: rawSignal,
 
       momentumActive: momentumResult.active === true,
       institutionalTag: institutional.tag,
       sectorParticipation: sectorParticipation.participation,
+      // ===== DEBUG SCANNERS =====
+  preBreakout,
+  volumeBuildup,
+  compression,
     });
   } catch (e) {
     console.error("❌ Signal API Error:", e.message);
