@@ -432,7 +432,41 @@ function finalDecision(data = {}) {
       if (normalizedData.trend === "UPTREND") bullScore += 1;
       if (normalizedData.trend === "DOWNTREND") bearScore += 1;
     }
+    
+// =====================================
+// CARRY-3: WAIT TRAP GUARD
+// =====================================
+const weakContext =
+  trendCheck.trend === "SIDEWAYS" &&
+  !volumeCheck.confirmed &&
+  !breakoutCheck.breakout &&
+  candleCheck.strength === "WEAK";
 
+const missingCoreData =
+  !normalizedData.close ||
+  !normalizedData.ema20 ||
+  !normalizedData.ema50 ||
+  typeof normalizedData.rsi !== "number";
+
+if (missingCoreData) {
+  return {
+    signal: "WAIT",
+    confidence: "NONE",
+    reason: "Core market data missing",
+    symbol: normalizedData.symbol,
+    timestamp: new Date().toISOString()
+  };
+}
+
+if (weakContext) {
+  return {
+    signal: "WAIT",
+    confidence: "LOW",
+    reason: "No trend, no volume, no breakout — market undecided",
+    symbol: normalizedData.symbol,
+    timestamp: new Date().toISOString()
+  };
+}
     // =====================================
     // STEP 6: DECISION LOGIC
     // =====================================
