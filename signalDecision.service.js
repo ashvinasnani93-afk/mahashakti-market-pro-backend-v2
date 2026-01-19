@@ -342,9 +342,9 @@ const momentum = evaluateMomentumContext({
     let bullScore = 0;
     let bearScore = 0;
     
-    // ===============================
-// STRONG SIGNAL BOOSTERS
-// ===============================
+   // ================================
+// STRONG SIGNAL BOOSTERS (OPERATOR GRADE)
+// ================================
 
 // Pre-breakout = early strength
 if (preBreakout && preBreakout.active === true) {
@@ -362,6 +362,12 @@ if (volumeBuildup && volumeBuildup.active === true) {
 if (compression && compression.active === true) {
   if (normalizedData.trend === "UPTREND") bullScore += 2;
   if (normalizedData.trend === "DOWNTREND") bearScore += 2;
+}
+
+// Momentum alignment = operator-grade confirmation
+if (momentum && momentum.confirmed === true) {
+  if (normalizedData.trend === "UPTREND") bullScore += 3;
+  if (normalizedData.trend === "DOWNTREND") bearScore += 3;
 }
 
     // Trend Score (Most Important)
@@ -412,12 +418,20 @@ if (compression && compression.active === true) {
       confidence = "VERY_HIGH";
       reason = `Strong uptrend + breakout + volume (Score: ${bullScore})`;
     }
-    // BUY (Score >= 4)
-    else if (bullScore >= 4 && rsiCheck.allowed) {
-      signal = "BUY";
-      confidence = bullScore >= 5 ? "HIGH" : "MEDIUM";
-      reason = `Bullish trend confirmed (Score: ${bullScore})`;
-    }
+   // ===============================
+// NORMAL SIGNAL ENGINE
+// ===============================
+
+// NORMAL BUY (Trend + RSI + Volume aligned)
+else if (
+  bullScore >= 3 &&
+  rsiCheck.allowed &&
+  volumeCheck.confirmed
+) {
+  signal = "BUY";
+  confidence = bullScore >= 4 ? "HIGH" : "MEDIUM";
+  reason = `Trend + RSI + Volume aligned (Score: ${bullScore})`;
+}
     // STRONG SELL (Score >= 6, with breakdown)
    else if (
   bearScore >= 6 ||
@@ -427,13 +441,15 @@ if (compression && compression.active === true) {
       confidence = "VERY_HIGH";
       reason = `Strong downtrend + breakdown + volume (Score: ${bearScore})`;
     }
-    // SELL (Score >= 4)
-else if (bearScore >= 4) {
+   // NORMAL SELL (Trend + RSI + Volume aligned)
+else if (
+  bearScore >= 3 &&
+  rsiCheck.allowed &&
+  volumeCheck.confirmed
+) {
   signal = "SELL";
-  confidence = bearScore >= 5 ? "HIGH" : "MEDIUM";
-  reason = rsiCheck.allowed
-    ? `Bearish trend confirmed (Score: ${bearScore})`
-    : `Bearish trend (RSI neutral, Score: ${bearScore})`;
+  confidence = bearScore >= 4 ? "HIGH" : "MEDIUM";
+  reason = `Trend + RSI + Volume aligned (Score: ${bearScore})`;
 }
     // WAIT (No clear direction)
     else {
