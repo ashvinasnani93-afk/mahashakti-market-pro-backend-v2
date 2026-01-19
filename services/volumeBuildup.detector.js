@@ -1,6 +1,6 @@
 // ==================================================
 // VOLUME BUILDUP DETECTOR (NEW)
-// Smart money accumulation detection
+// Detects smart money accumulation
 // ==================================================
 
 function detectVolumeBuildup(data = {}) {
@@ -24,9 +24,11 @@ function detectVolumeBuildup(data = {}) {
 
   let accumulation = false;
   if (closes.length >= 10) {
-    const last10Closes = closes.slice(-10);
-    const move = ((last10Closes[9] - last10Closes[0]) / last10Closes[0]) * 100;
-    if (move >= -2 && move <= 3 && volumeIncreasing) accumulation = true;
+    const c10 = closes.slice(-10);
+    const change = ((c10[9] - c10[0]) / c10[0]) * 100;
+    if (change >= -2 && change <= 3 && volumeIncreasing) {
+      accumulation = true;
+    }
   }
 
   let score = 0;
@@ -35,24 +37,38 @@ function detectVolumeBuildup(data = {}) {
   if (elevated) score += 2;
   if (accumulation) score += 3;
 
-  const direction = accumulation ? "BULLISH_BUILDUP" : "NEUTRAL";
+  const ratio = avgVolume > 0 ? avg5 / avgVolume : 0;
 
   if (score >= 7) {
     return {
       buildupDetected: true,
       confidence: "HIGH",
       score,
-      direction,
-      note: "Smart money accumulation detected",
+      volumeRatio: ratio.toFixed(2),
+      pattern: "ACCUMULATION",
+      action: "PREPARE_ENTRY"
+    };
+  }
+
+  if (score >= 5) {
+    return {
+      buildupDetected: true,
+      confidence: "MEDIUM",
+      score,
+      volumeRatio: ratio.toFixed(2),
+      pattern: "VOLUME_BUILDUP",
+      action: "WATCH"
     };
   }
 
   return {
     buildupDetected: false,
     score,
-    direction,
-    reason: "No strong buildup",
+    volumeRatio: ratio.toFixed(2),
+    reason: "No buildup"
   };
 }
 
-module.exports = { detectVolumeBuildup };
+module.exports = {
+  detectVolumeBuildup
+};
