@@ -7,11 +7,11 @@
 const { applySafety } = require("./signalSafety.service");
 const { getVixSafetyNote } = require("./signalVix.service");
 
-const { detectPreBreakout } = require("../services/preBreakout.scanner");
-const { detectVolumeBuildup } = require("../services/volumeBuildup.detector");
-const { detectRangeCompression } = require("../services/rangeCompression.scanner");
+const { detectPreBreakout } = require("./services/preBreakout.scanner");
+const { detectVolumeBuildup } = require("./services/volumeBuildup.detector");
+const { detectRangeCompression } = require("./services/rangeCompression.scanner");
 
-const { evaluateMomentumContext } = require("../services/momentumScanner.service");
+const { evaluateMomentumContext } = require("./services/momentumScanner.service");
 
 // ==================================================
 // CARRY FIX #1: NORMALIZE INPUT VALUES
