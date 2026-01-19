@@ -6,6 +6,10 @@
 
 const { applySafety } = require("./signalSafety.service");
 const { getVixSafetyNote } = require("./signalVix.service");
+const { detectPreBreakout } = require("./preBreakout.scanner");
+const { detectVolumeBuildup } = require("./volumeBuildup.detector");
+const { detectRangeCompression } = require("./rangeCompression.scanner");
+const { evaluateMomentumContext } = require("./momentumAdapter.service");
 
 // ==================================================
 // CARRY FIX #1: NORMALIZE INPUT VALUES
@@ -283,6 +287,32 @@ function finalDecision(data = {}) {
       highs: normalizeArray(data.highs),
       lows: normalizeArray(data.lows),
     };
+    
+    // ===============================
+// EARLY + INSTITUTIONAL SCANNERS
+// ===============================
+
+const preBreakout = detectPreBreakout(normalizedData);
+
+const volumeBuildup = detectVolumeBuildup({
+  volumes: normalizedData.volumes || [],
+  avgVolume: normalizedData.avgVolume,
+  closes: normalizedData.closes || []
+});
+
+const compression = detectRangeCompression({
+  highs: normalizedData.highs || [],
+  lows: normalizedData.lows || [],
+  closes: normalizedData.closes || []
+});
+
+const momentum = evaluateMomentumContext({
+  trend: normalizedData.trend,
+  rsi: normalizedData.rsi,
+  volume: normalizedData.volume,
+  avgVolume: normalizedData.avgVolume,
+  breakoutAction: normalizedData.trend === "UP" ? "BUY" : "SELL"
+});
 
     // =====================================
     // STEP 3: MINIMUM DATA CHECK
@@ -311,6 +341,28 @@ function finalDecision(data = {}) {
     // =====================================
     let bullScore = 0;
     let bearScore = 0;
+    
+    // ===============================
+// STRONG SIGNAL BOOSTERS
+// ===============================
+
+// Pre-breakout = early strength
+if (preBreakout && preBreakout.active === true) {
+  if (normalizedData.trend === "UPTREND") bullScore += 2;
+  if (normalizedData.trend === "DOWNTREND") bearScore += 2;
+}
+
+// Volume buildup = quality move
+if (volumeBuildup && volumeBuildup.active === true) {
+  if (normalizedData.trend === "UPTREND") bullScore += 2;
+  if (normalizedData.trend === "DOWNTREND") bearScore += 2;
+}
+
+// Compression = explosive potential
+if (compression && compression.active === true) {
+  if (normalizedData.trend === "UPTREND") bullScore += 2;
+  if (normalizedData.trend === "DOWNTREND") bearScore += 2;
+}
 
     // Trend Score (Most Important)
     if (trendCheck.trend === "UPTREND") {
