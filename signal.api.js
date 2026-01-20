@@ -40,6 +40,24 @@ const { formatSignalMessage } = require("./services/chatFormatter.util");
 // ==========================================
 function getSignal(req, res) {
   try {
+
+// 🔥 SYMBOL EXTRACT
+const symbol =
+  (req.query.symbol || req.body.symbol || "").toString().toUpperCase();
+
+if (!symbol) {
+  return res.json({
+    status: false,
+    signal: "WAIT",
+    error: "SYMBOL_REQUIRED"
+  });
+}
+
+// 🔥 AUTO SUBSCRIBE SYMBOL TO WEBSOCKET
+if (global.subscribeSymbol) {
+  global.subscribeSymbol(symbol);
+}
+    
    // 🔒 RATE LIMIT (LOCKED – OVERTRADE PROTECTION)
 const rateLimitResult = checkRateLimit({
   ip: req.ip,
