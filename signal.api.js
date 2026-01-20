@@ -103,7 +103,7 @@ if (!rateLimitResult.allowed) {
       return res.json({ status: false, signal: "WAIT" });
     }
 
-    const symbol = body.symbol || body.indexName;
+    
     if (!symbol) {
       return res.json({ status: true, signal: "WAIT" });
     }
