@@ -386,6 +386,8 @@ function subscribeSymbol(symbol) {
   subscribedTokens.add(info.token);
 }
 
+global.subscribeSymbol = subscribeSymbol; // 🔥
+
 // ==========================================
 // 🆕 ADD: IDLE SYMBOL CLEANUP (AUDIT CARRY)
 // ==========================================
