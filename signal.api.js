@@ -104,9 +104,7 @@ if (!rateLimitResult.allowed) {
     }
 
     
-    if (!symbol) {
-      return res.json({ status: true, signal: "WAIT" });
-    }
+   
 
     console.log("📌 SYMBOL RECEIVED:", symbol);
     console.log(
