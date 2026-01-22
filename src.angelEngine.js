@@ -3,6 +3,11 @@
 // MAHASHAKTI MARKET PRO
 // ===============================
 
+// SYSTEM STATE FLAGS
+let wsConnected = false;
+let systemReady = false;
+
+// LTP STORE
 let latestLtpStore = {};
 
 /**
@@ -27,13 +32,44 @@ function getLtp(symbol) {
  * This will be REPLACED by Angel WebSocket
  */
 function startMockFeed() {
+  console.log("📡 MOCK FEED STARTED");
+
   setInterval(() => {
     updateLtp("NIFTY", 25900 + Math.floor(Math.random() * 100));
     updateLtp("BANKNIFTY", 56000 + Math.floor(Math.random() * 200));
   }, 2000);
 }
 
+/**
+ * MAIN ENGINE BOOT
+ */
+function startAngelEngine() {
+  console.log("🚀 Angel Engine Booting...");
+
+  startMockFeed();
+
+  wsConnected = true;
+  systemReady = true;
+
+  console.log("🟢 MOCK WebSocket CONNECTED");
+  console.log("🧠 SYSTEM STATE: READY");
+}
+
+/**
+ * SYSTEM STATUS GETTERS
+ */
+function isSystemReady() {
+  return systemReady;
+}
+
+function isWsConnected() {
+  return wsConnected;
+}
+
 module.exports = {
   startMockFeed,
+  startAngelEngine,
   getLtp,
+  isSystemReady,
+  isWsConnected
 };
