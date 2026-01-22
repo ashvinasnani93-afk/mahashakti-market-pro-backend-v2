@@ -341,23 +341,22 @@ function startWebSocket() {
     markSystemDown("WS_ERROR");
   });
 
-  ws.on("close", () => {
+ws.on("close", () => {
   console.log("🔴 WebSocket Disconnected");
 
   wsConnected = false;
+  wsStarting = false;
   markSystemDown("WS_CLOSED");
 
-  if (!angelLoggedIn) return;
-  if (wsStarting) return;
-
-  wsStarting = true;
+  // 🔥 Force relogin to refresh feedToken
+  angelLoggedIn = false;
+  feedToken = null;
 
   setTimeout(() => {
-    console.log("🔄 Reconnecting WebSocket...");
-    startWebSocket();
-    wsStarting = false;
-  }, 3000);
-});
+    console.log("🔄 Re-login + WebSocket restart...");
+    angelLogin();
+  }, 5000);
+}); 
 }
 
 // ==========================================
