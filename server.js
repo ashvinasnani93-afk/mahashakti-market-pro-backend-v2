@@ -35,7 +35,12 @@ const sectorParticipationApi = require("./services/sectorParticipation.api");
 
 const { loadOptionSymbolMaster } = require("./token.service");
 
+// 🔥 ANGEL ENGINE BOOT
+const { startAngelEngine, isSystemReady, isWsConnected } = require("./src.angelEngine");
+
 const app = express();
+startAngelEngine();
+
 app.use(cors());
 app.use(express.json());
 
