@@ -32,7 +32,7 @@ function isExpiredOption(symbol) {
     if (!symbol) return true;
 
     const match = symbol.match(
-      /(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2})/
+      /(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{4})/
     );
 
     if (!match) return true;
