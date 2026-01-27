@@ -68,7 +68,16 @@ async function getValidStrikes({
       expiryType,
     });
 
-    if (!ceSymbol && !peSymbol) continue;
+   if (!ceSymbol || !peSymbol) {
+  console.log("⚠️ SYMBOL FORMAT FAIL:", {
+    index,
+    strike,
+    expiryDate,
+    expiryType,
+    ceSymbol,
+    peSymbol
+  });
+}
 
 const ceToken = ceSymbol ? await getOptionToken(ceSymbol) : null;
 const peToken = peSymbol ? await getOptionToken(peSymbol) : null; 
