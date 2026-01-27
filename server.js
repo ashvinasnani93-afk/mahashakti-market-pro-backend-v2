@@ -131,17 +131,17 @@ app.post("/commodity", getCommodity);
 // 🆕 MOMENTUM SCANNER (NO SIGNAL)
 app.use("/scanner", momentumScannerApi);
 
-// 🔥 MOVERS SCANNER (15-20% FAST MOVERS)
-app.use("/scanner", moversApi);
-
-// 🔥 BATCH SIGNALS ROUTE
-app.use("/signals", batchSignalsApi);
-
 // 🆕 INSTITUTIONAL FLOW (CONTEXT ONLY)
 app.use("/institutional", institutionalFlowApi);
 
 // 🆕🆕 SECTOR PARTICIPATION (CONTEXT ONLY)
 app.use("/sector", sectorParticipationApi);
+
+// 🔥 MOVERS SCANNER (15-20% FAST MOVERS)
+app.use("/scanner", moversApi);
+
+// 🔥 BATCH SIGNALS ROUTE
+app.use("/signals", batchSignalsApi);
 
 // ==========================================
 // GLOBAL STATE (CARRY 0.4 – SAFE & SINGLE)
@@ -158,8 +158,23 @@ let tokenSymbolMap = {};
 let subscribedTokens = new Set();
 let latestLTP = {};
 let symbolLastSeen = {}; // SINGLE SOURCE (locked)
-// 🔥 EXPOSE FOR BATCH / SCANNER APIS
+// 🔥 EXPOSE GLOBALS FOR SCANNER / BATCH APIs
 global.latestLTP = latestLTP;
+global.subscribeSymbol = null; // will be wired after function is declared
+
+// 🔥 STORE REAL OPEN / PREV CLOSE
+global.symbolOpenPrice = {};
+
+// 🔁 RESET OPEN PRICES DAILY
+setInterval(() => {
+  const now = new Date();
+
+  // 9:00 AM IST = Market Open Reset
+  if (now.getHours() === 9 && now.getMinutes() === 0) {
+    global.symbolOpenPrice = {};
+    console.log("🔄 OPEN PRICES RESET FOR NEW SESSION");
+  }
+}, 60 * 1000);
 
 // 🔒 RATE LIMIT STATE (Carry-6.1)
 const rateLimitMap = {};
@@ -346,9 +361,15 @@ function startWebSocket() {
     const symbol = tokenSymbolMap[token];
 
     if (symbol && ltp) {
-      latestLTP[symbol] = ltp;
-      symbolLastSeen[symbol] = Date.now();
-    }
+  latestLTP[symbol] = ltp;
+  symbolLastSeen[symbol] = Date.now();
+
+  // 🔥 Capture first tick as OPEN / PREV CLOSE
+  if (!global.symbolOpenPrice[symbol]) {
+    global.symbolOpenPrice[symbol] = ltp;
+    console.log("🟢 OPEN PRICE SET:", symbol, "=>", ltp);
+  }
+}
   });
 
   ws.on("error", (err) => {
@@ -407,6 +428,9 @@ function subscribeSymbol(symbol) {
 
   subscribedTokens.add(info.token);
 }
+
+// 🔥 MAKE AVAILABLE TO SCANNER & BATCH APIs
+global.subscribeSymbol = subscribeSymbol;
 
 global.subscribeSymbol = subscribeSymbol; // 🔥
 
