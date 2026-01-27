@@ -35,10 +35,16 @@ async function getValidStrikes({
   // --------------------------------
   // HARD VALIDATION
   // --------------------------------
-  if (!index || !(expiryDate instanceof Date)) {
-    console.log("❌ STRIKE SERVICE — INVALID INPUT", { index, expiryDate });
-    return [];
-  }
+  if (!index) return [];
+
+if (typeof expiryDate === "string") {
+  expiryDate = new Date(expiryDate);
+}
+
+if (!(expiryDate instanceof Date) || isNaN(expiryDate)) {
+  console.log("❌ INVALID EXPIRY DATE:", expiryDate);
+  return [];
+}
 
   const strikesSet = new Set();
 
