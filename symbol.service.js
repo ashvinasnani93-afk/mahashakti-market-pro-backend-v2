@@ -94,13 +94,15 @@ function formatOptionSymbol({
   const IDX = index.toUpperCase();
   const OPT_TYPE = type.toUpperCase(); // CE / PE
 
-  const year = d.getFullYear().toString().slice(-2);
+  const year = d.getFullYear().toString().slice(-2); // YY
   const month = MONTH_MAP[d.getMonth()];
   const day = d.getDate().toString().padStart(2, "0");
 
-  // ✅ ANGEL FINAL FORMAT
-  // Example: NIFTY30JAN2524500CE
-  return `${IDX}${day}${month}${year}${strike}${OPT_TYPE}`;
+  const symbol = `${IDX}${day}${month}${year}${strike}${OPT_TYPE}`;
+
+  console.log("🧠 FINAL SYMBOL:", symbol);
+
+  return symbol;
 }
 
 // ===============================
