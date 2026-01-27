@@ -94,7 +94,7 @@ function formatOptionSymbol({
   const IDX = index.toUpperCase();
   const OPT_TYPE = type.toUpperCase(); // CE / PE
 
-  const year = d.getFullYear().toString().slice(-2); // YY
+ const year = d.getFullYear().toString(); // FULL YEAR REQUIRED FOR ANGEL
   const month = MONTH_MAP[d.getMonth()];
   const day = d.getDate().toString().padStart(2, "0");
 
