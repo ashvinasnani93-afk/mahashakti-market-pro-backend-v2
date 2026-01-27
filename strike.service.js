@@ -1,112 +1,176 @@
-// ==========================================
-// STRIKE SERVICE – FINAL (A2.9.1)
+// ================================================
+// STRIKE SERVICE — FINAL (A2.10)
 // ANGEL SOURCE OF TRUTH
-// Extract strikes ONLY if Angel validates
-// ==========================================
+// LIVE ATM RANGE + ANGEL TOKEN VALIDATION
+// ================================================
 
 const { isMonthlyExpiry, formatOptionSymbol } = require("./symbol.service");
-const { getOptionToken } = require("./token.service");
+const { getOptionToken, getSpotLTP } = require("./token.service");
 
-// ===============================
-// EXTRACT STRIKE FROM ANGEL SYMBOL
-// (UTILITY – SAFE, NON-EXECUTING)
-// Examples:
-// NIFTY30JAN2524500CE      -> 24500
-// BANKNIFTY30JAN2559100PE -> 59100
-// ===============================
+// ================================================
+// EXTRACT STRIKE FROM ANGEL SYMBOL (UTILITY SAFE)
+// Example:
+// NIFTY03FEB2625200CE -> 25200
+// BANKNIFTY03FEB2659100PE -> 59100
+// ================================================
 function extractStrikeFromSymbol(symbol, index) {
-  if (!symbol || !index) return null;
-  if (!symbol.startsWith(index)) return null;
+  try {
+    if (!symbol || !index) return null;
+    if (!symbol.startsWith(index)) return null;
 
-  const match = symbol.match(/(\d+)(CE|PE)$/);
-  return match ? Number(match[1]) : null;
+    const match = symbol.match(/(\d+)(CE|PE)$/);
+    return match ? Number(match[1]) : null;
+  } catch {
+    return null;
+  }
 }
 
-// ===============================
-// GET VALID STRIKES (ANGEL VERIFIED)
-// ===============================
+// ================================================
+// GET VALID STRIKES (LIVE + ANGEL VERIFIED)
+// ================================================
 async function getValidStrikes({
-  index,       // NIFTY / BANKNIFTY
-  expiryDate,  // JS Date
+  index,       // "NIFTY" / "BANKNIFTY" / "FINNIFTY"
+  expiryDate  // JS Date
 }) {
-  // -------------------------------
+  // --------------------------------
   // HARD VALIDATION
-  // -------------------------------
+  // --------------------------------
   if (!index || !(expiryDate instanceof Date)) {
+    console.log("❌ STRIKE SERVICE — INVALID INPUT", { index, expiryDate });
     return [];
   }
 
   const strikesSet = new Set();
 
+  // --------------------------------
+  // EXPIRY TYPE DETECTION
+  // --------------------------------
   const expiryType = isMonthlyExpiry(expiryDate)
     ? "MONTHLY"
     : "WEEKLY";
 
- // ================================
-// LIVE ATM RANGE (PRODUCTION SAFE)
-// ================================
+  // --------------------------------
+  // STRIKE STEP BASED ON INDEX
+  // --------------------------------
+  const STEP =
+    index === "BANKNIFTY"
+      ? 100
+      : index === "FINNIFTY"
+      ? 50
+      : 50; // NIFTY
 
-// Get spot price from Angel / internal cache
-const spot = await getOptionToken(index); 
-// NOTE: getOptionToken(index) must return LTP for index symbol
+  // --------------------------------
+  // LIVE SPOT FROM ANGEL
+  // --------------------------------
+  let spot;
+  try {
+    spot = await getSpotLTP(index);
+  } catch (e) {
+    console.log("❌ SPOT LTP FAILED:", index, e);
+    return [];
+  }
 
-const ATM = Math.round(spot / STEP) * STEP;
+  if (!spot || isNaN(spot)) {
+    console.log("❌ INVALID SPOT VALUE:", spot);
+    return [];
+  }
 
-// Scan ±10 strikes around ATM
-const RANGE = {
-  start: ATM - (STEP * 10),
-  end: ATM + (STEP * 10)
-};
+  // --------------------------------
+  // ATM RANGE CALCULATION
+  // --------------------------------
+  const ATM = Math.round(spot / STEP) * STEP;
 
-console.log("🧠 ATM RANGE:", index, "ATM:", ATM, "RANGE:", RANGE);
+  const RANGE = {
+    start: ATM - STEP * 10, // 10 strikes below
+    end: ATM + STEP * 10   // 10 strikes above
+  };
 
+  console.log("🧠 ATM RANGE:", {
+    index,
+    spot,
+    ATM,
+    step: STEP,
+    range: RANGE,
+    expiryType
+  });
+
+  // --------------------------------
+  // ANGEL VALIDATION LOOP
+  // --------------------------------
   for (let strike = RANGE.start; strike <= RANGE.end; strike += STEP) {
+    // -------------------------------
+    // BUILD CE SYMBOL
+    // -------------------------------
     const ceSymbol = formatOptionSymbol({
       index,
       expiryDate,
       strike,
       type: "CE",
-      expiryType,
+      expiryType
     });
 
+    // -------------------------------
+    // BUILD PE SYMBOL
+    // -------------------------------
     const peSymbol = formatOptionSymbol({
       index,
       expiryDate,
       strike,
       type: "PE",
-      expiryType,
+      expiryType
     });
 
-   if (!ceSymbol || !peSymbol) {
-  console.log("⚠️ SYMBOL FORMAT FAIL:", {
-    index,
-    strike,
-    expiryDate,
-    expiryType,
-    ceSymbol,
-    peSymbol
-  });
-}
+    // -------------------------------
+    // FORMAT FAIL SAFE
+    // -------------------------------
+    if (!ceSymbol && !peSymbol) {
+      console.log("⚠️ SYMBOL FORMAT FAIL:", {
+        index,
+        strike,
+        expiryDate,
+        expiryType
+      });
+      continue;
+    }
 
-const ceToken = ceSymbol ? await getOptionToken(ceSymbol) : null;
-const peToken = peSymbol ? await getOptionToken(peSymbol) : null; 
-    
-console.log("TEST CE:", ceSymbol, "=>", ceToken);
-console.log("TEST PE:", peSymbol, "=>", peToken);
+    // -------------------------------
+    // ANGEL TOKEN CHECK
+    // -------------------------------
+    let ceToken = null;
+    let peToken = null;
 
-// ✅ ANGEL IS FINAL AUTHORITY
-if (ceToken || peToken) {
-  strikesSet.add(strike);
-}
+    try {
+      ceToken = ceSymbol ? await getOptionToken(ceSymbol) : null;
+      peToken = peSymbol ? await getOptionToken(peSymbol) : null;
+    } catch (e) {
+      console.log("❌ TOKEN LOOKUP ERROR:", strike, e);
+      continue;
+    }
+
+    // -------------------------------
+    // DEBUG LOGS (LIVE TRACE)
+    // -------------------------------
+    console.log("TEST CE:", ceSymbol, "=>", ceToken);
+    console.log("TEST PE:", peSymbol, "=>", peToken);
+
+    // -------------------------------
+    // ANGEL IS FINAL AUTHORITY
+    // -------------------------------
+    if (ceToken || peToken) {
+      strikesSet.add(strike);
+    }
   }
 
+  // --------------------------------
+  // FINAL SORTED STRIKE LIST
+  // --------------------------------
   return Array.from(strikesSet).sort((a, b) => a - b);
 }
 
-// ===============================
-// EXPORT
-// ===============================
+// ================================================
+// EXPORTS
+// ================================================
 module.exports = {
   getValidStrikes,
-  extractStrikeFromSymbol, // utility only (future safe)
+  extractStrikeFromSymbol // utility only (future safe)
 };
