@@ -71,7 +71,10 @@ async function getValidStrikes({
     if (!ceSymbol && !peSymbol) continue;
 
 const ceToken = ceSymbol ? await getOptionToken(ceSymbol) : null;
-const peToken = peSymbol ? await getOptionToken(peSymbol) : null;
+const peToken = peSymbol ? await getOptionToken(peSymbol) : null; 
+    
+console.log("TEST CE:", ceSymbol, "=>", ceToken);
+console.log("TEST PE:", peSymbol, "=>", peToken);
 
 // ✅ ANGEL IS FINAL AUTHORITY
 if (ceToken || peToken) {
