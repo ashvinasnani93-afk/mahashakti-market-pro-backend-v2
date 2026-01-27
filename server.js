@@ -19,6 +19,7 @@ const { getOptionsContextApi } = require("./services/options/optionsContext.api"
 
 // 🆕 OPTIONS FINAL API (PHASE-4)
 const { getOptions } = require("./services/options.api");
+const { getOptionExpiries } = require("./services/options.expiries");
 
 // ✅ INDEX & COMMODITY APIs (AUDITED – JUST WIRED)
 const { getIndexConfigAPI } = require("./services/index.api");
@@ -45,6 +46,8 @@ app.use(cors());
 app.use(express.json());
 
 app.use("/api", signalRoutes);
+
+app.get("/options/expiries", getOptionExpiries);
 
 // ==========================================
 // BASIC ROUTES
