@@ -25,7 +25,7 @@ function extractStrikeFromSymbol(symbol, index) {
 // ===============================
 // GET VALID STRIKES (ANGEL VERIFIED)
 // ===============================
-function getValidStrikes({
+async function getValidStrikes({
   index,       // NIFTY / BANKNIFTY
   expiryDate,  // JS Date
 }) {
@@ -70,13 +70,13 @@ function getValidStrikes({
 
     if (!ceSymbol && !peSymbol) continue;
 
-    const ceToken = ceSymbol ? getOptionToken(ceSymbol) : null;
-    const peToken = peSymbol ? getOptionToken(peSymbol) : null;
+const ceToken = ceSymbol ? await getOptionToken(ceSymbol) : null;
+const peToken = peSymbol ? await getOptionToken(peSymbol) : null;
 
-    // ✅ ANGEL IS FINAL AUTHORITY
-    if (ceToken || peToken) {
-      strikesSet.add(strike);
-    }
+// ✅ ANGEL IS FINAL AUTHORITY
+if (ceToken || peToken) {
+  strikesSet.add(strike);
+}
   }
 
   return Array.from(strikesSet).sort((a, b) => a - b);
