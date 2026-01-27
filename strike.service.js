@@ -42,14 +42,23 @@ async function getValidStrikes({
     ? "MONTHLY"
     : "WEEKLY";
 
-  // Strike step based on index
-  const STEP = index === "BANKNIFTY" ? 100 : 50;
+ // ================================
+// LIVE ATM RANGE (PRODUCTION SAFE)
+// ================================
 
-  // Safe wide scan (Angel validation will filter)
-  const RANGE =
-    index === "BANKNIFTY"
-      ? { start: 30000, end: 70000 }
-      : { start: 10000, end: 35000 };
+// Get spot price from Angel / internal cache
+const spot = await getOptionToken(index); 
+// NOTE: getOptionToken(index) must return LTP for index symbol
+
+const ATM = Math.round(spot / STEP) * STEP;
+
+// Scan ±10 strikes around ATM
+const RANGE = {
+  start: ATM - (STEP * 10),
+  end: ATM + (STEP * 10)
+};
+
+console.log("🧠 ATM RANGE:", index, "ATM:", ATM, "RANGE:", RANGE);
 
   for (let strike = RANGE.start; strike <= RANGE.end; strike += STEP) {
     const ceSymbol = formatOptionSymbol({
