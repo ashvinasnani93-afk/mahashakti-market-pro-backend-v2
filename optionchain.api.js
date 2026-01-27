@@ -39,10 +39,10 @@ async function getOptionChain(req, res) {
     // -------------------------------
     // STRIKES (ANGEL – SOURCE OF TRUTH)
     // -------------------------------
-    const strikes = getValidStrikes({
-      index: INDEX,
-      expiryDate,
-    });
+   const strikes = await getValidStrikes({
+  index: INDEX,
+  expiryDate
+});
 
     if (!Array.isArray(strikes) || strikes.length === 0) {
       return res.json({
