@@ -34,6 +34,9 @@ const institutionalFlowApi = require("./services/institutionalFlow.api");
 // 🆕🆕 SECTOR PARTICIPATION API (CONTEXT ONLY)
 const sectorParticipationApi = require("./services/sectorParticipation.api");
 
+// 🔥 BATCH SIGNALS API
+const batchSignalsApi = require("./services/signals.batch.api");
+
 // 🔥 MOVERS SCANNER API (FAST MOVERS)
 const moversApi = require("./services/scanner/movers.api");
 
@@ -131,6 +134,9 @@ app.use("/scanner", momentumScannerApi);
 // 🔥 MOVERS SCANNER (15-20% FAST MOVERS)
 app.use("/scanner", moversApi);
 
+// 🔥 BATCH SIGNALS ROUTE
+app.use("/signals", batchSignalsApi);
+
 // 🆕 INSTITUTIONAL FLOW (CONTEXT ONLY)
 app.use("/institutional", institutionalFlowApi);
 
@@ -152,6 +158,8 @@ let tokenSymbolMap = {};
 let subscribedTokens = new Set();
 let latestLTP = {};
 let symbolLastSeen = {}; // SINGLE SOURCE (locked)
+// 🔥 EXPOSE FOR BATCH / SCANNER APIS
+global.latestLTP = latestLTP;
 
 // 🔒 RATE LIMIT STATE (Carry-6.1)
 const rateLimitMap = {};
