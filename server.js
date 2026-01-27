@@ -34,6 +34,9 @@ const institutionalFlowApi = require("./services/institutionalFlow.api");
 // 🆕🆕 SECTOR PARTICIPATION API (CONTEXT ONLY)
 const sectorParticipationApi = require("./services/sectorParticipation.api");
 
+// 🔥 MOVERS SCANNER API (FAST MOVERS)
+const moversApi = require("./services/scanner/movers.api");
+
 const { loadOptionSymbolMaster } = require("./token.service");
 
 // 🔥 ANGEL ENGINE BOOT
@@ -124,6 +127,9 @@ app.post("/commodity", getCommodity);
 
 // 🆕 MOMENTUM SCANNER (NO SIGNAL)
 app.use("/scanner", momentumScannerApi);
+
+// 🔥 MOVERS SCANNER (15-20% FAST MOVERS)
+app.use("/scanner", moversApi);
 
 // 🆕 INSTITUTIONAL FLOW (CONTEXT ONLY)
 app.use("/institutional", institutionalFlowApi);
