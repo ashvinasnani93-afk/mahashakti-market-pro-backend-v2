@@ -1,3 +1,6 @@
+const express = require("express");
+const router = express.Router();
+
 // ==========================================
 // OPTIONS API (PHASE-4 | STEP-2C FINAL)
 // Single Entry Point for Options Module
@@ -11,7 +14,7 @@ const { decideOptionTrade } = require("./options/optionDecision.service.js");
 // ==========================================
 // POST /options
 // ==========================================
-function getOptions(req, res) {
+router.post("/", async (req, res) => {
   try {
     const body = req.body;
 
@@ -84,6 +87,4 @@ function getOptions(req, res) {
 // ==========================================
 // EXPORT
 // ==========================================
-module.exports = {
-  getOptions,
-};
+router.post("/", async (req, res) => {
