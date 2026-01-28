@@ -55,6 +55,9 @@ app.use("/api", signalRoutes);
 
 app.get("/options/expiries", getOptionExpiries);
 
+const optionsApi = require("./routes/options.api");
+app.use("/options", optionsApi);
+
 // ==========================================
 // BASIC ROUTES
 // ==========================================
