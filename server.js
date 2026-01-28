@@ -505,6 +505,9 @@ app.listen(PORT, async () => {
     await loadSymbolMaster();
     await loadOptionSymbolMaster();
 
+    const { startAngelEngine } = require("./src.angelEngine");
+startAngelEngine();
+
     // 🆕 ADD: non-blocking login loop
     startAngelLoginLoop();
   } catch (e) {
