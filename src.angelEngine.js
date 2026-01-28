@@ -1,17 +1,19 @@
-// ===============================
-// ANGEL REAL DATA ENGINE (BASE)
+// ==========================================
+// ANGEL LIVE DATA ENGINE (PRODUCTION)
 // MAHASHAKTI MARKET PRO
-// ===============================
+// ==========================================
 
-// SYSTEM STATE FLAGS
+const { connectAngelSocket, subscribeTokens } = require("./services/angel/angelSocket");
+const { fetchOptionTokens } = require("./services/angel/angelTokens");
+
 let wsConnected = false;
 let systemReady = false;
 
-// LTP STORE
-let latestLtpStore = {};
+// LIVE LTP STORE
+const latestLtpStore = {};
 
 /**
- * Update LTP from real feed (future use: WebSocket)
+ * Internal update hook
  */
 function updateLtp(symbol, ltp) {
   latestLtpStore[symbol] = {
@@ -21,38 +23,39 @@ function updateLtp(symbol, ltp) {
 }
 
 /**
- * Get latest LTP (used by API)
+ * Get latest LTP (used by APIs)
  */
 function getLtp(symbol) {
   return latestLtpStore[symbol] || null;
 }
 
 /**
- * TEMP: Demo real-like update (every 2 sec)
- * This will be REPLACED by Angel WebSocket
- */
-function startMockFeed() {
-  console.log("📡 MOCK FEED STARTED");
-
-  setInterval(() => {
-    updateLtp("NIFTY", 25900 + Math.floor(Math.random() * 100));
-    updateLtp("BANKNIFTY", 56000 + Math.floor(Math.random() * 200));
-  }, 2000);
-}
-
-/**
  * MAIN ENGINE BOOT
  */
-function startAngelEngine() {
-  console.log("🚀 Angel Engine Booting...");
+async function startAngelEngine() {
+  console.log("🚀 Angel LIVE Engine Booting...");
 
-  startMockFeed();
+  try {
+    const tokens = await fetchOptionTokens();
 
-  wsConnected = true;
-  systemReady = true;
+    connectAngelSocket((tick) => {
+      if (!tick || !tick.token) return;
 
-  console.log("🟢 MOCK WebSocket CONNECTED");
-  console.log("🧠 SYSTEM STATE: READY");
+      updateLtp(tick.token, tick.ltp);
+    });
+
+    subscribeTokens(tokens);
+
+    wsConnected = true;
+    systemReady = true;
+
+    console.log("🟢 LIVE WebSocket CONNECTED");
+    console.log("🧠 SYSTEM STATE: READY");
+  } catch (err) {
+    console.error("❌ Angel Engine Boot Failed:", err.message);
+    wsConnected = false;
+    systemReady = false;
+  }
 }
 
 /**
@@ -67,7 +70,6 @@ function isWsConnected() {
 }
 
 module.exports = {
-  startMockFeed,
   startAngelEngine,
   getLtp,
   isSystemReady,
