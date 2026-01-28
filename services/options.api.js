@@ -84,4 +84,53 @@ router.post("/options", async (req, res) => {
   }
 });
 
+// ==========================================
+// GET /options/chain
+// OPTION CHAIN DATA FEED (UI ONLY)
+// CONTEXT-ONLY | NO EXECUTION
+// ==========================================
+router.get("/chain", async (req, res) => {
+  try {
+    const { symbol, expiry } = req.query;
+
+    if (!symbol || !expiry) {
+      return res.json({
+        status: false,
+        message: "symbol and expiry required",
+      });
+    }
+
+    // Pull context from master (same safety layer)
+    const context = getOptionsContext({
+      symbol,
+      expiry,
+      tradeType: "INTRADAY",
+    });
+
+    if (!context || !context.chain) {
+      return res.json({
+        status: true,
+        symbol,
+        expiry,
+        chain: [],
+      });
+    }
+
+    return res.json({
+      status: true,
+      symbol,
+      expiry,
+      chain: context.chain,
+    });
+
+  } catch (e) {
+    console.error("❌ Option Chain Error:", e.message);
+
+    return res.json({
+      status: false,
+      message: "Option chain load failed",
+    });
+  }
+});
+
 module.exports = router;
