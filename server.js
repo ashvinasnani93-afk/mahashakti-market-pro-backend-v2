@@ -121,9 +121,6 @@ if (!ANGEL_TOTP_SECRET) throw new Error("ANGEL_TOTP_SECRET missing");
 app.post("/signal", getSignal);
 app.get("/signal", getSignal); // 🔥 ye line add karo
 
-// OPTIONS
-app.post("/options/context", getOptionsContextApi);
-app.post("/options", getOptions);
 
 // INDEX CONFIG
 app.post("/index/config", getIndexConfigAPI);
