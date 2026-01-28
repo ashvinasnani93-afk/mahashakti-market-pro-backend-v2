@@ -14,7 +14,7 @@ const { decideOptionTrade } = require("./options/optionDecision.service.js");
 // ==========================================
 // POST /options
 // ==========================================
-router.post("/", async (req, res) => {
+router.post("/options", async (req, res) => {
   try {
     const body = req.body;
 
@@ -43,7 +43,7 @@ router.post("/", async (req, res) => {
       symbol: body.symbol,
       spotPrice: body.spotPrice,
       expiry: body.expiry,         // WEEKLY / MONTHLY
-      tradeType: body.tradeType,   // INTRADAY / POSITIONAL
+      tradeType: body.tradeType,  // INTRADAY / POSITIONAL
     });
 
     if (optionsContext.status !== "READY") {
@@ -82,8 +82,6 @@ router.post("/", async (req, res) => {
       message: "Options processing error",
     });
   }
-}
-
-router.post("/options", getOptions);
+});
 
 module.exports = router;
