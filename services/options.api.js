@@ -84,7 +84,6 @@ router.post("/", async (req, res) => {
   }
 }
 
-// ==========================================
-// EXPORT
-// ==========================================
-router.post("/", async (req, res) => {
+router.post("/options", getOptions);
+
+module.exports = router;
