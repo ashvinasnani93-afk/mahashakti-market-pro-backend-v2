@@ -20,6 +20,25 @@ const MONTH_MAP = {
   11: "DEC",
 };
 
+// ==============================
+// GET ALL SYMBOLS (ENGINE USE)
+// ==============================
+function getAllSymbols() {
+  try {
+    // Stock symbol master already loaded in server.js
+    // Global fallback (safe)
+    if (global.STOCK_SYMBOLS && Array.isArray(global.STOCK_SYMBOLS)) {
+      return global.STOCK_SYMBOLS;
+    }
+
+    console.log("⚠️ Symbol Master not ready yet");
+    return [];
+  } catch (e) {
+    console.error("❌ getAllSymbols failed:", e.message);
+    return [];
+  }
+}
+
 // ===============================
 // GET LAST THURSDAY OF MONTH
 // ===============================
@@ -112,4 +131,5 @@ module.exports = {
   formatOptionSymbol,
   isMonthlyExpiry,
   normalizeExpiryDate,
+  getAllSymbols,   // ✅ ADD THIS
 };
