@@ -5,6 +5,7 @@
 
 const { connectAngelSocket, subscribeTokens } = require("./services/angel/angelSocket");
 const { fetchOptionTokens } = require("./services/angel/angelTokens");
+const { getAllSymbols } = require("./symbol.service");
 
 let wsConnected = false;
 let systemReady = false;
@@ -34,6 +35,13 @@ function getLtp(symbol) {
  */
 async function startAngelEngine() {
   console.log("🚀 Angel LIVE Engine Booting...");
+
+  const symbols = getAllSymbols();
+
+  if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
+    console.log("⏳ Angel Engine waiting: Symbol Master not ready yet");
+    return;
+  }
 
   try {
     const tokens = await fetchOptionTokens();
