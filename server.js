@@ -33,12 +33,7 @@ const moversApi = require("./services/scanner/movers.api");
 
 const { loadOptionSymbolMaster } = require("./token.service");
 
-// 🔥 ANGEL ENGINE STATUS BRIDGE
-const {
-  startAngelEngine,
-  isSystemReady,
-  isWsConnected
-} = require("./src.angelEngine");
+
 
 // ==========================================
 // APP BOOT
@@ -80,22 +75,15 @@ app.get("/", (req, res) => {
 // SYSTEM STATUS (REAL ENGINE STATE)
 // ==========================================
 app.get("/api/status", (req, res) => {
-  try {
-    return res.json({
-      status: true,
-      ready: isSystemReady(),
-      ws: isWsConnected(),
-      service: "Mahashakti Market Pro",
-      timestamp: new Date().toISOString()
-    });
-  } catch (e) {
-    return res.json({
-      status: false,
-      ready: false,
-      ws: false,
-      error: e.message
-    });
-  }
+  return res.json({
+    status: true,
+    ready: systemReady,
+    ws: wsConnected,
+    angel: angelLoggedIn,
+    subscribedTokens: subscribedTokens.size,
+    service: "Mahashakti Market Pro",
+    timestamp: new Date().toISOString()
+  });
 });
 
 // ==========================================
