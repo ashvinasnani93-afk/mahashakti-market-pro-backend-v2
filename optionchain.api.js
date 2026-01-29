@@ -20,15 +20,6 @@ const {
 } = require("./services/optionsMaster.service");
 
 // -----------------------------
-// OPTION CONTEXT + EXPIRY ENGINE
-// -----------------------------
-const {
-  getOptionChainContext,
-} = require("./services/optionChainContext.service");
-
-const { getExpiries } = require("./services/options.expiries");
-
-// -----------------------------
 // HELPERS
 // -----------------------------
 function isSameDate(d1, d2) {
@@ -128,9 +119,6 @@ function buildOptionChain({ symbol, expiryDate, master, spotPrice }) {
       peLtp = peData ? peData.ltp : null;
     }
 
-    // -----------------------------
-    // CONTEXT LOGIC (LOCKED)
-    // -----------------------------
     const ceBuyerBias = ceLtp && peLtp ? ceLtp > peLtp : false;
     const peBuyerBias = ceLtp && peLtp ? peLtp > ceLtp : false;
 
@@ -176,14 +164,6 @@ function buildOptionChain({ symbol, expiryDate, master, spotPrice }) {
 // ROUTE
 // Mounted at: /angel/option-chain
 // -----------------------------
-// FINAL URL:
-// /angel/option-chain?index=NIFTY
-// /angel/option-chain?index=BANKNIFTY
-// /angel/option-chain?index=FINNIFTY
-// /angel/option-chain?stock=RELIANCE
-// expiry OPTIONAL (auto-detected)
-// spot OPTIONAL (auto-detected via LTP)
-// -----------------------------
 router.get("/", async (req, res) => {
   try {
     if (!isSystemReady()) {
@@ -206,7 +186,7 @@ router.get("/", async (req, res) => {
     const isIndex = ["NIFTY", "BANKNIFTY", "FINNIFTY"].includes(symbol);
 
     // -----------------------------
-    // LOAD ANGEL MASTER
+    // LOAD ANGEL MASTER (ASYNC SAFE)
     // -----------------------------
     const master = await getAllOptionSymbols();
 
@@ -289,5 +269,4 @@ router.get("/", async (req, res) => {
   }
 });
 
-// -----------------------------
 module.exports = router;
