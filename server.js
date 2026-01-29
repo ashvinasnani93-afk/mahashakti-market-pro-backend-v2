@@ -9,6 +9,7 @@ const WebSocket = require("ws");
 const https = require("https");
 const { SmartAPI } = require("smartapi-javascript");
 const { authenticator } = require("otplib");
+const { setAllSymbols } = require("./symbol.service");
 
 // ==========================================
 // ANGEL ENGINE (SINGLE SOURCE OF TRUTH)
@@ -213,11 +214,14 @@ function loadSymbolMaster() {
               }
             });
 
-            console.log(
-              "✅ STOCK Symbols Loaded:",
-              Object.keys(symbolTokenMap).length
-            );
-            resolve();
+           const symbols = Object.keys(symbolTokenMap);
+
+console.log("✅ STOCK Symbols Loaded:", symbols.length);
+
+// 🔥 SEND TO ANGEL ENGINE
+setAllSymbols(symbols);
+
+resolve();
           });
         }
       )
