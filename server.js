@@ -460,12 +460,18 @@ app.listen(PORT, async () => {
     await loadOptionSymbolMaster();
 
     startAngelLoginLoop();
+
+    // 🔥 START LIVE ENGINE AFTER LOGIN BOOT
+    setTimeout(() => {
+      console.log("🧠 Booting Angel LIVE Engine...");
+      startAngelEngine();
+    }, 8000);
+
   } catch (e) {
     console.error("❌ Startup failed:", e);
     process.exit(1);
   }
 });
-
 // ==========================================
 // SAFE SHUTDOWN
 // ==========================================
