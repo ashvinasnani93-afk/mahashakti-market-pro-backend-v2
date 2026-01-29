@@ -38,8 +38,6 @@ const { setAllSymbols } = require("./symbol.service");
 const { startAngelEngine, isSystemReady, isWsConnected } =
   require("./src.angelEngine.js");
 
-const { setSymbolMaster } =
-  require("./services/angel/angelTokens.js");
 
 // ==========================================
 // APP BOOT
@@ -473,8 +471,6 @@ app.listen(PORT, async () => {
 setAllSymbols(Object.keys(symbolTokenMap));
 
 await loadOptionSymbolMaster();
-    
-setSymbolMaster(global.OPTION_SYMBOLS);
     
 startAngelLoginLoop();
 
