@@ -37,7 +37,7 @@ const { loadOptionSymbolMaster } = require("./token.service");
 const { startAngelEngine, isSystemReady, isWsConnected } =
   require("./src.angelEngine.js");
 
-const { setSmartApi } = require("./src/services/angelTokens.js");
+const { setSmartApi } = require("./services/angel/angelTokens.js");
 
 // ==========================================
 // APP BOOT
