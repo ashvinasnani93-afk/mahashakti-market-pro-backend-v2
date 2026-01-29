@@ -247,8 +247,11 @@ async function angelLogin() {
       otp
     );
 
-    smartApi.setAccessToken(session.data.jwtToken);
-    feedToken = session.data.feedToken;
+   smartApi.setAccessToken(session.data.jwtToken);
+feedToken = session.data.feedToken;
+
+// 🔗 EXPORT TOKEN TO ENV FOR ANGEL TOKEN SERVICE
+process.env.ANGEL_ACCESS_TOKEN = session.data.jwtToken;
 
     angelLoggedIn = true;
     console.log("✅ Angel Login SUCCESS");
