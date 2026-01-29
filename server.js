@@ -66,6 +66,28 @@ app.get("/", (req, res) => {
   res.send("Mahashakti Market Pro API is LIVE 🚀");
 });
 
+// =============================
+// SYSTEM STATUS ENDPOINT
+// =============================
+app.get("/api/status", (req, res) => {
+  try {
+    return res.json({
+      status: true,
+      ready: isSystemReady(),
+      ws: isWsConnected(),
+      service: "Mahashakti Market Pro",
+      timestamp: new Date().toISOString()
+    });
+  } catch (e) {
+    return res.json({
+      status: false,
+      ready: false,
+      ws: false,
+      error: e.message
+    });
+  }
+});
+
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
