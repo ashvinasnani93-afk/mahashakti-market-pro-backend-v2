@@ -1,12 +1,12 @@
 // ==========================================
 // MAHASHAKTI MARKET PRO
-// FINAL – ALL STOCKS + OPTIONS LTP (AUDITED)
+// SERVER — LIVE ENGINE WIRED (CARRY-1 FIX)
 // ==========================================
 
 const express = require("express");
 const cors = require("cors");
-const WebSocket = require("ws");
 const https = require("https");
+const WebSocket = require("ws");
 const { SmartAPI } = require("smartapi-javascript");
 const { authenticator } = require("otplib");
 
@@ -16,10 +16,6 @@ const { authenticator } = require("otplib");
 const signalRoutes = require("./routes/signal.routes");
 const { getSignal } = require("./signal.api");
 const optionChainRoutes = require("./optionchain.api");
-
-const { getOptionsContextApi } = require("./services/options/optionsContext.api");
-const { getOptions } = require("./services/options.api");
-const { getOptionExpiries } = require("./services/options.expiries");
 
 const { getIndexConfigAPI } = require("./services/index.api");
 const { getCommodity } = require("./services/commodity.api");
@@ -33,7 +29,12 @@ const moversApi = require("./services/scanner/movers.api");
 
 const { loadOptionSymbolMaster } = require("./token.service");
 
-
+// 🔥 ANGEL ENGINE (DO NOT REMOVE — THIS FIXES CRASH)
+const {
+  isSystemReady,
+  isWsConnected,
+  startAngelEngine
+} = require("./src.angelEngine");
 
 // ==========================================
 // APP BOOT
@@ -46,10 +47,6 @@ app.use(express.json());
 // ROUTE WIRING
 // ==========================================
 app.use("/api", signalRoutes);
-app.get("/options/expiries", getOptionExpiries);
-
-const optionsApi = require("./services/options.api");
-app.use("/options", optionsApi);
 
 // CORE APIs
 app.post("/signal", getSignal);
@@ -63,6 +60,9 @@ app.use("/institutional", institutionalFlowApi);
 app.use("/sector", sectorParticipationApi);
 app.use("/scanner", moversApi);
 app.use("/signals", batchSignalsApi);
+
+// OPTIONS
+app.use("/angel/option-chain", optionChainRoutes);
 
 // ==========================================
 // BASIC ROUTES
@@ -78,8 +78,8 @@ app.get("/api/status", (req, res) => {
   try {
     return res.json({
       status: true,
-      ready: angelLoggedIn && wsConnected,
-      ws: wsConnected,
+      ready: isSystemReady(),
+      ws: isWsConnected(),
       service: "Mahashakti Market Pro",
       timestamp: new Date().toISOString()
     });
@@ -120,7 +120,7 @@ if (!ANGEL_PASSWORD) throw new Error("ANGEL_PASSWORD missing");
 if (!ANGEL_TOTP_SECRET) throw new Error("ANGEL_TOTP_SECRET missing");
 
 // ==========================================
-// GLOBAL STATE (SAFE SINGLE SOURCE)
+// GLOBAL STATE
 // ==========================================
 let smartApi;
 let ws;
@@ -136,11 +136,6 @@ let symbolLastSeen = {};
 global.latestLTP = latestLTP;
 global.subscribeSymbol = null;
 global.symbolOpenPrice = {};
-
-// Runtime flags
-let wsConnected = false;
-let wsStarting = false;
-let angelLoggedIn = false;
 
 // ==========================================
 // RATE LIMIT
@@ -245,145 +240,20 @@ async function angelLogin() {
     smartApi.setAccessToken(session.data.jwtToken);
     feedToken = session.data.feedToken;
 
-    angelLoggedIn = true;
     console.log("✅ Angel Login SUCCESS");
 
-    if (!wsConnected && !wsStarting) {
-      startWebSocket();
-    }
+    // 🔥 BOOT LIVE ENGINE AFTER LOGIN
+    setTimeout(() => {
+      console.log("🚀 Booting Angel LIVE Engine...");
+      startAngelEngine();
+    }, 3000);
   } catch (e) {
-    angelLoggedIn = false;
     console.error("❌ Angel Login Error:", e.message);
     setTimeout(angelLogin, 5000);
   } finally {
     isLoggingIn = false;
   }
 }
-
-// ==========================================
-// HEARTBEAT
-// ==========================================
-let heartbeatTimer = null;
-
-function stopHeartbeat() {
-  if (heartbeatTimer) clearInterval(heartbeatTimer);
-  heartbeatTimer = null;
-}
-
-function startHeartbeat() {
-  stopHeartbeat();
-
-  heartbeatTimer = setInterval(() => {
-    if (ws && wsConnected) {
-      try {
-        ws.ping(); // ✅ REAL WS HEARTBEAT (Angel compatible)
-        console.log("❤️ WS Heartbeat Ping");
-      } catch {
-        console.log("⚠️ WS Heartbeat Failed");
-      }
-    }
-  }, 20000);
-}
-
-// ==========================================
-// WEBSOCKET
-// ==========================================
-function startWebSocket() {
-  if (!feedToken || wsConnected || wsStarting) return;
-
-  wsStarting = true;
-
-  const wsUrl =
-    `wss://smartapisocket.angelone.in/smart-stream` +
-    `?clientCode=${ANGEL_CLIENT_ID}` +
-    `&feedToken=${feedToken}` +
-    `&apiKey=${ANGEL_API_KEY}`;
-
-  ws = new WebSocket(wsUrl);
-
-  ws.on("open", () => {
-    console.log("🟢 WebSocket Connected");
-    wsConnected = true;
-    wsStarting = false;
-    startHeartbeat();
-    subscribedTokens.clear();
-    resubscribeAllSymbols();
-  });
-
-  ws.on("message", (data) => {
-    if (!Buffer.isBuffer(data)) return;
-    if (data.length !== 51) return;
-
-    const ltp = decodeLTP(data);
-    const token = data.toString("utf8", 2, 27).replace(/\0/g, "");
-    const symbol = tokenSymbolMap[token];
-
-    if (symbol && ltp) {
-      latestLTP[symbol] = ltp;
-      symbolLastSeen[symbol] = Date.now();
-
-      if (!global.symbolOpenPrice[symbol]) {
-        global.symbolOpenPrice[symbol] = ltp;
-        console.log("🟢 OPEN PRICE SET:", symbol, "=>", ltp);
-      }
-    }
-  });
-
-  ws.on("error", (err) => {
-    console.error("❌ WebSocket error:", err.message);
-    wsConnected = false;
-    wsStarting = false;
-    stopHeartbeat();
-  });
-
-  ws.on("close", () => {
-    console.log("🔴 WebSocket Disconnected");
-    wsConnected = false;
-    wsStarting = false;
-    stopHeartbeat();
-
-    // 🔁 WS reconnect only (NO RE-LOGIN LOOP)
-    setTimeout(() => {
-      console.log("🔁 Reconnecting WebSocket...");
-      startWebSocket();
-    }, 5000);
-  });
-}
-
-// ==========================================
-// RESUBSCRIBE
-// ==========================================
-function resubscribeAllSymbols() {
-  if (!ws || ws.readyState !== 1) return;
-  Object.keys(latestLTP).forEach((symbol) => {
-    subscribeSymbol(symbol);
-  });
-}
-
-// ==========================================
-// SUBSCRIBE SYMBOL
-// ==========================================
-function subscribeSymbol(symbol) {
-  const info = symbolTokenMap[symbol];
-  if (!info || !ws || ws.readyState !== 1) return;
-  if (subscribedTokens.has(info.token)) return;
-
-  ws.send(
-    JSON.stringify({
-      action: 1,
-      params: {
-        mode: 1,
-        tokenList: [
-          { exchangeType: info.exchangeType, tokens: [info.token] }
-        ]
-      }
-    })
-  );
-
-  subscribedTokens.add(info.token);
-}
-
-global.subscribeSymbol = subscribeSymbol;
 
 // ==========================================
 // CLEANUP IDLE SYMBOLS
@@ -414,7 +284,9 @@ app.get("/angel/ltp", (req, res) => {
     return res.json({ status: false, message: "symbol invalid" });
   }
 
-  subscribeSymbol(symbol);
+  if (global.subscribeSymbol) {
+    global.subscribeSymbol(symbol);
+  }
 
   if (latestLTP[symbol]) {
     return res.json({
@@ -429,25 +301,6 @@ app.get("/angel/ltp", (req, res) => {
 });
 
 // ==========================================
-// OPTION CHAIN
-// ==========================================
-app.use("/angel/option-chain", optionChainRoutes);
-
-// ==========================================
-// LOGIN LOOP
-// ==========================================
-function startAngelLoginLoop() {
-  setTimeout(angelLogin, 2000);
-
-  setInterval(() => {
-    if (!feedToken && !isLoggingIn) {
-      console.log("🔁 Retrying Angel login...");
-      angelLogin();
-    }
-  }, 60000);
-}
-
-// ==========================================
 // SERVER START
 // ==========================================
 const PORT = process.env.PORT || 3000;
@@ -459,19 +312,21 @@ app.listen(PORT, async () => {
     await loadSymbolMaster();
     await loadOptionSymbolMaster();
 
-    startAngelLoginLoop();
+    // 🔁 LOGIN LOOP
+    setTimeout(angelLogin, 2000);
 
-    // 🔥 START LIVE ENGINE AFTER LOGIN BOOT
-    setTimeout(() => {
-      console.log("🧠 Booting Angel LIVE Engine...");
-      startAngelEngine();
-    }, 8000);
-
+    setInterval(() => {
+      if (!feedToken && !isLoggingIn) {
+        console.log("🔁 Retrying Angel login...");
+        angelLogin();
+      }
+    }, 60000);
   } catch (e) {
     console.error("❌ Startup failed:", e);
     process.exit(1);
   }
 });
+
 // ==========================================
 // SAFE SHUTDOWN
 // ==========================================
