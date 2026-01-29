@@ -15,7 +15,7 @@ const { getLtp, isSystemReady } = require("./src.angelEngine");
 // -----------------------------
 // OPTION MASTER (ANGEL SOURCE OF TRUTH)
 // -----------------------------
-const { getAllOptionSymbols } = require("./options.symbolMaster");
+const { getOptionsContext } = require("./services/optionsMaster.service");
 
 // ----------------------------
 // OPTION CONTEXT + EXPIRY ENGINE
