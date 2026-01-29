@@ -78,8 +78,8 @@ app.get("/api/status", (req, res) => {
   try {
     return res.json({
       status: true,
-      ready: isSystemReady(),
-      ws: isWsConnected(),
+      ready: angelLoggedIn && wsConnected,
+      ws: wsConnected,
       service: "Mahashakti Market Pro",
       timestamp: new Date().toISOString()
     });
