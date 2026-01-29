@@ -480,7 +480,7 @@ app.get("/angel/ltp", (req, res) => {
 // ==========================================
 // OPTION CHAIN API
 // ==========================================
-app.use("/option-chain", optionChainRoutes);
+app.use("/angel/option-chain", optionChainRoutes);
 
 // ==========================================
 // 🆕 ADD: SAFE ANGEL LOGIN LOOP (AUDIT CARRY)
