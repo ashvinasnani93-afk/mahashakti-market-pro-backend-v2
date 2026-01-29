@@ -33,7 +33,7 @@ const moversApi = require("./services/scanner/movers.api");
 
 const { loadOptionSymbolMaster } = require("./token.service");
 
-
+const { isSystemReady, isWsConnected, startAngelEngine } = require("./src.angelEngine");
 
 // ==========================================
 // APP BOOT
@@ -75,15 +75,22 @@ app.get("/", (req, res) => {
 // SYSTEM STATUS (REAL ENGINE STATE)
 // ==========================================
 app.get("/api/status", (req, res) => {
-  return res.json({
-    status: true,
-    ready: systemReady,
-    ws: wsConnected,
-    angel: angelLoggedIn,
-    subscribedTokens: subscribedTokens.size,
-    service: "Mahashakti Market Pro",
-    timestamp: new Date().toISOString()
-  });
+  try {
+    return res.json({
+      status: true,
+      ready: isSystemReady(),
+      ws: isWsConnected(),
+      service: "Mahashakti Market Pro",
+      timestamp: new Date().toISOString()
+    });
+  } catch (e) {
+    return res.status(500).json({
+      status: false,
+      ready: false,
+      ws: false,
+      error: e.message
+    });
+  }
 });
 
 // ==========================================
