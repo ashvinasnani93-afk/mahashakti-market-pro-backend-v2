@@ -17,6 +17,12 @@ const { getLtp, isSystemReady } = require("./src.angelEngine");
 // -----------------------------
 const { getAllOptionSymbols } = require("./options.symbolMaster");
 
+// ----------------------------
+// OPTION CONTEXT + EXPIRY ENGINE
+// ----------------------------
+const { getOptionChainContext } = require("./services/optionChainContext.service");
+const { getExpiries } = require("./services/options.expiries");
+
 // -----------------------------
 // HELPERS
 // -----------------------------
