@@ -12,7 +12,7 @@ const { authenticator } = require("otplib");
 
 const signalRoutes = require("./routes/signal.routes");
 const { getSignal } = require("./signal.api");
-const { getOptionChain } = require("./optionchain.api");
+const optionChainRoutes = require("./optionchain.api");
 
 // ✅ OPTIONS CONTEXT API (PHASE-3 START)
 const { getOptionsContextApi } = require("./services/options/optionsContext.api");
@@ -480,7 +480,7 @@ app.get("/angel/ltp", (req, res) => {
 // ==========================================
 // OPTION CHAIN API
 // ==========================================
-app.get("/option-chain", getOptionChain);
+app.use("/option-chain", optionChainRoutes);
 
 // ==========================================
 // 🆕 ADD: SAFE ANGEL LOGIN LOOP (AUDIT CARRY)
