@@ -452,7 +452,6 @@ app.listen(PORT, async () => {
     await loadSymbolMaster();
     await loadOptionSymbolMaster();
 
-    startAngelEngine(); // 🔥 ONE TIME ONLY
     startAngelLoginLoop();
   } catch (e) {
     console.error("❌ Startup failed:", e);
