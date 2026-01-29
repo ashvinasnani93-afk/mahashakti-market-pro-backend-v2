@@ -33,7 +33,7 @@ const moversApi = require("./services/scanner/movers.api");
 
 const { loadOptionSymbolMaster } = require("./token.service");
 
-const { isSystemReady, isWsConnected, startAngelEngine } = require("./src.angelEngine");
+
 
 // ==========================================
 // APP BOOT
