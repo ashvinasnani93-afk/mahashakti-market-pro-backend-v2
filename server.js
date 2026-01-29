@@ -32,6 +32,7 @@ const batchSignalsApi = require("./services/signals.batch.api");
 const moversApi = require("./services/scanner/movers.api");
 
 const { loadOptionSymbolMaster } = require("./token.service");
+const { setAllSymbols } = require("./symbol.service");
 
 // 🔥 LIVE ENGINE + TOKEN LINK
 const { startAngelEngine, isSystemReady, isWsConnected } =
@@ -463,16 +464,19 @@ app.listen(PORT, async () => {
 
   try {
     await loadSymbolMaster();
-    await loadOptionSymbolMaster();
 
-    startAngelLoginLoop();
+// 🔗 LINK SYMBOL MASTER INTO ENGINE
+setAllSymbols(Object.keys(symbolTokenMap));
 
-    // 🔥 START LIVE ENGINE AFTER LOGIN BOOT
-    setTimeout(() => {
-      console.log("🧠 Booting Angel LIVE Engine...");
-      startAngelEngine();
-    }, 8000);
+await loadOptionSymbolMaster();
 
+startAngelLoginLoop();
+
+// 🔥 START LIVE ENGINE AFTER SYMBOLS READY
+setTimeout(() => {
+  console.log("🧠 Booting Angel LIVE Engine...");
+  startAngelEngine();
+}, 5000);
   } catch (e) {
     console.error("❌ Startup failed:", e);
     process.exit(1);
