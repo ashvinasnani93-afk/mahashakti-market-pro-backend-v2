@@ -120,7 +120,6 @@ function startWebSocket(feedToken, clientCode, tokens) {
 
     setTimeout(() => {
       console.log("🔁 Reconnecting Angel Engine...");
-      startAngelEngine();
     }, 5000);
   });
 
