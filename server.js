@@ -1,6 +1,6 @@
 // ==========================================
 // MAHASHAKTI MARKET PRO
-// FINAL – ALL STOCKS + OPTIONS LTP (AUDITED + ENGINE WIRED)
+// FINAL – ALL STOCKS + OPTIONS LTP (AUDITED + ENGINE LINKED)
 // ==========================================
 
 const express = require("express");
@@ -9,16 +9,6 @@ const WebSocket = require("ws");
 const https = require("https");
 const { SmartAPI } = require("smartapi-javascript");
 const { authenticator } = require("otplib");
-const { setAllSymbols } = require("./symbol.service");
-
-// ==========================================
-// ANGEL ENGINE (SINGLE SOURCE OF TRUTH)
-// ==========================================
-const {
-  startAngelEngine,
-  isSystemReady,
-  isWsConnected
-} = require("./src.angelEngine");
 
 // ==========================================
 // ROUTES / APIS
@@ -42,6 +32,15 @@ const batchSignalsApi = require("./services/signals.batch.api");
 const moversApi = require("./services/scanner/movers.api");
 
 const { loadOptionSymbolMaster } = require("./token.service");
+
+// 🔥 LIVE ENGINE + TOKEN LINK
+const {
+  startAngelEngine,
+  isSystemReady,
+  isWsConnected
+} = require("./src/angelEngine");
+
+const { setSmartApi } = require("./src/services/angel/angelTokens");
 
 // ==========================================
 // APP BOOT
@@ -145,6 +144,11 @@ global.latestLTP = latestLTP;
 global.subscribeSymbol = null;
 global.symbolOpenPrice = {};
 
+// Runtime flags
+let wsConnected = false;
+let wsStarting = false;
+let angelLoggedIn = false;
+
 // ==========================================
 // RATE LIMIT
 // ==========================================
@@ -214,19 +218,242 @@ function loadSymbolMaster() {
               }
             });
 
-           const symbols = Object.keys(symbolTokenMap);
-
-console.log("✅ STOCK Symbols Loaded:", symbols.length);
-
-// 🔥 SEND TO ANGEL ENGINE
-setAllSymbols(symbols);
-
-resolve();
+            console.log(
+              "✅ STOCK Symbols Loaded:",
+              Object.keys(symbolTokenMap).length
+            );
+            resolve();
           });
         }
       )
       .on("error", reject);
   });
+}
+
+// ==========================================
+// ANGEL LOGIN
+// ==========================================
+async function angelLogin() {
+  if (isLoggingIn) return;
+  isLoggingIn = true;
+
+  try {
+    console.log("🔐 Angel Login Start");
+
+    smartApi = new SmartAPI({ api_key: ANGEL_API_KEY });
+    const otp = authenticator.generate(ANGEL_TOTP_SECRET);
+
+    const session = await smartApi.generateSession(
+      ANGEL_CLIENT_ID,
+      ANGEL_PASSWORD,
+      otp
+    );
+
+    smartApi.setAccessToken(session.data.jwtToken);
+    feedToken = session.data.feedToken;
+
+    angelLoggedIn = true;
+    console.log("✅ Angel Login SUCCESS");
+
+    // 🔥 LINK SMARTAPI TO TOKEN SERVICE (Carry-2B FIX)
+    setSmartApi(smartApi);
+
+    if (!wsConnected && !wsStarting) {
+      startWebSocket();
+    }
+  } catch (e) {
+    angelLoggedIn = false;
+    console.error("❌ Angel Login Error:", e.message);
+    setTimeout(angelLogin, 5000);
+  } finally {
+    isLoggingIn = false;
+  }
+}
+
+// ==========================================
+// HEARTBEAT
+// ==========================================
+let heartbeatTimer = null;
+
+function stopHeartbeat() {
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
+}
+
+function startHeartbeat() {
+  stopHeartbeat();
+
+  heartbeatTimer = setInterval(() => {
+    if (ws && wsConnected) {
+      try {
+        ws.ping();
+        console.log("❤️ WS Heartbeat Ping");
+      } catch {
+        console.log("⚠️ WS Heartbeat Failed");
+      }
+    }
+  }, 20000);
+}
+
+// ==========================================
+// WEBSOCKET
+// ==========================================
+function startWebSocket() {
+  if (!feedToken || wsConnected || wsStarting) return;
+
+  wsStarting = true;
+
+  const wsUrl =
+    `wss://smartapisocket.angelone.in/smart-stream` +
+    `?clientCode=${ANGEL_CLIENT_ID}` +
+    `&feedToken=${feedToken}` +
+    `&apiKey=${ANGEL_API_KEY}`;
+
+  ws = new WebSocket(wsUrl);
+
+  ws.on("open", () => {
+    console.log("🟢 WebSocket Connected");
+    wsConnected = true;
+    wsStarting = false;
+    startHeartbeat();
+    subscribedTokens.clear();
+    resubscribeAllSymbols();
+  });
+
+  ws.on("message", (data) => {
+    if (!Buffer.isBuffer(data)) return;
+    if (data.length !== 51) return;
+
+    const ltp = decodeLTP(data);
+    const token = data.toString("utf8", 2, 27).replace(/\0/g, "");
+    const symbol = tokenSymbolMap[token];
+
+    if (symbol && ltp) {
+      latestLTP[symbol] = ltp;
+      symbolLastSeen[symbol] = Date.now();
+
+      if (!global.symbolOpenPrice[symbol]) {
+        global.symbolOpenPrice[symbol] = ltp;
+        console.log("🟢 OPEN PRICE SET:", symbol, "=>", ltp);
+      }
+    }
+  });
+
+  ws.on("error", (err) => {
+    console.error("❌ WebSocket error:", err.message);
+    wsConnected = false;
+    wsStarting = false;
+    stopHeartbeat();
+  });
+
+  ws.on("close", () => {
+    console.log("🔴 WebSocket Disconnected");
+    wsConnected = false;
+    wsStarting = false;
+    stopHeartbeat();
+
+    setTimeout(() => {
+      console.log("🔁 Reconnecting WebSocket...");
+      startWebSocket();
+    }, 5000);
+  });
+}
+
+// ==========================================
+// RESUBSCRIBE
+// ==========================================
+function resubscribeAllSymbols() {
+  if (!ws || ws.readyState !== 1) return;
+  Object.keys(latestLTP).forEach((symbol) => {
+    subscribeSymbol(symbol);
+  });
+}
+
+// ==========================================
+// SUBSCRIBE SYMBOL
+// ==========================================
+function subscribeSymbol(symbol) {
+  const info = symbolTokenMap[symbol];
+  if (!info || !ws || ws.readyState !== 1) return;
+  if (subscribedTokens.has(info.token)) return;
+
+  ws.send(
+    JSON.stringify({
+      action: 1,
+      params: {
+        mode: 1,
+        tokenList: [
+          { exchangeType: info.exchangeType, tokens: [info.token] }
+        ]
+      }
+    })
+  );
+
+  subscribedTokens.add(info.token);
+}
+
+global.subscribeSymbol = subscribeSymbol;
+
+// ==========================================
+// CLEANUP IDLE SYMBOLS
+// ==========================================
+setInterval(() => {
+  const now = Date.now();
+  const MAX_IDLE = 2 * 60 * 1000;
+
+  Object.keys(symbolLastSeen).forEach((symbol) => {
+    if (now - symbolLastSeen[symbol] > MAX_IDLE) {
+      const info = symbolTokenMap[symbol];
+      if (info) subscribedTokens.delete(info.token);
+
+      delete latestLTP[symbol];
+      delete symbolLastSeen[symbol];
+
+      console.log("🧹 Removed inactive symbol:", symbol);
+    }
+  });
+}, 120000);
+
+// ==========================================
+// LTP API
+// ==========================================
+app.get("/angel/ltp", (req, res) => {
+  const symbol = req.query.symbol?.toUpperCase();
+  if (!symbol || !symbolTokenMap[symbol]) {
+    return res.json({ status: false, message: "symbol invalid" });
+  }
+
+  subscribeSymbol(symbol);
+
+  if (latestLTP[symbol]) {
+    return res.json({
+      status: true,
+      symbol,
+      ltp: latestLTP[symbol],
+      live: true
+    });
+  }
+
+  res.json({ status: false, message: "LTP not ready yet" });
+});
+
+// ==========================================
+// OPTION CHAIN
+// ==========================================
+app.use("/angel/option-chain", optionChainRoutes);
+
+// ==========================================
+// LOGIN LOOP
+// ==========================================
+function startAngelLoginLoop() {
+  setTimeout(angelLogin, 2000);
+
+  setInterval(() => {
+    if (!feedToken && !isLoggingIn) {
+      console.log("🔁 Retrying Angel login...");
+      angelLogin();
+    }
+  }, 60000);
 }
 
 // ==========================================
@@ -241,11 +468,14 @@ app.listen(PORT, async () => {
     await loadSymbolMaster();
     await loadOptionSymbolMaster();
 
-    // 🔥 BOOT ANGEL ENGINE (SINGLE SOURCE)
+    startAngelLoginLoop();
+
+    // 🔥 START LIVE ENGINE AFTER LOGIN BOOT
     setTimeout(() => {
       console.log("🧠 Booting Angel LIVE Engine...");
       startAngelEngine();
-    }, 5000);
+    }, 8000);
+
   } catch (e) {
     console.error("❌ Startup failed:", e);
     process.exit(1);
