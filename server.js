@@ -1,6 +1,6 @@
 // ==========================================
 // MAHASHAKTI MARKET PRO
-// FINAL – ALL STOCKS + OPTIONS LTP
+// FINAL – ALL STOCKS + OPTIONS LTP (AUDITED)
 // ==========================================
 
 const express = require("express");
@@ -10,65 +10,75 @@ const https = require("https");
 const { SmartAPI } = require("smartapi-javascript");
 const { authenticator } = require("otplib");
 
+// ==========================================
+// ROUTES / APIS
+// ==========================================
 const signalRoutes = require("./routes/signal.routes");
 const { getSignal } = require("./signal.api");
 const optionChainRoutes = require("./optionchain.api");
 
-// ✅ OPTIONS CONTEXT API (PHASE-3 START)
 const { getOptionsContextApi } = require("./services/options/optionsContext.api");
-
-// 🆕 OPTIONS FINAL API (PHASE-4)
 const { getOptions } = require("./services/options.api");
 const { getOptionExpiries } = require("./services/options.expiries");
 
-// ✅ INDEX & COMMODITY APIs (AUDITED – JUST WIRED)
 const { getIndexConfigAPI } = require("./services/index.api");
 const { getCommodity } = require("./services/commodity.api");
 
-// 🆕 MOMENTUM SCANNER API
 const momentumScannerApi = require("./services/momentumScanner.api");
-
-// 🆕 INSTITUTIONAL FLOW API (FII / DII CONTEXT)
 const institutionalFlowApi = require("./services/institutionalFlow.api");
-
-// 🆕🆕 SECTOR PARTICIPATION API (CONTEXT ONLY)
 const sectorParticipationApi = require("./services/sectorParticipation.api");
 
-// 🔥 BATCH SIGNALS API
 const batchSignalsApi = require("./services/signals.batch.api");
-
-// 🔥 MOVERS SCANNER API (FAST MOVERS)
 const moversApi = require("./services/scanner/movers.api");
 
 const { loadOptionSymbolMaster } = require("./token.service");
 
-// 🔥 ANGEL ENGINE BOOT
-const { startAngelEngine, isSystemReady, isWsConnected } = require("./src.angelEngine");
+// 🔥 ANGEL ENGINE STATUS BRIDGE
+const {
+  startAngelEngine,
+  isSystemReady,
+  isWsConnected
+} = require("./src.angelEngine");
 
+// ==========================================
+// APP BOOT
+// ==========================================
 const app = express();
-startAngelEngine();
-
 app.use(cors());
 app.use(express.json());
 
+// ==========================================
+// ROUTE WIRING
+// ==========================================
 app.use("/api", signalRoutes);
-
 app.get("/options/expiries", getOptionExpiries);
 
 const optionsApi = require("./services/options.api");
 app.use("/options", optionsApi);
 
+// CORE APIs
+app.post("/signal", getSignal);
+app.get("/signal", getSignal);
+
+app.post("/index/config", getIndexConfigAPI);
+app.post("/commodity", getCommodity);
+
+app.use("/scanner", momentumScannerApi);
+app.use("/institutional", institutionalFlowApi);
+app.use("/sector", sectorParticipationApi);
+app.use("/scanner", moversApi);
+app.use("/signals", batchSignalsApi);
+
 // ==========================================
 // BASIC ROUTES
 // ==========================================
-
 app.get("/", (req, res) => {
   res.send("Mahashakti Market Pro API is LIVE 🚀");
 });
 
-// =============================
-// SYSTEM STATUS ENDPOINT
-// =============================
+// ==========================================
+// SYSTEM STATUS (REAL ENGINE STATE)
+// ==========================================
 app.get("/api/status", (req, res) => {
   try {
     return res.json({
@@ -88,37 +98,16 @@ app.get("/api/status", (req, res) => {
   }
 });
 
+// ==========================================
+// HEALTH
+// ==========================================
 app.get("/health", (req, res) => {
   res.json({
     status: "ok",
     uptime: process.uptime(),
-    timestamp: Date.now(),
+    timestamp: Date.now()
   });
 });
-
-// 🆕 CARRY 0.5: EXTENDED HEALTH (SYSTEM AWARE)
-app.get("/health/extended", (req, res) => {
-  res.json({
-    server: "running",
-    systemReady,
-    uptime: process.uptime(),
-
-    angel: {
-      loggedIn: angelLoggedIn,
-      feedToken: Boolean(feedToken),
-    },
-
-    websocket: {
-      connected: wsConnected,
-      starting: wsStarting,
-      subscribedTokens: subscribedTokens.size,
-      activeSymbols: Object.keys(latestLTP).length,
-    },
-
-    timestamp: Date.now(),
-  });
-});
-const PORT = process.env.PORT || 3000;
 
 // ==========================================
 // ENV CHECK
@@ -127,7 +116,7 @@ const {
   ANGEL_API_KEY,
   ANGEL_CLIENT_ID,
   ANGEL_PASSWORD,
-  ANGEL_TOTP_SECRET,
+  ANGEL_TOTP_SECRET
 } = process.env;
 
 if (!ANGEL_API_KEY) throw new Error("ANGEL_API_KEY missing");
@@ -136,94 +125,34 @@ if (!ANGEL_PASSWORD) throw new Error("ANGEL_PASSWORD missing");
 if (!ANGEL_TOTP_SECRET) throw new Error("ANGEL_TOTP_SECRET missing");
 
 // ==========================================
-// CORE APIs
+// GLOBAL STATE (SAFE SINGLE SOURCE)
 // ==========================================
-
-// SIGNAL
-app.post("/signal", getSignal);
-app.get("/signal", getSignal); // 🔥 ye line add karo
-
-
-// INDEX CONFIG
-app.post("/index/config", getIndexConfigAPI);
-
-// COMMODITY
-app.post("/commodity", getCommodity);
-
-// 🆕 MOMENTUM SCANNER (NO SIGNAL)
-app.use("/scanner", momentumScannerApi);
-
-// 🆕 INSTITUTIONAL FLOW (CONTEXT ONLY)
-app.use("/institutional", institutionalFlowApi);
-
-// 🆕🆕 SECTOR PARTICIPATION (CONTEXT ONLY)
-app.use("/sector", sectorParticipationApi);
-
-// 🔥 MOVERS SCANNER (15-20% FAST MOVERS)
-app.use("/scanner", moversApi);
-
-// 🔥 BATCH SIGNALS ROUTE
-app.use("/signals", batchSignalsApi);
-
-// ==========================================
-// GLOBAL STATE (CARRY 0.4 – SAFE & SINGLE)
-// ==========================================
-
 let smartApi;
 let ws;
 let feedToken = null;
 let isLoggingIn = false;
 
-// ---- market state ----
 let symbolTokenMap = {};
 let tokenSymbolMap = {};
 let subscribedTokens = new Set();
 let latestLTP = {};
-let symbolLastSeen = {}; // SINGLE SOURCE (locked)
-// 🔥 EXPOSE GLOBALS FOR SCANNER / BATCH APIs
-global.latestLTP = latestLTP;
-global.subscribeSymbol = null; // will be wired after function is declared
+let symbolLastSeen = {};
 
-// 🔥 STORE REAL OPEN / PREV CLOSE
+global.latestLTP = latestLTP;
+global.subscribeSymbol = null;
 global.symbolOpenPrice = {};
 
-// 🔁 RESET OPEN PRICES DAILY
-setInterval(() => {
-  const now = new Date();
+// Runtime flags
+let wsConnected = false;
+let wsStarting = false;
+let angelLoggedIn = false;
 
-  // 9:00 AM IST = Market Open Reset
-  if (now.getHours() === 9 && now.getMinutes() === 0) {
-    global.symbolOpenPrice = {};
-    console.log("🔄 OPEN PRICES RESET FOR NEW SESSION");
-  }
-}, 60 * 1000);
-
-// 🔒 RATE LIMIT STATE (Carry-6.1)
+// ==========================================
+// RATE LIMIT
+// ==========================================
 const rateLimitMap = {};
 
-// ---- runtime flags (Carry 0.4 hardened) ----
-let wsConnected = false;
-let angelLoggedIn = false;
-// ==========================================
-// 🆕 CARRY 0.5 — RUNTIME CONTROLLER
-// ==========================================
-
-let systemReady = false;
-let wsStarting = false;
-
-function markSystemReady() {
-  systemReady = true;
-  console.log("🧠 SYSTEM STATE: READY");
-}
-function markSystemDown(reason) {
-  systemReady = false;
-  console.log("🛑 SYSTEM STATE: DOWN →", reason);
-}
-// ==========================================
-// 🆕 RATE LIMIT CHECK (Carry-6.1)
-// ==========================================
-
-function checkRateLimit(req, limit = 20, windowMs = 60 * 1000) {
+function checkRateLimit(req, limit = 20, windowMs = 60000) {
   const ip =
     req.headers["x-forwarded-for"] ||
     req.socket.remoteAddress ||
@@ -232,31 +161,22 @@ function checkRateLimit(req, limit = 20, windowMs = 60 * 1000) {
   const now = Date.now();
 
   if (!rateLimitMap[ip]) {
-    rateLimitMap[ip] = {
-      count: 1,
-      lastReset: now,
-    };
+    rateLimitMap[ip] = { count: 1, lastReset: now };
     return true;
   }
 
   const entry = rateLimitMap[ip];
 
-  // Reset window
   if (now - entry.lastReset > windowMs) {
     entry.count = 1;
     entry.lastReset = now;
     return true;
   }
 
-  // Increment count
   entry.count += 1;
-
-  if (entry.count > limit) {
-    return false;
-  }
-
-  return true;
+  return entry.count <= limit;
 }
+
 // ==========================================
 // LTP DECODER
 // ==========================================
@@ -267,7 +187,7 @@ function decodeLTP(buffer) {
 }
 
 // ==========================================
-// LOAD STOCK SYMBOL MASTER
+// SYMBOL MASTER
 // ==========================================
 function loadSymbolMaster() {
   return new Promise((resolve, reject) => {
@@ -290,7 +210,7 @@ function loadSymbolMaster() {
 
                 symbolTokenMap[symbol] = {
                   token: item.token,
-                  exchangeType,
+                  exchangeType
                 };
                 tokenSymbolMap[item.token] = symbol;
               }
@@ -309,7 +229,7 @@ function loadSymbolMaster() {
 }
 
 // ==========================================
-// ANGEL LOGIN (CARRY 0.5 SYNCED)
+// ANGEL LOGIN
 // ==========================================
 async function angelLogin() {
   if (isLoggingIn) return;
@@ -333,16 +253,12 @@ async function angelLogin() {
     angelLoggedIn = true;
     console.log("✅ Angel Login SUCCESS");
 
-    // 🆕 CARRY 0.5: start WS only once
     if (!wsConnected && !wsStarting) {
       startWebSocket();
     }
-
-    markSystemReady();
   } catch (e) {
     angelLoggedIn = false;
-    markSystemDown("ANGEL_LOGIN_FAILED");
-    console.error("❌ Angel Login Error:", e);
+    console.error("❌ Angel Login Error:", e.message);
     setTimeout(angelLogin, 5000);
   } finally {
     isLoggingIn = false;
@@ -350,7 +266,32 @@ async function angelLogin() {
 }
 
 // ==========================================
-// WEBSOCKET (CARRY 0.5 SYNCED)
+// HEARTBEAT
+// ==========================================
+let heartbeatTimer = null;
+
+function stopHeartbeat() {
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
+}
+
+function startHeartbeat() {
+  stopHeartbeat();
+
+  heartbeatTimer = setInterval(() => {
+    if (ws && wsConnected) {
+      try {
+        ws.ping(); // ✅ REAL WS HEARTBEAT (Angel compatible)
+        console.log("❤️ WS Heartbeat Ping");
+      } catch {
+        console.log("⚠️ WS Heartbeat Failed");
+      }
+    }
+  }, 20000);
+}
+
+// ==========================================
+// WEBSOCKET
 // ==========================================
 function startWebSocket() {
   if (!feedToken || wsConnected || wsStarting) return;
@@ -369,7 +310,7 @@ function startWebSocket() {
     console.log("🟢 WebSocket Connected");
     wsConnected = true;
     wsStarting = false;
-
+    startHeartbeat();
     subscribedTokens.clear();
     resubscribeAllSymbols();
   });
@@ -383,48 +324,42 @@ function startWebSocket() {
     const symbol = tokenSymbolMap[token];
 
     if (symbol && ltp) {
-  latestLTP[symbol] = ltp;
-  symbolLastSeen[symbol] = Date.now();
+      latestLTP[symbol] = ltp;
+      symbolLastSeen[symbol] = Date.now();
 
-  // 🔥 Capture first tick as OPEN / PREV CLOSE
-  if (!global.symbolOpenPrice[symbol]) {
-    global.symbolOpenPrice[symbol] = ltp;
-    console.log("🟢 OPEN PRICE SET:", symbol, "=>", ltp);
-  }
-}
+      if (!global.symbolOpenPrice[symbol]) {
+        global.symbolOpenPrice[symbol] = ltp;
+        console.log("🟢 OPEN PRICE SET:", symbol, "=>", ltp);
+      }
+    }
   });
 
   ws.on("error", (err) => {
     console.error("❌ WebSocket error:", err.message);
     wsConnected = false;
     wsStarting = false;
-    markSystemDown("WS_ERROR");
+    stopHeartbeat();
   });
 
-ws.on("close", () => {
-  console.log("🔴 WebSocket Disconnected");
+  ws.on("close", () => {
+    console.log("🔴 WebSocket Disconnected");
+    wsConnected = false;
+    wsStarting = false;
+    stopHeartbeat();
 
-  wsConnected = false;
-  wsStarting = false;
-  markSystemDown("WS_CLOSED");
-
-  // 🔥 Force relogin to refresh feedToken
-  angelLoggedIn = false;
-  feedToken = null;
-
-  setTimeout(() => {
-    console.log("🔄 Re-login + WebSocket restart...");
-    angelLogin();
-  }, 5000);
-}); 
+    // 🔁 WS reconnect only (NO RE-LOGIN LOOP)
+    setTimeout(() => {
+      console.log("🔁 Reconnecting WebSocket...");
+      startWebSocket();
+    }, 5000);
+  });
 }
 
 // ==========================================
-// 🆕 ADD: RESUBSCRIBE ALL SYMBOLS (AUDIT CARRY)
+// RESUBSCRIBE
 // ==========================================
 function resubscribeAllSymbols() {
   if (!ws || ws.readyState !== 1) return;
-
   Object.keys(latestLTP).forEach((symbol) => {
     subscribeSymbol(symbol);
   });
@@ -443,28 +378,27 @@ function subscribeSymbol(symbol) {
       action: 1,
       params: {
         mode: 1,
-        tokenList: [{ exchangeType: info.exchangeType, tokens: [info.token] }],
-      },
+        tokenList: [
+          { exchangeType: info.exchangeType, tokens: [info.token] }
+        ]
+      }
     })
   );
 
   subscribedTokens.add(info.token);
 }
 
-// 🔥 MAKE AVAILABLE TO SCANNER & BATCH APIs
 global.subscribeSymbol = subscribeSymbol;
 
-global.subscribeSymbol = subscribeSymbol; // 🔥
-
 // ==========================================
-// 🆕 ADD: IDLE SYMBOL CLEANUP (AUDIT CARRY)
+// CLEANUP IDLE SYMBOLS
 // ==========================================
 setInterval(() => {
   const now = Date.now();
-  const MAX_IDLE_TIME = 2 * 60 * 1000; // 2 minutes
+  const MAX_IDLE = 2 * 60 * 1000;
 
   Object.keys(symbolLastSeen).forEach((symbol) => {
-    if (now - symbolLastSeen[symbol] > MAX_IDLE_TIME) {
+    if (now - symbolLastSeen[symbol] > MAX_IDLE) {
       const info = symbolTokenMap[symbol];
       if (info) subscribedTokens.delete(info.token);
 
@@ -477,7 +411,7 @@ setInterval(() => {
 }, 120000);
 
 // ==========================================
-// STOCK LTP API
+// LTP API
 // ==========================================
 app.get("/angel/ltp", (req, res) => {
   const symbol = req.query.symbol?.toUpperCase();
@@ -492,7 +426,7 @@ app.get("/angel/ltp", (req, res) => {
       status: true,
       symbol,
       ltp: latestLTP[symbol],
-      live: true,
+      live: true
     });
   }
 
@@ -500,18 +434,18 @@ app.get("/angel/ltp", (req, res) => {
 });
 
 // ==========================================
-// OPTION CHAIN API
+// OPTION CHAIN
 // ==========================================
 app.use("/angel/option-chain", optionChainRoutes);
 
 // ==========================================
-// 🆕 ADD: SAFE ANGEL LOGIN LOOP (AUDIT CARRY)
+// LOGIN LOOP
 // ==========================================
 function startAngelLoginLoop() {
   setTimeout(angelLogin, 2000);
 
   setInterval(() => {
-    if (!feedToken) {
+    if (!feedToken && !isLoggingIn) {
       console.log("🔁 Retrying Angel login...");
       angelLogin();
     }
@@ -519,28 +453,28 @@ function startAngelLoginLoop() {
 }
 
 // ==========================================
-// START SERVER
+// SERVER START
 // ==========================================
+const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, async () => {
   console.log("🚀 Server running on port", PORT);
+
   try {
     await loadSymbolMaster();
     await loadOptionSymbolMaster();
 
-    const { startAngelEngine } = require("./src.angelEngine");
-startAngelEngine();
-
-    // 🆕 ADD: non-blocking login loop
+    startAngelEngine(); // 🔥 ONE TIME ONLY
     startAngelLoginLoop();
   } catch (e) {
     console.error("❌ Startup failed:", e);
     process.exit(1);
   }
 });
-// ==========================================
-// 🆕 CARRY 0.2 — SAFE SHUTDOWN HANDLING
-// ==========================================
 
+// ==========================================
+// SAFE SHUTDOWN
+// ==========================================
 function gracefulShutdown(signal) {
   console.log(`🛑 ${signal} received. Shutting down safely...`);
 
@@ -559,11 +493,9 @@ function gracefulShutdown(signal) {
   }, 1000);
 }
 
-// Render / Linux signals
 process.on("SIGTERM", gracefulShutdown);
 process.on("SIGINT", gracefulShutdown);
 
-// Unexpected crash safety
 process.on("uncaughtException", (err) => {
   console.error("🔥 Uncaught Exception:", err);
   gracefulShutdown("uncaughtException");
@@ -573,16 +505,15 @@ process.on("unhandledRejection", (reason) => {
   console.error("🔥 Unhandled Rejection:", reason);
   gracefulShutdown("unhandledRejection");
 });
-// ==========================================
-// 🆕 RATE LIMIT CLEANUP (Carry-6.1.4)
-// ==========================================
 
+// ==========================================
+// RATE LIMIT CLEANUP
+// ==========================================
 setInterval(() => {
   const now = Date.now();
-
   for (const ip in rateLimitMap) {
     if (now - rateLimitMap[ip].lastReset > 5 * 60 * 1000) {
       delete rateLimitMap[ip];
     }
   }
-}, 60 * 1000);
+}, 60000);
