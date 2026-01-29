@@ -10,17 +10,22 @@ const router = express.Router();
 // -----------------------------
 // ANGEL ENGINE
 // -----------------------------
-const { getLtp, isSystemReady } = require("./src.angelEngine");
+const { getLtp, isSystemReady } = require("./src/angelEngine");
 
 // -----------------------------
 // OPTION MASTER (ANGEL SOURCE OF TRUTH)
 // -----------------------------
-const { getOptionsContext } = require("./services/optionsMaster.service");
+const {
+  getAllOptionSymbols,
+} = require("./services/optionsMaster.service");
 
-// ----------------------------
+// -----------------------------
 // OPTION CONTEXT + EXPIRY ENGINE
-// ----------------------------
-const { getOptionChainContext } = require("./services/optionChainContext.service");
+// -----------------------------
+const {
+  getOptionChainContext,
+} = require("./services/optionChainContext.service");
+
 const { getExpiries } = require("./services/options.expiries");
 
 // -----------------------------
@@ -56,6 +61,7 @@ function getAvailableExpiries(master, symbol) {
 
   master.forEach((opt) => {
     if (!opt || !opt.name || !opt.expiry) return;
+
     if (opt.name.toUpperCase() === symbol.toUpperCase()) {
       const d = new Date(opt.expiry);
       if (!isNaN(d.getTime())) {
@@ -104,7 +110,6 @@ function buildOptionChain({ symbol, expiryDate, master, spotPrice }) {
     .sort((a, b) => a - b);
 
   const atmStrike = getATMStrike(strikes, spotPrice);
-
   const chain = {};
 
   strikes.forEach((strike) => {
@@ -169,14 +174,17 @@ function buildOptionChain({ symbol, expiryDate, master, spotPrice }) {
 
 // -----------------------------
 // ROUTE
+// Mounted at: /angel/option-chain
 // -----------------------------
-// /options/chain?index=NIFTY
-// /options/chain?index=BANKNIFTY
-// /options/chain?index=FINNIFTY
-// /options/chain?stock=RELIANCE
+// FINAL URL:
+// /angel/option-chain?index=NIFTY
+// /angel/option-chain?index=BANKNIFTY
+// /angel/option-chain?index=FINNIFTY
+// /angel/option-chain?stock=RELIANCE
 // expiry OPTIONAL (auto-detected)
 // spot OPTIONAL (auto-detected via LTP)
-router.get("/options/chain", (req, res) => {
+// -----------------------------
+router.get("/", async (req, res) => {
   try {
     if (!isSystemReady()) {
       return res.json({
@@ -200,7 +208,7 @@ router.get("/options/chain", (req, res) => {
     // -----------------------------
     // LOAD ANGEL MASTER
     // -----------------------------
-    const master = getAllOptionSymbols();
+    const master = await getAllOptionSymbols();
 
     if (!Array.isArray(master) || !master.length) {
       return res.json({
