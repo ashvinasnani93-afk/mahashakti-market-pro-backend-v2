@@ -45,10 +45,13 @@ function setOptionSymbolMaster(map) {
 // ==============================
 function getAllSymbols() {
   try {
-    const optionKeys = Object.keys(optionStore || {});
+    if (optionStore && typeof optionStore === "object") {
+      const tokens = Object.values(optionStore);
 
-    if (optionKeys.length > 0) {
-      return optionKeys;
+      if (Array.isArray(tokens) && tokens.length > 0) {
+        console.log("📤 SYMBOL SERVICE: Returning OPTION TOKENS:", tokens.length);
+        return tokens;
+      }
     }
 
     if (!Array.isArray(symbolStore) || symbolStore.length === 0) {
@@ -56,13 +59,13 @@ function getAllSymbols() {
       return [];
     }
 
+    console.log("📤 SYMBOL SERVICE: Returning STOCK SYMBOLS:", symbolStore.length);
     return symbolStore;
   } catch (e) {
     console.error("❌ getAllSymbols failed:", e.message);
     return [];
   }
 }
-
 module.exports = {
   setAllSymbols,
   setOptionSymbolMaster,
