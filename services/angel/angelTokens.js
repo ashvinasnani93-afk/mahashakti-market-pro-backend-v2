@@ -42,7 +42,7 @@ async function fetchOptionTokens(optionSymbols = []) {
     if (!optionSymbols.length) {  
       console.log("📥 No symbols passed — pulling OPTION symbols from Token Master");  
         
-      const { getAllOptionSymbols } = require("../services/optionsMaster.service");  
+     const { getAllOptionSymbols } = require("../optionsMaster.service");
       const optionMaster = await getAllOptionSymbols();  
         
       if (!optionMaster || !optionMaster.length) {  
