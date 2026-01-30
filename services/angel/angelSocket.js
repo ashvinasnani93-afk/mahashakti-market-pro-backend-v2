@@ -2,50 +2,52 @@ const WebSocket = require("ws");
 
 let ws = null;
 let tickHandler = null;
-let isConnected = false;
 
-// ==========================================
-// CONNECT ANGEL SMART SOCKET (REAL PROTOCOL)
-// ==========================================
-function connectAngelSocket({ clientCode, feedToken, apiKey }, onTick) {
-  if (!clientCode || !feedToken || !apiKey) {
-    throw new Error("Angel socket credentials missing");
-  }
+const WS_URL = "wss://smartapis.angelone.in/smart-stream";
 
+// ===============================
+// CONNECT + AUTH FLOW
+// ===============================
+function connectAngelSocket(onTick) {
   tickHandler = onTick;
 
-  const wsUrl =
-    `wss://smartapisocket.angelone.in/smart-stream` +
-    `?clientCode=${clientCode}` +
-    `&feedToken=${feedToken}` +
-    `&apiKey=${apiKey}`;
-
-  console.log("📡 Connecting Angel WebSocket...");
-
-  ws = new WebSocket(wsUrl);
+  ws = new WebSocket(WS_URL);
 
   ws.on("open", () => {
-    isConnected = true;
-    console.log("🟢 Angel WebSocket CONNECTED");
+    console.log("📡 Angel WebSocket OPEN — sending AUTH");
+
+    // 🔐 AUTH PAYLOAD (MANDATORY)
+    const authPayload = {
+      action: "authenticate",
+      apiKey: process.env.ANGEL_API_KEY,
+      clientCode: process.env.ANGEL_CLIENT_ID,
+      feedToken:
+        process.env.ANGEL_FEED_TOKEN || process.env.ANGEL_ACCESS_TOKEN
+    };
+
+    ws.send(JSON.stringify(authPayload));
   });
 
   ws.on("message", (data) => {
     try {
-      // Angel sends binary buffers
-      if (Buffer.isBuffer(data)) {
-        if (tickHandler) tickHandler(data);
+      const msg = JSON.parse(data.toString());
+
+      // ✅ AUTH SUCCESS
+      if (msg?.status === true && msg?.type === "AUTH") {
+        console.log("🟢 Angel WebSocket AUTH SUCCESS");
+        return;
       }
+
+      // 📡 LIVE TICK
+      if (tickHandler) tickHandler(msg);
     } catch (e) {
       console.log("⚠ WS parse error:", e.message);
     }
   });
 
   ws.on("close", () => {
-    isConnected = false;
     console.log("🔴 Angel WebSocket CLOSED — reconnecting...");
-    setTimeout(() => {
-      connectAngelSocket({ clientCode, feedToken, apiKey }, tickHandler);
-    }, 5000);
+    setTimeout(() => connectAngelSocket(tickHandler), 3000);
   });
 
   ws.on("error", (err) => {
@@ -53,47 +55,27 @@ function connectAngelSocket({ clientCode, feedToken, apiKey }, onTick) {
   });
 }
 
-// ==========================================
-// SUBSCRIBE TOKENS (ANGEL FORMAT)
-// ==========================================
-function subscribeTokens(tokens = [], exchangeType = 2) {
+// ===============================
+// SUBSCRIBE AFTER AUTH
+// ===============================
+function subscribeTokens(tokens = []) {
   if (!ws || ws.readyState !== 1) {
-    console.log("⚠ WS not ready for subscription");
+    console.log("⚠ WS not ready for subscribe");
     return;
   }
-
-  if (!Array.isArray(tokens) || !tokens.length) {
-    console.log("⚠ No tokens to subscribe");
-    return;
-  }
-
-  const payload = {
-    action: 1,
-    params: {
-      mode: 1, // 1 = LTP
-      tokenList: [
-        {
-          exchangeType, // 1=NSE, 2=NFO, 3=BSE
-          tokens: tokens.map(String)
-        }
-      ]
-    }
-  };
 
   console.log("📡 Subscribing tokens:", tokens.length);
+
+  const payload = {
+    action: "subscribe",
+    mode: "LTP",
+    tokens
+  };
 
   ws.send(JSON.stringify(payload));
 }
 
-// ==========================================
-// STATUS
-// ==========================================
-function isWsConnected() {
-  return isConnected;
-}
-
 module.exports = {
   connectAngelSocket,
-  subscribeTokens,
-  isWsConnected
+  subscribeTokens
 };
