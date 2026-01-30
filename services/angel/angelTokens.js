@@ -1,4 +1,5 @@
 const axios = require("axios");
+const { getAllSymbols } = require("../symbol.service");
 
 let smartApi = null;
 
@@ -33,10 +34,16 @@ async function fetchOptionTokens(optionSymbols = []) {
     throw new Error("SmartAPI not injected into token service");
   }
 
-  if (!optionSymbols.length) {
-    throw new Error("Option symbol master empty");
-  }
+ // AUTO PULL FROM SYMBOL SERVICE IF EMPTY
+if (!optionSymbols.length) {
+  console.log("📥 No symbols passed — pulling from Symbol Service");
+  optionSymbols = getAllSymbols();
+}
 
+ if (!optionSymbols || !optionSymbols.length) {
+  throw new Error("Option symbol master empty AFTER Symbol Service pull");
+} 
+  
   console.log("📡 Fetching Angel option tokens:", optionSymbols.length);
 
   const res = await axios.post(
