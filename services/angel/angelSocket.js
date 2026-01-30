@@ -2,51 +2,42 @@ const WebSocket = require("ws");
 
 let ws = null;
 let tickHandler = null;
+let isAuthed = false;
 
-const WS_URL = "wss://smartapis.angelone.in/smart-stream";
-
-// ===============================
-// CONNECT + AUTH FLOW
-// ===============================
+// ==========================================
+// CONNECT + AUTH FIRST, THEN SUBSCRIBE
+// ==========================================
 function connectAngelSocket(onTick) {
   tickHandler = onTick;
 
-  ws = new WebSocket(WS_URL);
+  ws = new WebSocket("wss://smartapis.angelone.in/smart-stream");
 
   ws.on("open", () => {
-    console.log("📡 Angel WebSocket OPEN — sending AUTH");
-
-    // 🔐 AUTH PAYLOAD (MANDATORY)
-    const authPayload = {
-      action: "authenticate",
-      apiKey: process.env.ANGEL_API_KEY,
-      clientCode: process.env.ANGEL_CLIENT_ID,
-      feedToken:
-        process.env.ANGEL_FEED_TOKEN || process.env.ANGEL_ACCESS_TOKEN
-    };
-
-    ws.send(JSON.stringify(authPayload));
+    console.log("📡 Angel WebSocket OPEN");
+    authenticate();
   });
 
   ws.on("message", (data) => {
     try {
       const msg = JSON.parse(data.toString());
 
-      // ✅ AUTH SUCCESS
-      if (msg?.status === true && msg?.type === "AUTH") {
-        console.log("🟢 Angel WebSocket AUTH SUCCESS");
+      // AUTH CONFIRM
+      if (msg?.status === true && msg?.type === "cn") {
+        isAuthed = true;
+        console.log("🔐 Angel WS AUTH SUCCESS");
         return;
       }
 
-      // 📡 LIVE TICK
-      if (tickHandler) tickHandler(msg);
-    } catch (e) {
-      console.log("⚠ WS parse error:", e.message);
-    }
+      // TICKS
+      if (tickHandler) {
+        tickHandler(msg);
+      }
+    } catch (e) {}
   });
 
   ws.on("close", () => {
     console.log("🔴 Angel WebSocket CLOSED — reconnecting...");
+    isAuthed = false;
     setTimeout(() => connectAngelSocket(tickHandler), 3000);
   });
 
@@ -55,24 +46,61 @@ function connectAngelSocket(onTick) {
   });
 }
 
-// ===============================
-// SUBSCRIBE AFTER AUTH
-// ===============================
-function subscribeTokens(tokens = []) {
-  if (!ws || ws.readyState !== 1) {
-    console.log("⚠ WS not ready for subscribe");
+// ==========================================
+// AUTH PAYLOAD (MANDATORY FOR STABILITY)
+// ==========================================
+function authenticate() {
+  if (!ws || ws.readyState !== 1) return;
+
+  const feedToken =
+    process.env.ANGEL_FEED_TOKEN ||
+    process.env.ANGEL_ACCESS_TOKEN;
+
+  const clientCode = process.env.ANGEL_CLIENT_ID;
+
+  if (!feedToken || !clientCode) {
+    console.log("❌ WS AUTH FAILED: Missing FEED_TOKEN / CLIENT_ID");
     return;
   }
 
-  console.log("📡 Subscribing tokens:", tokens.length);
-
   const payload = {
-    action: "subscribe",
-    mode: "LTP",
-    tokens
+    action: "authenticate",
+    params: {
+      feedToken,
+      clientCode
+    }
   };
 
   ws.send(JSON.stringify(payload));
+  console.log("🔐 Angel WS AUTH SENT");
+}
+
+// ==========================================
+// SUBSCRIBE TOKENS (ONLY AFTER AUTH)
+// ==========================================
+function subscribeTokens(tokens = []) {
+  if (!ws || ws.readyState !== 1) return;
+  if (!isAuthed) {
+    console.log("⏳ WS not authed yet — delaying subscribe");
+    setTimeout(() => subscribeTokens(tokens), 1000);
+    return;
+  }
+
+  // ⚠ Angel LIMIT SAFE CHUNKING
+  const CHUNK = 200;
+  for (let i = 0; i < tokens.length; i += CHUNK) {
+    const batch = tokens.slice(i, i + CHUNK);
+
+    const payload = {
+      action: "subscribe",
+      mode: "LTP",
+      tokens: batch
+    };
+
+    ws.send(JSON.stringify(payload));
+  }
+
+  console.log("📡 Subscribed Tokens:", tokens.length);
 }
 
 module.exports = {
