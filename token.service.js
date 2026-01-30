@@ -1,18 +1,18 @@
 // ==========================================
-// TOKEN SERVICE — FINAL (T2.6)
-// ANGEL SOURCE OF TRUTH
-// SPOT LTP + OPTION SYMBOL → TOKEN (NFO)
-// MEMORY SAFE + AUTO REFRESH
+// TOKEN SERVICE — DEBUGGED & IMPROVED (T2.7)
+// ANGEL SOURCE OF TRUTH – NFO OPTIONS MASTER
+// MEMORY SAFE + AUTO REFRESH + BETTER ERROR HANDLING
 // ==========================================
 
 const https = require("https");
 
 // ==========================================
-// GLOBAL CACHE
+// GLOBAL CACHE (consider moving to class later)
 // ==========================================
 let optionSymbolMap = {};
 let lastLoadCount = 0;
 let lastLoadTime = 0;
+let isLoading = false; // prevent concurrent loads
 
 // ==========================================
 // CONFIG
@@ -20,198 +20,242 @@ let lastLoadTime = 0;
 const MASTER_URL =
   "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
 
-// Reload every 30 minutes
-const RELOAD_INTERVAL = 30 * 60 * 1000;
+const RELOAD_INTERVAL = 30 * 60 * 1000; // 30 min
+const REQUEST_TIMEOUT = 15000; // 15 seconds
 
 // ==========================================
-// UTILITY: CHECK OPTION EXPIRY
-// Angel format: NIFTY03FEB2625200CE
+// IMPROVED EXPIRY CHECK
+// Handles more Angel symbol formats robustly
 // ==========================================
 function isExpiredOption(symbol) {
+  if (!symbol || typeof symbol !== "string") return true;
+
+  // Common Angel formats: NIFTY03FEB2524500CE, BANKNIFTY2740325400PE, etc.
+  const regex = /(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{2})(\d{2})?/i;
+  const match = symbol.match(regex);
+
+  if (!match) {
+    console.warn(`Invalid expiry format in symbol: ${symbol}`);
+    return true; // treat unknown as expired
+  }
+
+  const day = parseInt(match[1], 10);
+  const monthStr = match[2].toUpperCase();
+  const yearShort = match[3];
+  // Some symbols have full year or extra digits – take first two as YY
+  const year = 2000 + parseInt(yearShort, 10);
+
+  const MONTH_MAP = {
+    JAN: 0, FEB: 1, MAR: 2, APR: 3, MAY: 4, JUN: 5,
+    JUL: 6, AUG: 7, SEP: 8, OCT: 9, NOV: 10, DEC: 11,
+  };
+
+  const month = MONTH_MAP[monthStr];
+  if (month === undefined) return true;
+
   try {
-    if (!symbol) return true;
-
-    const match = symbol.match(
-      /(\d{2})(JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)(\d{4})/
-    );
-
-    if (!match) return true;
-
-    const day = Number(match[1]);
-    const monthStr = match[2];
-    const year = Number("20" + match[3]);
-
-    const MONTH_MAP = {
-      JAN: 0,
-      FEB: 1,
-      MAR: 2,
-      APR: 3,
-      MAY: 4,
-      JUN: 5,
-      JUL: 6,
-      AUG: 7,
-      SEP: 8,
-      OCT: 9,
-      NOV: 10,
-      DEC: 11,
-    };
-
-    const expiryDate = new Date(year, MONTH_MAP[monthStr], day);
+    const expiryDate = new Date(year, month, day);
     expiryDate.setHours(0, 0, 0, 0);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     return expiryDate < today;
-  } catch {
+  } catch (err) {
+    console.warn(`Expiry parse error for ${symbol}:`, err.message);
     return true;
   }
 }
 
 // ==========================================
-// LOAD OPTION SYMBOL MASTER (NFO ONLY)
+// LOAD MASTER WITH TIMEOUT + RETRY
 // ==========================================
-function loadOptionSymbolMaster(force = false) {
+async function loadOptionSymbolMaster(force = false, retryCount = 0) {
+  const MAX_RETRIES = 2;
+
+  if (isLoading) {
+    console.log("Master load already in progress – waiting...");
+    return new Promise((r) => setTimeout(() => r(), 1500));
+  }
+
+  const now = Date.now();
+
+  if (!force && now - lastLoadTime < RELOAD_INTERVAL && lastLoadCount > 0) {
+    return;
+  }
+
+  isLoading = true;
+  console.log(`[TOKEN] Loading Angel NFO Master (force: ${force}, attempt ${retryCount + 1})...`);
+
   return new Promise((resolve, reject) => {
-    const now = Date.now();
-
-    if (!force && now - lastLoadTime < RELOAD_INTERVAL && lastLoadCount > 0) {
-      return resolve();
-    }
-
-    console.log("📥 Loading Angel OPTION Symbol Master...");
-
-    https
-      .get(MASTER_URL, (res) => {
-        if (res.statusCode !== 200) {
-          return reject(
-            new Error(`Angel symbol master HTTP ${res.statusCode}`)
-          );
+    const req = https.get(MASTER_URL, { timeout: REQUEST_TIMEOUT }, (res) => {
+      if (res.statusCode !== 200) {
+        const err = new Error(`HTTP ${res.statusCode} from Angel master`);
+        console.error("[TOKEN] Load failed:", err.message);
+        res.resume();
+        if (retryCount < MAX_RETRIES) {
+          setTimeout(() => loadOptionSymbolMaster(force, retryCount + 1).then(resolve).catch(reject), 3000);
+        } else {
+          reject(err);
         }
+        return;
+      }
 
-        let data = "";
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => {
+        try {
+          const json = JSON.parse(data);
+          optionSymbolMap = {};
+          let added = 0;
+          let skippedExpired = 0;
+          let skippedInvalid = 0;
 
-        res.on("data", (chunk) => (data += chunk));
-        res.on("end", () => {
-          try {
-            const json = JSON.parse(data);
+          json.forEach((item) => {
+            if (
+              item.exch_seg === "NFO" &&
+              (item.instrumenttype === "OPTIDX" || item.instrumenttype === "OPTSTK")
+            ) {
+              const symbol = item.symbol?.toUpperCase()?.trim();
+              const token = item.token;
 
-            // 🔥 MEMORY RESET
-            optionSymbolMap = {};
-            let added = 0;
-            let skippedExpired = 0;
-
-            json.forEach((item) => {
-              if (
-                item.exch_seg === "NFO" &&
-                (item.instrumenttype === "OPTIDX" ||
-                  item.instrumenttype === "OPTSTK")
-              ) {
-                const symbol = item.symbol?.toUpperCase();
-                const token = item.token;
-
-                if (!symbol || !token) return;
-
-                // 🚫 IGNORE EXPIRED
-                if (isExpiredOption(symbol)) {
-                  skippedExpired++;
-                  return;
-                }
-
-                optionSymbolMap[symbol] = {
-                  token,
-                  exchangeType: 2, // NFO
-                };
-
-                added++;
+              if (!symbol || !token) {
+                skippedInvalid++;
+                return;
               }
-            });
 
-            console.log(
-              `✅ OPTION Symbols Loaded: ${added} (expired ignored: ${skippedExpired})`
-            );
+              if (isExpiredOption(symbol)) {
+                skippedExpired++;
+                return;
+              }
 
-            if (lastLoadCount > 0 && lastLoadCount !== added) {
-              console.log(
-                `🧪 Symbol count change: ${lastLoadCount} → ${added}`
-              );
+              optionSymbolMap[symbol] = {
+                token,
+                exchangeType: 2, // NFO
+                instrumentType: item.instrumenttype,
+                name: item.name,
+                strike: item.strike,
+                expiry: item.expiry,
+              };
+
+              added++;
             }
+          });
 
-            lastLoadCount = added;
-            lastLoadTime = Date.now();
-            resolve();
-          } catch (e) {
-            reject(e);
+          console.log(
+            `[TOKEN] OPTION Master loaded: ${added} symbols | expired skipped: ${skippedExpired} | invalid: ${skippedInvalid}`
+          );
+
+          if (added === 0) {
+            console.warn("[TOKEN] WARNING: Zero valid NFO options loaded – check master URL or network");
           }
-        });
-      })
-      .on("error", reject);
+
+          lastLoadCount = added;
+          lastLoadTime = Date.now();
+          isLoading = false;
+          resolve();
+        } catch (e) {
+          console.error("[TOKEN] JSON parse error:", e.message);
+          isLoading = false;
+          reject(e);
+        }
+      });
+    });
+
+    req.on("timeout", () => {
+      req.destroy();
+      console.error("[TOKEN] Master request timeout");
+      if (retryCount < MAX_RETRIES) {
+        setTimeout(() => loadOptionSymbolMaster(force, retryCount + 1).then(resolve).catch(reject), 3000);
+      } else {
+        reject(new Error("Master load timeout after retries"));
+      }
+    });
+
+    req.on("error", (err) => {
+      console.error("[TOKEN] Network error:", err.message);
+      isLoading = false;
+      reject(err);
+    });
   });
 }
 
 // ==========================================
-// GET TOKEN BY OPTION SYMBOL
-// STRICT ANGEL MATCH
+// GET TOKEN (with auto-load)
 // ==========================================
 async function getOptionToken(optionSymbol) {
   if (!optionSymbol) return null;
 
-  const key = optionSymbol.toUpperCase();
+  const key = optionSymbol.toUpperCase().trim();
 
-  // Auto-load if empty or expired cache
-  if (!lastLoadCount || Date.now() - lastLoadTime > RELOAD_INTERVAL) {
+  if (lastLoadCount === 0 || Date.now() - lastLoadTime > RELOAD_INTERVAL) {
     try {
       await loadOptionSymbolMaster();
     } catch (e) {
-      console.log("❌ SYMBOL MASTER LOAD FAIL:", e.message);
+      console.error("[TOKEN] Auto-load failed:", e.message);
       return null;
     }
   }
 
-  return optionSymbolMap[key] || null;
+  const entry = optionSymbolMap[key];
+  if (!entry) {
+    console.debug(`[TOKEN] No token found for: ${key}`);
+  }
+
+  return entry || null;
 }
 
 // ==========================================
-// GET LIVE SPOT LTP (INDEX)
-// Uses Angel REST proxy or your backend route
+// GET SPOT LTP – AVOID SELF-HTTP IF POSSIBLE
+// For now kept, but consider injecting LTP cache later
 // ==========================================
 async function getSpotLTP(index) {
   return new Promise((resolve, reject) => {
-    try {
-      // 🔁 CHANGE THIS IF YOUR ROUTE IS DIFFERENT
-      const url = `https://mahashakti-market-pro-production.up.railway.app/angel/ltp?symbol=${index}`;
+    const url = `https://mahashakti-market-pro-production.up.railway.app/angel/ltp?symbol=${encodeURIComponent(index)}`;
 
-      https
-        .get(url, (res) => {
-          let data = "";
-
-          res.on("data", (chunk) => (data += chunk));
-          res.on("end", () => {
-            try {
-              const json = JSON.parse(data);
-
-              if (!json || !json.ltp) {
-                return reject("Invalid LTP response");
-              }
-
-              resolve(Number(json.ltp));
-            } catch (e) {
-              reject(e);
-            }
-          });
-        })
-        .on("error", reject);
-    } catch (e) {
-      reject(e);
-    }
+    https.get(url, { timeout: REQUEST_TIMEOUT }, (res) => {
+      let data = "";
+      res.on("data", (chunk) => (data += chunk));
+      res.on("end", () => {
+        try {
+          const json = JSON.parse(data);
+          if (json?.status === true && json.ltp) {
+            resolve(Number(json.ltp));
+          } else {
+            reject(new Error(`Invalid LTP response: ${JSON.stringify(json)}`));
+          }
+        } catch (e) {
+          reject(e);
+        }
+      });
+    }).on("error", (err) => {
+      console.error(`[TOKEN] Spot LTP fetch failed for ${index}:`, err.message);
+      reject(err);
+    });
   });
+}
+
+// ==========================================
+// INIT – Call this once on server startup!
+// ==========================================
+async function initializeTokenService() {
+  try {
+    await loadOptionSymbolMaster(true); // force first load
+    console.log("[TOKEN] Initialization complete");
+  } catch (err) {
+    console.error("[TOKEN] Initialization failed – option chain will be unavailable:", err);
+  }
 }
 
 // ==========================================
 // EXPORTS
 // ==========================================
 module.exports = {
+  initializeTokenService,       // ← Call in server.js on boot
   loadOptionSymbolMaster,
   getOptionToken,
   getSpotLTP,
+  // Optional: expose for debugging
+  getLoadedCount: () => lastLoadCount,
+  isCacheFresh: () => Date.now() - lastLoadTime < RELOAD_INTERVAL,
 };
