@@ -80,27 +80,36 @@ function authenticate() {
 // ==========================================
 function subscribeTokens(tokens = []) {
   if (!ws || ws.readyState !== 1) return;
+
   if (!isAuthed) {
     console.log("⏳ WS not authed yet — delaying subscribe");
     setTimeout(() => subscribeTokens(tokens), 1000);
     return;
   }
 
-  // ⚠ Angel LIMIT SAFE CHUNKING
+  // ⚠ Angel LIMIT SAFE CHUNKING (OFFICIAL FORMAT)
   const CHUNK = 200;
+
   for (let i = 0; i < tokens.length; i += CHUNK) {
-    const batch = tokens.slice(i, i + CHUNK);
+    const batch = tokens.slice(i, i + CHUNK).map(String);
 
     const payload = {
       action: "subscribe",
-      mode: "LTP",
-      tokens: batch
+      params: {
+        mode: "LTP",
+        tokenList: [
+          {
+            exchangeType: 2, // NFO
+            tokens: batch
+          }
+        ]
+      }
     };
 
     ws.send(JSON.stringify(payload));
   }
 
-  console.log("📡 Subscribed Tokens:", tokens.length);
+  console.log("📡 Subscribed Tokens (Angel format):", tokens.length);
 }
 
 module.exports = {
