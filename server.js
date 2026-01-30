@@ -466,7 +466,7 @@ app.listen(PORT, async () => {
 
   try {
     // 🔐 BOOT TOKEN SERVICE FIRST (MANDATORY)
-    await initializeTokenService();
+    await initializeTokenService();   // ← LINE 468
 
     await loadSymbolMaster();
 
@@ -474,9 +474,6 @@ app.listen(PORT, async () => {
     setAllSymbols(Object.keys(symbolTokenMap));
 
     await loadOptionSymbolMaster();
-
-    // 🔗 LINK OPTION SYMBOLS INTO TOKEN SERVICE
-    setSymbolMaster(global.OPTION_SYMBOLS);
 
     startAngelLoginLoop();
 
