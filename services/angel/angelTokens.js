@@ -1,5 +1,5 @@
 const axios = require("axios");
-const { getAllSymbols } = require("../symbol.service");
+const { getAllSymbols } = require("../../symbol.service");
 
 let smartApi = null;
 
