@@ -497,17 +497,29 @@ app.listen(PORT, async () => {
   console.log("🚀 Server running on port", PORT);
 
   try {
-    // 🔐 BOOT TOKEN SERVICE FIRST (MANDATORY)
-    await initializeTokenService();   // ← LINE 468
+   await initializeTokenService();
 
-    await loadSymbolMaster();
+await loadSymbolMaster();
 
-    // 🔗 LINK SYMBOL MASTER INTO ENGINE
-    setAllSymbols(Object.keys(symbolTokenMap));
+// LINK STOCK SYMBOLS INTO ENGINE
+setAllSymbols(Object.keys(symbolTokenMap));
 
-    await loadOptionSymbolMaster();
+// LOAD OPTIONS
+await loadOptionSymbolMaster();
 
-    startAngelLoginLoop();
+// 🔥🔥 THIS LINE IS MISSING — ENGINE NEVER GETS OPTIONS
+global.OPTION_SYMBOLS = require("./token.service").getLoadedCount
+  ? require("./token.service")
+  : null;
+
+// OR BETTER (CLEAN WAY)
+const tokenService = require("./token.service");
+global.OPTION_SYMBOLS = tokenService;
+
+// 🔥 INJECT INTO ENGINE
+setSymbolMaster(global.OPTION_SYMBOLS);
+
+startAngelLoginLoop();
 
     // 🔥 START LIVE ENGINE AFTER SYMBOLS READY
     setTimeout(() => {
