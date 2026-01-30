@@ -1,27 +1,27 @@
-// ==========================================
-// OPTION CHAIN SERVICE – FINAL (A3.1)
-// Angel = SINGLE SOURCE OF TRUTH
-// No Fake / Manual Strikes
-// ==========================================
-
-const { formatOptionSymbol, isMonthlyExpiry } = require("./symbol.service");
-const { getOptionToken } = require("./token.service");
-
+// ==========================================  
+// OPTION CHAIN SERVICE – FINAL (A3.1) - FIXED  
+// Angel = SINGLE SOURCE OF TRUTH  
+// No Fake / Manual Strikes  
+// ==========================================  
+  
+const { formatOptionSymbol, isMonthlyExpiry } = require("./symbol.service");  
+const { getOptionToken } = require("./token.service");  
+  
 // ==========================================  
 // BUILD OPTION CHAIN (ANGEL VALIDATED)  
 // Supports both INDEX and STOCK options  
 // ==========================================  
 function buildOptionChain({  
-  index,        // NIFTY / BANKNIFTY (optional)  
-  stock,        // RELIANCE / TCS (optional)  
-  expiryDate,   // JS Date object  
+  index,      // NIFTY / BANKNIFTY (optional)  
+  stock,      // RELIANCE / TCS (optional)  
+  expiryDate, // JS Date object  
   strikes = [], // strikes from strike.service (Angel validated)  
 }) {  
   const chain = {};  
   
-  // -------------------------------  
+  // ---------------------------------  
   // HARD VALIDATION  
-  // -------------------------------  
+  // ---------------------------------  
   if (!(expiryDate instanceof Date) || !Array.isArray(strikes)) {  
     return chain;  
   }  
@@ -38,9 +38,9 @@ function buildOptionChain({
   strikes.forEach((strike) => {  
     if (typeof strike !== "number") return;  
   
-    // -------------------------------  
+    // ---------------------------------  
     // FORMAT OPTION SYMBOLS  
-    // -------------------------------  
+    // ---------------------------------  
     const ceSymbol = formatOptionSymbol({  
       index: index || null,  
       stock: stock || null,  
@@ -62,9 +62,9 @@ function buildOptionChain({
     // format failed → skip  
     if (!ceSymbol && !peSymbol) return;  
   
-    // -------------------------------  
+    // ---------------------------------  
     // FETCH TOKENS FROM ANGEL MASTER  
-    // -------------------------------  
+    // ---------------------------------  
     const ceToken = ceSymbol ? getOptionToken(ceSymbol) : null;  
     const peToken = peSymbol ? getOptionToken(peSymbol) : null;  
   
@@ -72,12 +72,11 @@ function buildOptionChain({
     // Angel ke paas dono nahi → strike exist hi nahi karta  
     if (!ceToken && !peToken) return;  
   
-    // -------------------------------  
+    // ---------------------------------  
     // FINAL STRIKE OBJECT  
-    // -------------------------------  
+    // ---------------------------------  
     chain[strike] = {  
       strike,  
-  
       CE: ceToken  
         ? {  
             symbol: ceSymbol,  
@@ -85,7 +84,6 @@ function buildOptionChain({
             exchangeType: ceToken.exchangeType, // NFO  
           }  
         : null,  
-  
       PE: peToken  
         ? {  
             symbol: peSymbol,  
@@ -97,11 +95,11 @@ function buildOptionChain({
   });  
   
   return chain;  
-}
-
-// ==========================================
-// EXPORT
-// ==========================================
-module.exports = {
-  buildOptionChain,
+}  
+  
+// ==========================================  
+// EXPORT  
+// ==========================================  
+module.exports = {  
+  buildOptionChain,  
 };
