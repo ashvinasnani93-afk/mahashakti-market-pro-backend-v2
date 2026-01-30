@@ -23,6 +23,21 @@ let reconnectLock = false;
 // ================================
 const latestLtpStore = {};
 
+// ===================================
+// OPTION SYMBOL MASTER LINK
+// ===================================
+let OPTION_SYMBOLS = {};
+
+function setSymbolMaster(map) {
+  if (!map || typeof map !== "object") {
+    console.log("⚠️ setSymbolMaster called with invalid map");
+    return;
+  }
+
+  OPTION_SYMBOLS = map;
+  console.log("📌 Angel Engine linked option symbols:", Object.keys(map).length);
+}
+
 /**
  * Internal update hook
  */
