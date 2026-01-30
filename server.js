@@ -31,7 +31,7 @@ const sectorParticipationApi = require("./services/sectorParticipation.api");
 const batchSignalsApi = require("./services/signals.batch.api");
 const moversApi = require("./services/scanner/movers.api");
 
-const { loadOptionSymbolMaster } = require("./token.service");
+const { loadOptionSymbolMaster, initializeTokenService } = require("./token.service");
 const { setAllSymbols } = require("./symbol.service");
 
 // 🔥 LIVE ENGINE + TOKEN LINK
@@ -465,23 +465,29 @@ app.listen(PORT, async () => {
   console.log("🚀 Server running on port", PORT);
 
   try {
+    // 🔐 BOOT TOKEN SERVICE FIRST (MANDATORY)
+    await initializeTokenService();
+
     await loadSymbolMaster();
 
-// 🔗 LINK SYMBOL MASTER INTO ENGINE
-setAllSymbols(Object.keys(symbolTokenMap));
+    // 🔗 LINK SYMBOL MASTER INTO ENGINE
+    setAllSymbols(Object.keys(symbolTokenMap));
 
-await loadOptionSymbolMaster();
-    
-startAngelLoginLoop();
+    await loadOptionSymbolMaster();
 
-// 🔥 START LIVE ENGINE AFTER SYMBOLS READY
-setTimeout(() => {
-  console.log("🧠 Booting Angel LIVE Engine...");
-  startAngelEngine();
-}, 5000);
+    // 🔗 LINK OPTION SYMBOLS INTO TOKEN SERVICE
+    setSymbolMaster(global.OPTION_SYMBOLS);
+
+    startAngelLoginLoop();
+
+    // 🔥 START LIVE ENGINE AFTER SYMBOLS READY
+    setTimeout(() => {
+      console.log("🧠 Booting Angel LIVE Engine...");
+      startAngelEngine();
+    }, 5000);
+
   } catch (e) {
     console.error("❌ Startup failed:", e);
-    process.exit(1);
   }
 });
 
