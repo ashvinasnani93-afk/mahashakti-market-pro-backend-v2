@@ -6,20 +6,21 @@
 
 let symbolStore = [];
 let optionStore = {};
+
 // ==============================
 // SET SYMBOLS (SERVER USE)
 // ==============================
 function setAllSymbols(symbols) {
   try {
     if (!Array.isArray(symbols)) {
-      console.log("⚠️ setAllSymbols called with invalid data");
+      console.log("⚠️ SYMBOL SERVICE: setAllSymbols called with invalid data");
       return;
     }
 
     symbolStore = symbols;
-    console.log("🧠 SYMBOL SERVICE: Symbols registered:", symbols.length);
+    console.log("🧠 SYMBOL SERVICE: Stock symbols registered:", symbols.length);
   } catch (e) {
-    console.error("❌ setAllSymbols failed:", e.message);
+    console.error("❌ SYMBOL SERVICE: setAllSymbols failed:", e.message);
   }
 }
 
@@ -34,9 +35,12 @@ function setOptionSymbolMaster(map) {
     }
 
     optionStore = map;
-    console.log("📦 SYMBOL SERVICE: Option symbols registered:", Object.keys(map).length);
+    console.log(
+      "📦 SYMBOL SERVICE: Option symbols registered:",
+      Object.keys(map).length
+    );
   } catch (e) {
-    console.error("❌ setOptionSymbolMaster failed:", e.message);
+    console.error("❌ SYMBOL SERVICE: setOptionSymbolMaster failed:", e.message);
   }
 }
 
@@ -45,27 +49,43 @@ function setOptionSymbolMaster(map) {
 // ==============================
 function getAllSymbols() {
   try {
-    if (optionStore && typeof optionStore === "object") {
-      const tokens = Object.values(optionStore);
+    // PRIORITY = OPTION SYMBOLS
+    if (
+      optionStore &&
+      typeof optionStore === "object" &&
+      Object.keys(optionStore).length > 0
+    ) {
+      const tokens = Object.values(optionStore).filter(Boolean);
 
       if (Array.isArray(tokens) && tokens.length > 0) {
-        console.log("📤 SYMBOL SERVICE: Returning OPTION TOKENS:", tokens.length);
+        console.log(
+          "📤 SYMBOL SERVICE: Returning OPTION TOKENS:",
+          tokens.length
+        );
         return tokens;
       }
     }
 
+    // FALLBACK = STOCK SYMBOLS
     if (!Array.isArray(symbolStore) || symbolStore.length === 0) {
       console.log("⚠️ SYMBOL SERVICE: No symbols ready yet");
       return [];
     }
 
-    console.log("📤 SYMBOL SERVICE: Returning STOCK SYMBOLS:", symbolStore.length);
+    console.log(
+      "📤 SYMBOL SERVICE: Returning STOCK SYMBOLS:",
+      symbolStore.length
+    );
     return symbolStore;
   } catch (e) {
-    console.error("❌ getAllSymbols failed:", e.message);
+    console.error("❌ SYMBOL SERVICE: getAllSymbols failed:", e.message);
     return [];
   }
 }
+
+// ==============================
+// EXPORTS (ENGINE + TOKEN SERVICE)
+// ==============================
 module.exports = {
   setAllSymbols,
   setOptionSymbolMaster,
