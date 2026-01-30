@@ -31,7 +31,8 @@ const sectorParticipationApi = require("./services/sectorParticipation.api");
 const batchSignalsApi = require("./services/signals.batch.api");
 const moversApi = require("./services/scanner/movers.api");
 
-const { loadOptionSymbolMaster, initializeTokenService } = require("./token.service");
+const tokenService = require("./token.service");
+const { loadOptionSymbolMaster, initializeTokenService } = tokenService;
 const { setAllSymbols } = require("./symbol.service");
 const { setSmartApi } = require("./services/angel/angelTokens");
 
