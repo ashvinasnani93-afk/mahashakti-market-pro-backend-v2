@@ -215,7 +215,7 @@ async function getOptionToken(optionSymbol) {
 // ==========================================
 async function getSpotLTP(index) {
   return new Promise((resolve, reject) => {
-    const url = `https://mahashakti-market-pro-production.up.railway.app/angel/ltp?symbol=${encodeURIComponent(index)}`;
+    const url = `https://mahshakti-market-pro-production.up.railway.app/angel/ltp?symbol=${encodeURIComponent(index)}`;
 
     https.get(url, { timeout: REQUEST_TIMEOUT }, (res) => {
       let data = "";
