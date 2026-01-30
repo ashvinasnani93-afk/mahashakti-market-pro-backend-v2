@@ -215,4 +215,5 @@ module.exports = {
   getLtp,
   isSystemReady,
   isWsConnected,
+  setSymbolMaster   // 🔥 REQUIRED FOR OPTION MASTER LINK
 };
