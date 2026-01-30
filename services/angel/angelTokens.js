@@ -1,10 +1,7 @@
 const axios = require("axios");
 
-// ❌ STOCK SYMBOL SERVICE HATA DIYA
-// const { getAllSymbols } = require("../../symbol.service");
-
-// ✅ OPTION MASTER SERVICE ADD
-const { getAllOptionMaster } = require("./token.service");
+// ✅ CORRECT PATH TO TOKEN MASTER
+const { getAllOptionMaster } = require("../token.service");
 
 let smartApi = null;
 
@@ -39,7 +36,7 @@ async function fetchOptionTokens(optionSymbols = []) {
     throw new Error("SmartAPI not injected into token service");
   }
 
-  // ✅ AUTO PULL FROM OPTION MASTER (NOT STOCK SERVICE)
+  // ✅ AUTO PULL FROM OPTION MASTER
   if (!optionSymbols.length) {
     console.log("📥 No symbols passed — pulling OPTION symbols from Token Master");
 
@@ -49,16 +46,12 @@ async function fetchOptionTokens(optionSymbols = []) {
       throw new Error("Option master empty — token.service not loaded");
     }
 
-    // ⚠️ Angel API limit → max 50–100 symbols per call
+    // ⚠️ TEMP SAFETY LIMIT (WE REMOVE NEXT STEP)
     optionSymbols = optionMaster
       .slice(0, 50)
       .map(row => row.symbol);
 
     console.log("📥 Pulled OPTION symbols from master:", optionSymbols.length);
-  }
-
-  if (!optionSymbols || !optionSymbols.length) {
-    throw new Error("Option symbol list empty AFTER master pull");
   }
 
   console.log("📡 Fetching Angel OPTION tokens:", optionSymbols.length);
