@@ -1,7 +1,7 @@
 const axios = require("axios");  
   
 // ✅ CORRECT PATH TO TOKEN MASTER  
-const { getOptionToken } = require("../token.service");  // 🔥 FIXED: Removed one ../  
+const { getOptionToken } = require("../../token.service"); 
   
 let smartApi = null;  
   
