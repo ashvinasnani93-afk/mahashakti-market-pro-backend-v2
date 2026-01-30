@@ -150,6 +150,10 @@ async function loadOptionSymbolMaster(force = false, retryCount = 0) {
             console.warn("[TOKEN] WARNING: Zero valid NFO options loaded – check master URL or network");
           }
 
+          // 🔥 EXPORT TO ENGINE
+global.OPTION_SYMBOLS = Object.keys(optionSymbolMap);
+console.log("🧠 OPTION SYMBOLS REGISTERED:", global.OPTION_SYMBOLS.length);
+
           lastLoadCount = added;
           lastLoadTime = Date.now();
           isLoading = false;
