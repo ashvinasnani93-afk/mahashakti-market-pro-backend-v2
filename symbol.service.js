@@ -40,7 +40,10 @@ function setOptionSymbolMaster(map) {
       Object.keys(map).length
     );
   } catch (e) {
-    console.error("❌ SYMBOL SERVICE: setOptionSymbolMaster failed:", e.message);
+    console.error(
+      "❌ SYMBOL SERVICE: setOptionSymbolMaster failed:",
+      e.message
+    );
   }
 }
 
@@ -49,21 +52,15 @@ function setOptionSymbolMaster(map) {
 // ==============================
 function getAllSymbols() {
   try {
-    // PRIORITY = OPTION SYMBOLS
+    // PRIORITY = OPTION TOKENS
     if (
       optionStore &&
       typeof optionStore === "object" &&
       Object.keys(optionStore).length > 0
     ) {
-      const tokens = Object.values(optionStore).filter(Boolean);
-
-      if (Array.isArray(tokens) && tokens.length > 0) {
-        console.log(
-          "📤 SYMBOL SERVICE: Returning OPTION TOKENS:",
-          tokens.length
-        );
-        return tokens;
-      }
+      const tokens = Object.values(optionStore);
+      console.log("📤 SYMBOL SERVICE: Returning OPTION TOKENS:", tokens.length);
+      return tokens;
     }
 
     // FALLBACK = STOCK SYMBOLS
@@ -83,9 +80,6 @@ function getAllSymbols() {
   }
 }
 
-// ==============================
-// EXPORTS (ENGINE + TOKEN SERVICE)
-// ==============================
 module.exports = {
   setAllSymbols,
   setOptionSymbolMaster,
