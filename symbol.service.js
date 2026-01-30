@@ -5,7 +5,7 @@
 // ==========================================
 
 let symbolStore = [];
-
+let optionStore = {};
 // ==============================
 // SET SYMBOLS (SERVER USE)
 // ==============================
@@ -23,13 +23,36 @@ function setAllSymbols(symbols) {
   }
 }
 
+// ============================
+// SET OPTION SYMBOL MASTER
+// ============================
+function setOptionSymbolMaster(map) {
+  try {
+    if (!map || typeof map !== "object") {
+      console.log("⚠️ SYMBOL SERVICE: Option master invalid");
+      return;
+    }
+
+    optionStore = map;
+    console.log("📦 SYMBOL SERVICE: Option symbols registered:", Object.keys(map).length);
+  } catch (e) {
+    console.error("❌ setOptionSymbolMaster failed:", e.message);
+  }
+}
+
 // ==============================
 // GET SYMBOLS (ENGINE USE)
 // ==============================
 function getAllSymbols() {
   try {
+    const optionKeys = Object.keys(optionStore || {});
+
+    if (optionKeys.length > 0) {
+      return optionKeys;
+    }
+
     if (!Array.isArray(symbolStore) || symbolStore.length === 0) {
-      console.log("⚠️ SYMBOL SERVICE: Symbol Master not ready yet");
+      console.log("⚠️ SYMBOL SERVICE: No symbols ready yet");
       return [];
     }
 
@@ -42,5 +65,6 @@ function getAllSymbols() {
 
 module.exports = {
   setAllSymbols,
+  setOptionSymbolMaster,
   getAllSymbols
 };
