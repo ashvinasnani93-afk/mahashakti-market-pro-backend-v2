@@ -33,6 +33,7 @@ const moversApi = require("./services/scanner/movers.api");
 
 const { loadOptionSymbolMaster, initializeTokenService } = require("./token.service");
 const { setAllSymbols } = require("./symbol.service");
+const { setSmartApi } = require("./services/angel/angelTokens");
 
 // 🔥 LIVE ENGINE + TOKEN LINK
 const { startAngelEngine, isSystemReady, isWsConnected } =
@@ -271,6 +272,23 @@ process.env.ANGEL_ACCESS_TOKEN = session.data.jwtToken;
 }
 
 // ==========================================
+// SMARTAPI DIRECT LTP FETCH
+// ==========================================
+async function getSmartApiLTP(exchange, symbol, token) {
+  if (!smartApi) {
+    throw new Error("SmartAPI not initialized");
+  }
+
+  try {
+    const res = await smartApi.getLTP(exchange, symbol, token);
+    return res?.data?.ltp || null;
+  } catch (e) {
+    console.error("❌ SmartAPI LTP Error:", e.message);
+    return null;
+  }
+}
+
+// ==========================================
 // HEARTBEAT
 // ==========================================
 let heartbeatTimer = null;
@@ -417,24 +435,38 @@ setInterval(() => {
 // ==========================================
 // LTP API
 // ==========================================
-app.get("/angel/ltp", (req, res) => {
-  const symbol = req.query.symbol?.toUpperCase();
-  if (!symbol || !symbolTokenMap[symbol]) {
-    return res.json({ status: false, message: "symbol invalid" });
-  }
+app.get("/angel/ltp", async (req, res) => {
+  try {
+    const { exchange, symbol, token } = req.query;
 
-  subscribeSymbol(symbol);
+    if (!exchange || !symbol || !token) {
+      return res.status(400).json({
+        status: false,
+        message: "exchange, symbol, token required"
+      });
+    }
 
-  if (latestLTP[symbol]) {
-    return res.json({
+    const ltp = await getSmartApiLTP(exchange, symbol, token);
+
+    if (!ltp) {
+      return res.status(503).json({
+        status: false,
+        message: "LTP unavailable"
+      });
+    }
+
+    res.json({
       status: true,
+      exchange,
       symbol,
-      ltp: latestLTP[symbol],
-      live: true
+      ltp
+    });
+  } catch (e) {
+    res.status(500).json({
+      status: false,
+      error: e.message
     });
   }
-
-  res.json({ status: false, message: "LTP not ready yet" });
 });
 
 // ==========================================
