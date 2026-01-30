@@ -36,10 +36,12 @@ const { loadOptionSymbolMaster, initializeTokenService } = tokenService;
 const { setAllSymbols } = require("./symbol.service");
 const { setSmartApi } = require("./services/angel/angelTokens");
 
-// 🔥 LIVE ENGINE + TOKEN LINK
-const { startAngelEngine, isSystemReady, isWsConnected } =
-  require("./src.angelEngine.js");
-
+const {
+  startAngelEngine,
+  isSystemReady,
+  isWsConnected,
+  setSymbolMaster   // 🔥 MISSING IMPORT
+} = require("./src.angelEngine.js");
 
 // ==========================================
 // APP BOOT
