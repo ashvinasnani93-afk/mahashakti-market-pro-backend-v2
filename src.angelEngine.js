@@ -35,7 +35,7 @@ function setSymbolMaster(map) {
   }
 
   OPTION_SYMBOLS = map;
-  console.log("📌 Angel Engine linked option symbols:", Object.keys(map).length);
+  
 }
 
 /**
