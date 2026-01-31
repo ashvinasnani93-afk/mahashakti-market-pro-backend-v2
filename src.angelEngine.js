@@ -117,7 +117,7 @@ function subscribeTokens(tokens) {
 function connectWS(feedToken, clientCode, tokens) {
   console.log("🔌 Connecting Angel WS...");
 
-  ws = new WebSocket("wss://smartapis.angelone.in/smart-stream");
+ ws = new WebSocket("wss://smartapisocket.angelone.in/smart-stream");
 
   ws.on("open", () => {
     wsConnected = true;
