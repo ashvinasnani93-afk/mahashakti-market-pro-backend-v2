@@ -117,24 +117,23 @@ function subscribeTokens(tokens) {
 function connectWS(feedToken, clientCode, tokens) {
   console.log("🔌 Connecting Angel WS...");
 
-  ws = new WebSocket("wss://smartapisocket.angelone.in/smart-stream");
+ ws = new WebSocket(
+  "wss://smartapisocket.angelone.in/smart-stream",
+  {
+    headers: {
+      Authorization: `Bearer ${process.env.ANGEL_ACCESS_TOKEN}`,
+      "x-api-key": process.env.ANGEL_API_KEY,
+      "x-client-code": clientCode,
+      "x-feed-token": feedToken
+    }
+  }
+);
 
   ws.on("open", () => {
     wsConnected = true;
     console.log("🟢 WS Connected");
 
-    // AUTH
-    ws.send(
-      JSON.stringify({
-        action: "authenticate",
-        params: {
-          feedToken,
-          clientCode
-        }
-      })
-    );
-
-    console.log("🔐 WS AUTH SENT");
+    
   });
 
   ws.on("message", (data) => {
