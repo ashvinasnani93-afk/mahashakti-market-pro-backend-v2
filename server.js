@@ -427,36 +427,7 @@ function subscribeAllStocksToWS() {
   }
 }
 
-// ==========================================
-// SMARTAPI DIRECT LTP (FALLBACK)
-// ==========================================
-async function getSmartApiLTP(exchange, symbol, token) {
-  try {
-    // 🔥 1. WS MEMORY FIRST (FAST MODE)
-    if (global.latestLTP && global.latestLTP[token]) {
-      return global.latestLTP[token];
-    }
 
-    // 🔁 2. FALLBACK TO SMARTAPI REST
-    if (!smartApi) {
-      console.log("⚠️ LTP: SmartAPI not initialized");
-      return null;
-    }
-
-    const res = await smartApi.getLTP(exchange, symbol, token);
-    const ltp = res?.data?.ltp || null;
-
-    if (ltp) {
-      // Cache it
-      global.latestLTP[token] = ltp;
-    }
-
-    return ltp;
-  } catch (e) {
-    console.error("❌ SmartAPI LTP Error:", e.message);
-    return null;
-  }
-}
 // ==========================================
 // LTP API (REDIS → WS → REST)
 // ==========================================
