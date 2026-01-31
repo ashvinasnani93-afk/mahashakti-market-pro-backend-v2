@@ -1,17 +1,28 @@
 // ==========================================
 // MAHASHAKTI MARKET PRO
-// FINAL – ALL STOCKS + OPTIONS LTP (AUDITED + ENGINE LINKED)
+// ENTERPRISE 42K+ MODE — CARRY-1
+// FULL REPLACEMENT FILE (SERVER BOOT LAYER)
+// ------------------------------------------
+// Boot Order:
+// 1) ENV CHECK
+// 2) Token Service Init
+// 3) Symbol Master (Stocks/Futures/Commodities)
+// 4) Option Master (42K+ map)
+// 5) Angel Login (JWT + Feed)
+// 6) WS Pool (if module exists) — 70 sockets
+// 7) Engine Start
 // ==========================================
+
+"use strict";
 
 const express = require("express");
 const cors = require("cors");
-const WebSocket = require("ws");
 const https = require("https");
 const { SmartAPI } = require("smartapi-javascript");
 const { authenticator } = require("otplib");
 
 // ==========================================
-// ROUTES / APIS
+// ROUTES / APIS (EXISTING MODULES)
 // ==========================================
 const signalRoutes = require("./routes/signal.routes");
 const { getSignal } = require("./signal.api");
@@ -31,8 +42,17 @@ const sectorParticipationApi = require("./services/sectorParticipation.api");
 const batchSignalsApi = require("./services/signals.batch.api");
 const moversApi = require("./services/scanner/movers.api");
 
+// ==========================================
+// TOKEN / ENGINE
+// ==========================================
 const tokenService = require("./token.service");
-const { loadOptionSymbolMaster, initializeTokenService } = tokenService;
+const {
+  initializeTokenService,
+  loadOptionSymbolMaster, // backward compat
+  loadOptionMaster,      // new baseline
+  getAllOptionMaster
+} = tokenService;
+
 const { setAllSymbols } = require("./symbol.service");
 const { setSmartApi } = require("./services/angel/angelTokens");
 
@@ -40,47 +60,56 @@ const {
   startAngelEngine,
   isSystemReady,
   isWsConnected,
-  setSymbolMaster   // 🔥 MISSING IMPORT
+  setSymbolMaster
 } = require("./src.angelEngine.js");
+
+// ==========================================
+// OPTIONAL ENTERPRISE MODULES (AUTO-DETECT)
+// If files don't exist yet, system runs in degraded mode.
+// ==========================================
+let createWsPool = null;
+let redisInit = null;
+let redisGet = null;
+let redisSet = null;
+let publishLTP = null;
+
+try {
+  ({ createWsPool } = require("./ws-pool.manager"));
+  console.log("🧩 ws-pool.manager loaded");
+} catch {
+  console.log("⚠️ ws-pool.manager NOT FOUND → WS Pool disabled (degraded mode)");
+}
+
+try {
+  ({ redisInit, redisGet, redisSet } = require("./redis.adapter"));
+  console.log("🧩 redis.adapter loaded");
+} catch {
+  console.log("⚠️ redis.adapter NOT FOUND → Redis disabled (memory only)");
+}
+
+try {
+  ({ publishLTP } = require("./ltp-bus"));
+  console.log("🧩 ltp-bus loaded");
+} catch {
+  console.log("⚠️ ltp-bus NOT FOUND → LTP bus disabled");
+}
 
 // ==========================================
 // APP BOOT
 // ==========================================
 const app = express();
 app.use(cors());
-app.use(express.json());
-
-// ==========================================
-// ROUTE WIRING
-// ==========================================
-app.use("/api", signalRoutes);
-app.get("/options/expiries", getOptionExpiries);
-
-const optionsApi = require("./services/options.api");
-app.use("/options", optionsApi);
-
-// CORE APIs
-app.post("/signal", getSignal);
-app.get("/signal", getSignal);
-
-app.post("/index/config", getIndexConfigAPI);
-app.post("/commodity", getCommodity);
-
-app.use("/scanner", momentumScannerApi);
-app.use("/institutional", institutionalFlowApi);
-app.use("/sector", sectorParticipationApi);
-app.use("/scanner", moversApi);
-app.use("/signals", batchSignalsApi);
+app.use(express.json({ limit: "2mb" }));
 
 // ==========================================
 // BASIC ROUTES
 // ==========================================
 app.get("/", (req, res) => {
-  res.send("Mahashakti Market Pro API is LIVE 🚀");
+  res.send("Mahashakti Market Pro API is LIVE 🚀 (ENTERPRISE 42K+ MODE)");
 });
 
 // ==========================================
-// SYSTEM STATUS (REAL ENGINE STATE)
+// SYSTEM STATUS
 // ==========================================
 app.get("/api/status", (req, res) => {
   try {
@@ -88,6 +117,7 @@ app.get("/api/status", (req, res) => {
       status: true,
       ready: isSystemReady(),
       ws: isWsConnected(),
+      mode: "ENTERPRISE_42K_PLUS",
       service: "Mahashakti Market Pro",
       timestamp: new Date().toISOString()
     });
@@ -113,13 +143,40 @@ app.get("/health", (req, res) => {
 });
 
 // ==========================================
+// ROUTE WIRING
+// ==========================================
+app.use("/api", signalRoutes);
+app.get("/options/expiries", getOptionExpiries);
+
+const optionsApi = require("./services/options.api");
+app.use("/options", optionsApi);
+
+// CORE APIs
+app.post("/signal", getSignal);
+app.get("/signal", getSignal);
+
+app.post("/index/config", getIndexConfigAPI);
+app.post("/commodity", getCommodity);
+
+app.use("/scanner", momentumScannerApi);
+app.use("/institutional", institutionalFlowApi);
+app.use("/sector", sectorParticipationApi);
+app.use("/scanner", moversApi);
+app.use("/signals", batchSignalsApi);
+
+// OPTION CHAIN
+app.use("/angel/option-chain", optionChainRoutes);
+
+// ==========================================
 // ENV CHECK
 // ==========================================
 const {
   ANGEL_API_KEY,
   ANGEL_CLIENT_ID,
   ANGEL_PASSWORD,
-  ANGEL_TOTP_SECRET
+  ANGEL_TOTP_SECRET,
+  REDIS_URL,
+  PORT
 } = process.env;
 
 if (!ANGEL_API_KEY) throw new Error("ANGEL_API_KEY missing");
@@ -128,32 +185,25 @@ if (!ANGEL_PASSWORD) throw new Error("ANGEL_PASSWORD missing");
 if (!ANGEL_TOTP_SECRET) throw new Error("ANGEL_TOTP_SECRET missing");
 
 // ==========================================
-// GLOBAL STATE (SAFE SINGLE SOURCE)
+// GLOBAL STATE
 // ==========================================
-let smartApi;
-
-
+let smartApi = null;
 let isLoggingIn = false;
+let angelLoggedIn = false;
 
-let symbolTokenMap = {};
-let tokenSymbolMap = {};
-
+let feedToken = null;
+let jwtToken = null;
+let refreshToken = null;
 
 const latestLTP = {};
 global.latestLTP = latestLTP;
-global.subscribeSymbol = null;
-global.symbolOpenPrice = {};
-
-// Runtime flags
-
-let angelLoggedIn = false;
 
 // ==========================================
 // RATE LIMIT
 // ==========================================
 const rateLimitMap = {};
 
-function checkRateLimit(req, limit = 20, windowMs = 60000) {
+function checkRateLimit(req, limit = 180, windowMs = 60000) {
   const ip =
     req.headers["x-forwarded-for"] ||
     req.socket.remoteAddress ||
@@ -179,8 +229,11 @@ function checkRateLimit(req, limit = 20, windowMs = 60000) {
 }
 
 // ==========================================
-// SYMBOL MASTER
+// SYMBOL MASTER (ALL SEGMENTS)
 // ==========================================
+let symbolTokenMap = {};
+let tokenSymbolMap = {};
+
 function loadSymbolMaster() {
   return new Promise((resolve, reject) => {
     console.log("📥 Loading Angel Symbol Master...");
@@ -192,27 +245,43 @@ function loadSymbolMaster() {
           let data = "";
           res.on("data", (c) => (data += c));
           res.on("end", () => {
-            const json = JSON.parse(data);
+            try {
+              const json = JSON.parse(data);
 
-            json.forEach((item) => {
-              if (!item.symbol || !item.token) return;
-              if (item.exch_seg === "NSE" || item.exch_seg === "BSE") {
+              json.forEach((item) => {
+                if (!item.symbol || !item.token) return;
+
+                const seg = (item.exch_seg || "").toLowerCase();
+                let exchangeType = null;
+
+                if (seg === "nse_cm") exchangeType = 1;
+                if (seg === "nse_fo") exchangeType = 2;
+                if (seg === "bse_cm") exchangeType = 3;
+                if (seg === "bse_fo") exchangeType = 4;
+                if (seg === "mcx_fo") exchangeType = 5;
+                if (seg === "ncx_fo") exchangeType = 7;
+                if (seg === "cde_fo") exchangeType = 13;
+
+                if (!exchangeType) return;
+
                 const symbol = item.symbol.toUpperCase();
-                const exchangeType = item.exch_seg === "NSE" ? 1 : 3;
 
                 symbolTokenMap[symbol] = {
                   token: item.token,
                   exchangeType
                 };
-                tokenSymbolMap[item.token] = symbol;
-              }
-            });
 
-            console.log(
-              "✅ STOCK Symbols Loaded:",
-              Object.keys(symbolTokenMap).length
-            );
-            resolve();
+                tokenSymbolMap[item.token] = symbol;
+              });
+
+              console.log(
+                "✅ SYMBOLS Loaded:",
+                Object.keys(symbolTokenMap).length
+              );
+              resolve();
+            } catch (e) {
+              reject(e);
+            }
           });
         }
       )
@@ -239,20 +308,29 @@ async function angelLogin() {
       otp
     );
 
- smartApi.setAccessToken(session.data.jwtToken);
-feedToken = session.data.feedToken;
+    jwtToken = session?.data?.jwtToken || null;
+    refreshToken = session?.data?.refreshToken || null;
+    feedToken = session?.data?.feedToken || null;
 
-// 🔥 EXPORT TOKENS TO ENV FOR ALL SERVICES
-process.env.ANGEL_ACCESS_TOKEN = session.data.jwtToken;
-process.env.ANGEL_FEED_TOKEN = session.data.feedToken;   // ← ADD THIS LINE
+    if (!jwtToken || !feedToken) {
+      throw new Error("Invalid token response from Angel");
+    }
+
+    smartApi.setAccessToken(jwtToken);
+
+    // Export for other services
+    process.env.ANGEL_ACCESS_TOKEN = jwtToken;
+    process.env.ANGEL_FEED_TOKEN = feedToken;
 
     angelLoggedIn = true;
     console.log("✅ Angel Login SUCCESS");
 
-    // 🔥 LINK SMARTAPI TO TOKEN SERVICE (Carry-2B FIX)
+    // Link SmartAPI globally
     setSmartApi(smartApi);
 
-   
+    // Start WS Pool AFTER login (if available)
+    await startWsPool();
+
   } catch (e) {
     angelLoggedIn = false;
     console.error("❌ Angel Login Error:", e.message);
@@ -263,12 +341,78 @@ process.env.ANGEL_FEED_TOKEN = session.data.feedToken;   // ← ADD THIS LINE
 }
 
 // ==========================================
-// SMARTAPI DIRECT LTP FETCH
+// TOKEN REFRESH GUARD
+// ==========================================
+async function refreshJwtToken() {
+  try {
+    if (!refreshToken || !smartApi) return;
+
+    console.log("🔁 Refreshing JWT Token...");
+    const res = await smartApi.generateToken(refreshToken);
+
+    jwtToken = res?.data?.jwtToken || jwtToken;
+    refreshToken = res?.data?.refreshToken || refreshToken;
+    feedToken = res?.data?.feedToken || feedToken;
+
+    smartApi.setAccessToken(jwtToken);
+
+    process.env.ANGEL_ACCESS_TOKEN = jwtToken;
+    process.env.ANGEL_FEED_TOKEN = feedToken;
+
+    console.log("✅ Token Refresh SUCCESS");
+  } catch (e) {
+    console.error("❌ Token Refresh Failed:", e.message);
+    angelLoggedIn = false;
+  }
+}
+
+// ==========================================
+// WS POOL (OPTIONAL — 70 SOCKETS)
+// ==========================================
+let wsPool = null;
+
+async function startWsPool() {
+  if (!createWsPool || wsPool) return;
+
+  console.log("🧩 Starting WS Pool Manager (70 sockets)...");
+
+  wsPool = createWsPool({
+    maxSockets: 70, // FULL 42K+ MODE
+    tokensPerSocket: 1000,
+    apiKey: ANGEL_API_KEY,
+    clientCode: ANGEL_CLIENT_ID,
+    getJwt: () => jwtToken,
+    getFeedToken: () => feedToken,
+
+    onTick: (tick) => {
+      if (!tick || !tick.token) return;
+
+      latestLTP[tick.token] = tick.ltp;
+
+      if (publishLTP) {
+        publishLTP(tick);
+      }
+
+      if (redisSet) {
+        redisSet(`ltp:${tick.exchangeType}:${tick.token}`, tick.ltp, 5);
+      }
+    },
+
+    onAuthError: async () => {
+      console.log("⚠️ WS Auth Error → Refreshing token");
+      await refreshJwtToken();
+    }
+  });
+
+  await wsPool.start();
+  console.log("✅ WS Pool ONLINE (70 sockets)");
+}
+
+// ==========================================
+// SMARTAPI DIRECT LTP (FALLBACK)
 // ==========================================
 async function getSmartApiLTP(exchange, symbol, token) {
-  if (!smartApi) {
-    throw new Error("SmartAPI not initialized");
-  }
+  if (!smartApi) throw new Error("SmartAPI not initialized");
 
   try {
     const res = await smartApi.getLTP(exchange, symbol, token);
@@ -280,20 +424,55 @@ async function getSmartApiLTP(exchange, symbol, token) {
 }
 
 // ==========================================
-// LTP API
+// LTP API (REDIS → WS → REST)
 // ==========================================
 app.get("/angel/ltp", async (req, res) => {
   try {
-    const { exchange, symbol, token } = req.query;
-
-    if (!exchange || !symbol || !token) {
-      return res.status(400).json({
+    if (!checkRateLimit(req, 240, 60000)) {
+      return res.status(429).json({
         status: false,
-        message: "exchange, symbol, token required"
+        message: "Rate limit exceeded"
       });
     }
 
-    const ltp = await getSmartApiLTP(exchange, symbol, token);
+    const { exchangeType, symbol, token } = req.query;
+
+    if (!exchangeType || !token) {
+      return res.status(400).json({
+        status: false,
+        message: "exchangeType, token required"
+      });
+    }
+
+    if (redisGet) {
+      const cached = await redisGet(`ltp:${exchangeType}:${token}`);
+      if (cached) {
+        return res.json({
+          status: true,
+          source: "redis",
+          token,
+          ltp: Number(cached)
+        });
+      }
+    }
+
+    if (latestLTP[token]) {
+      return res.json({
+        status: true,
+        source: "ws",
+        token,
+        ltp: latestLTP[token]
+      });
+    }
+
+    if (!symbol) {
+      return res.status(503).json({
+        status: false,
+        message: "Symbol required for REST fallback"
+      });
+    }
+
+    const ltp = await getSmartApiLTP("NSE", symbol, token);
 
     if (!ltp) {
       return res.status(503).json({
@@ -304,8 +483,8 @@ app.get("/angel/ltp", async (req, res) => {
 
     res.json({
       status: true,
-      exchange,
-      symbol,
+      source: "rest",
+      token,
       ltp
     });
   } catch (e) {
@@ -317,18 +496,13 @@ app.get("/angel/ltp", async (req, res) => {
 });
 
 // ==========================================
-// OPTION CHAIN
-// ==========================================
-app.use("/angel/option-chain", optionChainRoutes);
-
-// ==========================================
 // LOGIN LOOP
 // ==========================================
 function startAngelLoginLoop() {
   setTimeout(angelLogin, 2000);
 
   setInterval(() => {
-    if (!feedToken && !isLoggingIn) {
+    if (!angelLoggedIn && !isLoggingIn) {
       console.log("🔁 Retrying Angel login...");
       angelLogin();
     }
@@ -338,43 +512,56 @@ function startAngelLoginLoop() {
 // ==========================================
 // SERVER START
 // ==========================================
-const PORT = process.env.PORT || 3000;
+const SERVER_PORT = PORT || 3000;
 
-app.listen(PORT, async () => {
-  console.log("🚀 Server running on port", PORT);
+app.listen(SERVER_PORT, async () => {
+  console.log("🚀 Server running on port", SERVER_PORT);
 
   try {
-   await initializeTokenService();
+    // Redis init (optional)
+    if (redisInit && REDIS_URL) {
+      await redisInit(REDIS_URL);
+    }
 
-await loadSymbolMaster();
+    // Token Service baseline
+    await initializeTokenService();
 
-// LINK STOCK SYMBOLS INTO ENGINE
-setAllSymbols(Object.keys(symbolTokenMap));
+    // Load Symbols (All segments)
+    await loadSymbolMaster();
+    setAllSymbols(Object.keys(symbolTokenMap));
 
-// LOAD OPTIONS
-await loadOptionSymbolMaster();
+    // Load Option Master (42K+)
+    if (loadOptionMaster) {
+      await loadOptionMaster(true);
+    } else {
+      await loadOptionSymbolMaster();
+    }
 
-// 🔥🔥 THIS LINE IS MISSING — ENGINE NEVER GETS OPTIONS
-global.OPTION_SYMBOLS = require("./token.service").getLoadedCount
-  ? require("./token.service")
-  : null;
+    const optionMaster = getAllOptionMaster
+      ? getAllOptionMaster()
+      : tokenService.getAllOptionMaster
+      ? tokenService.getAllOptionMaster()
+      : null;
 
-// OR BETTER (CLEAN WAY)
-global.OPTION_SYMBOLS = tokenService.getAllOptionMaster();
+    if (!optionMaster || Object.keys(optionMaster).length === 0) {
+      throw new Error("Option Master empty");
+    }
 
-// 🔥 INJECT INTO ENGINE
-setSymbolMaster(global.OPTION_SYMBOLS);
+    // Inject into Engine
+    setSymbolMaster(optionMaster);
 
-startAngelLoginLoop();
+    // Start Login Loop (WS starts after login)
+    startAngelLoginLoop();
 
-    // 🔥 START LIVE ENGINE AFTER SYMBOLS READY
+    // Start Engine after infra ready
     setTimeout(() => {
       console.log("🧠 Booting Angel LIVE Engine...");
       startAngelEngine();
-    }, 5000);
+    }, 8000);
 
   } catch (e) {
     console.error("❌ Startup failed:", e);
+    process.exit(1);
   }
 });
 
@@ -384,7 +571,11 @@ startAngelLoginLoop();
 function gracefulShutdown(signal) {
   console.log(`🛑 ${signal} received. Shutting down safely...`);
 
- 
+  try {
+    if (wsPool && wsPool.stop) wsPool.stop();
+  } catch (e) {
+    console.error("WS stop error:", e.message);
+  }
 
   setTimeout(() => {
     console.log("✅ Process exited cleanly");
