@@ -187,6 +187,36 @@ async function angelLogin() {
 }
 
 // ==========================================
+// RATE LIMIT (SAFE DEFAULT)
+// ==========================================
+const rateLimitMap = {};
+
+function checkRateLimit(req, limit = 240, windowMs = 60000) {
+  const ip =
+    req.headers["x-forwarded-for"] ||
+    req.socket.remoteAddress ||
+    "unknown";
+
+  const now = Date.now();
+
+  if (!rateLimitMap[ip]) {
+    rateLimitMap[ip] = { count: 1, lastReset: now };
+    return true;
+  }
+
+  const entry = rateLimitMap[ip];
+
+  if (now - entry.lastReset > windowMs) {
+    entry.count = 1;
+    entry.lastReset = now;
+    return true;
+  }
+
+  entry.count += 1;
+  return entry.count <= limit;
+}
+
+// ==========================================
 // LTP API — SYMBOL + TOKEN RESOLVER
 // ==========================================
 app.get("/angel/ltp", async (req, res) => {
