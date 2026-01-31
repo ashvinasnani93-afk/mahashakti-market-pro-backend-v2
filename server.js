@@ -3,14 +3,11 @@
 // ENTERPRISE 42K+ MODE — CARRY-1
 // FULL REPLACEMENT FILE (SERVER BOOT LAYER)
 // ------------------------------------------
-// Boot Order:
-// 1) ENV CHECK
-// 2) Token Service Init
-// 3) Symbol Master (Stocks/Futures/Commodities)
-// 4) Option Master (42K+ map)
-// 5) Angel Login (JWT + Feed)
-// 6) WS Pool (if module exists) — 70 sockets
-// 7) Engine Start
+// Fixes:
+// 1) AUTO-SUBSCRIBE ALL STOCK TOKENS TO WS POOL
+// 2) REDIS → WS → REST LTP FALLBACK CHAIN
+// 3) 42K+ OPTION MASTER WIRING KEPT INTACT
+// 4) OPTIONAL MODULES (ws-pool/redis/ltp-bus) AUTO-DETECT
 // ==========================================
 
 "use strict";
@@ -65,7 +62,6 @@ const {
 
 // ==========================================
 // OPTIONAL ENTERPRISE MODULES (AUTO-DETECT)
-// If files don't exist yet, system runs in degraded mode.
 // ==========================================
 let createWsPool = null;
 let redisInit = null;
@@ -203,7 +199,7 @@ global.latestLTP = latestLTP;
 // ==========================================
 const rateLimitMap = {};
 
-function checkRateLimit(req, limit = 180, windowMs = 60000) {
+function checkRateLimit(req, limit = 240, windowMs = 60000) {
   const ip =
     req.headers["x-forwarded-for"] ||
     req.socket.remoteAddress ||
@@ -254,6 +250,7 @@ function loadSymbolMaster() {
                 const seg = (item.exch_seg || "").toLowerCase();
                 let exchangeType = null;
 
+                // Angel exchangeType map
                 if (seg === "nse_cm") exchangeType = 1;
                 if (seg === "nse_fo") exchangeType = 2;
                 if (seg === "bse_cm") exchangeType = 3;
@@ -406,6 +403,31 @@ async function startWsPool() {
 
   await wsPool.start();
   console.log("✅ WS Pool ONLINE (70 sockets)");
+
+  // 🔥 AUTO-SUBSCRIBE ALL STOCK TOKENS
+  subscribeAllStocksToWS();
+}
+
+// ==========================================
+// AUTO-SUBSCRIBE STOCK TOKENS
+// ==========================================
+function subscribeAllStocksToWS() {
+  if (!wsPool || !symbolTokenMap) return;
+
+  const tokens = Object.values(symbolTokenMap).map((s) => ({
+    token: s.token,
+    exchangeType: s.exchangeType
+  }));
+
+  if (!tokens.length) {
+    console.log("⚠️ No stock tokens found to subscribe");
+    return;
+  }
+
+  console.log("📡 Subscribing STOCK tokens to WS:", tokens.length);
+  if (wsPool.subscribe) {
+    wsPool.subscribe(tokens);
+  }
 }
 
 // ==========================================
@@ -444,6 +466,7 @@ app.get("/angel/ltp", async (req, res) => {
       });
     }
 
+    // Redis first
     if (redisGet) {
       const cached = await redisGet(`ltp:${exchangeType}:${token}`);
       if (cached) {
@@ -456,6 +479,7 @@ app.get("/angel/ltp", async (req, res) => {
       }
     }
 
+    // WS memory
     if (latestLTP[token]) {
       return res.json({
         status: true,
@@ -465,6 +489,7 @@ app.get("/angel/ltp", async (req, res) => {
       });
     }
 
+    // REST fallback
     if (!symbol) {
       return res.status(503).json({
         status: false,
