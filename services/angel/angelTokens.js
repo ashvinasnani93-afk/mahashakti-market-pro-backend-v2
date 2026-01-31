@@ -39,6 +39,12 @@ async function fetchOptionTokens() {
   const feedToken = process.env.ANGEL_FEED_TOKEN;
   const clientCode = process.env.ANGEL_CLIENT_ID;
 
+  const accessToken = process.env.ANGEL_ACCESS_TOKEN;
+
+if (!accessToken) {
+  throw new Error("Missing ANGEL_ACCESS_TOKEN (JWT) – login not synced");
+}
+
   if (!feedToken || !clientCode) {
     throw new Error("Missing ANGEL_FEED_TOKEN or ANGEL_CLIENT_ID");
   }
@@ -62,10 +68,12 @@ async function fetchOptionTokens() {
 // 🔐 SYNC INTO PROCESS ENV FOR WEBSOCKET
 process.env.ANGEL_FEED_TOKEN = feedToken;
 process.env.ANGEL_CLIENT_ID = clientCode;
+process.env.ANGEL_ACCESS_TOKEN = accessToken;
 
 console.log("🔐 ENV SYNC CONFIRM:", {
   FEED: !!process.env.ANGEL_FEED_TOKEN,
-  CLIENT: process.env.ANGEL_CLIENT_ID
+  CLIENT: process.env.ANGEL_CLIENT_ID,
+  JWT: process.env.ANGEL_ACCESS_TOKEN?.slice(0, 12) + "****"
 });
 
 return {
