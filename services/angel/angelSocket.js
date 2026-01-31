@@ -1,47 +1,53 @@
-// ==========================================
-// ANGEL SMARTAPI 2.0 WEBSOCKET ENGINE
-// MAHASHAKTI MARKET PRO
-// URL AUTH + HEARTBEAT + CHUNK SAFE + RECONNECT
-// ==========================================
-
 const WebSocket = require("ws");
 
 let ws = null;
 let tickHandler = null;
-let pendingTokens = [];
+let heartbeatTimer = null;
 let reconnectTimer = null;
 
 // ================================
-// BUILD WS URL (SMARTAPI 2.0 AUTH)
+// CONFIG
 // ================================
-function buildWSUrl() {
-  const clientCode = process.env.ANGEL_CLIENT_ID;
-  const apiKey = process.env.ANGEL_API_KEY;
-  const feedToken = process.env.ANGEL_FEED_TOKEN;
-
-  if (!clientCode || !apiKey || !feedToken) {
-    throw new Error(
-      "Missing ENV: ANGEL_CLIENT_ID / ANGEL_API_KEY / ANGEL_FEED_TOKEN"
-    );
-  }
-
-  return `wss://smartapisocket.angelone.in/smart-stream?clientCode=${clientCode}&feedToken=${feedToken}&apiKey=${apiKey}`;
-}
+const WS_URL = "wss://smartapisocket.angelone.in/smart-stream";
+const HEARTBEAT_INTERVAL = 30000;
+const RECONNECT_DELAY = 3000;
 
 // ================================
-// CONNECT ENGINE
+// CONNECT
 // ================================
 function connectAngelSocket(onTick) {
   tickHandler = onTick;
 
   try {
-    const url = buildWSUrl();
-    console.log("🔌 Connecting Angel WS...");
-    ws = new WebSocket(url);
-  } catch (e) {
-    console.log("❌ WS Build URL Failed:", e.message);
-    reconnect();
-    return;
+    const apiKey = process.env.ANGEL_API_KEY;
+    const clientCode = process.env.ANGEL_CLIENT_ID;
+    const feedToken = process.env.ANGEL_FEED_TOKEN;
+    const accessToken = process.env.ANGEL_ACCESS_TOKEN;
+
+    if (!apiKey || !clientCode || !feedToken || !accessToken) {
+      console.log("❌ WS ENV MISSING:", {
+        API: !!apiKey,
+        CLIENT: !!clientCode,
+        FEED: !!feedToken,
+        ACCESS: !!accessToken
+      });
+      return;
+    }
+
+    console.log("🔗 Connecting Angel WS (HEADER MODE)...");
+
+    ws = new WebSocket(WS_URL, {
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "x-api-key": apiKey,
+        "x-client-code": clientCode,
+        "x-feed-token": feedToken
+      }
+    });
+
+  } catch (err) {
+    console.log("❌ WS Build Failed:", err.message);
+    return scheduleReconnect();
   }
 
   // ================================
@@ -50,12 +56,6 @@ function connectAngelSocket(onTick) {
   ws.on("open", () => {
     console.log("🟢 Angel WebSocket CONNECTED");
     startHeartbeat();
-
-    if (pendingTokens.length) {
-      console.log("🚀 Subscribing pending tokens:", pendingTokens.length);
-      subscribeTokens(pendingTokens);
-      pendingTokens = [];
-    }
   });
 
   // ================================
@@ -63,26 +63,12 @@ function connectAngelSocket(onTick) {
   // ================================
   ws.on("message", (data) => {
     try {
-      // Tick packets may be binary or JSON (errors)
-      let msg;
-      try {
-        msg = JSON.parse(data.toString());
-      } catch {
-        // Binary tick — forward raw
-        if (tickHandler) tickHandler(data);
-        return;
-      }
+      if (data.toString() === "pong") return;
 
-      // Error response
-      if (msg?.errorCode) {
-        console.log("⚠ Angel WS Error:", msg.errorCode, msg.errorMessage);
-        return;
-      }
-
-      // Forward any JSON ticks if present
+      const msg = JSON.parse(data.toString());
       if (tickHandler) tickHandler(msg);
     } catch (e) {
-      // ignore noise
+      // Binary packets ignored here
     }
   });
 
@@ -90,103 +76,86 @@ function connectAngelSocket(onTick) {
   // CLOSE
   // ================================
   ws.on("close", () => {
-    console.log("🔴 Angel WebSocket CLOSED — reconnecting...");
+    console.log("🔴 Angel WS CLOSED — reconnecting...");
     stopHeartbeat();
-    reconnect();
+    scheduleReconnect();
   });
 
   // ================================
   // ERROR
   // ================================
   ws.on("error", (err) => {
-    console.log("❌ Angel WS Error:", err.message);
-    stopHeartbeat();
-    reconnect();
+    console.log("⚠ Angel WS Error:", err.message);
   });
 }
 
 // ================================
 // HEARTBEAT
 // ================================
-let heartbeatTimer = null;
-
 function startHeartbeat() {
   stopHeartbeat();
 
   heartbeatTimer = setInterval(() => {
     if (ws && ws.readyState === 1) {
-      try {
-        ws.send("ping");
-        console.log("💓 WS Heartbeat Ping");
-      } catch {
-        console.log("⚠ WS Heartbeat Failed");
-      }
+      ws.send("ping");
+      console.log("❤️ WS Heartbeat Ping");
     }
-  }, 30000);
+  }, HEARTBEAT_INTERVAL);
 }
 
 function stopHeartbeat() {
-  if (heartbeatTimer) clearInterval(heartbeatTimer);
-  heartbeatTimer = null;
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
 }
 
 // ================================
 // RECONNECT
 // ================================
-function reconnect() {
+function scheduleReconnect() {
   if (reconnectTimer) return;
 
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
     connectAngelSocket(tickHandler);
-  }, 5000);
+  }, RECONNECT_DELAY);
 }
 
 // ================================
-// SUBSCRIBE TOKENS (CHUNK SAFE)
+// SUBSCRIBE (SAFE CHUNKING)
 // ================================
 function subscribeTokens(tokens = []) {
   if (!ws || ws.readyState !== 1) {
-    console.log("⏳ WS not ready — queueing tokens:", tokens.length);
-    pendingTokens = tokens;
+    console.log("⏳ WS not ready — skipping subscribe");
     return;
   }
 
-  const CHUNK = 900; // Angel limit safe
-  const exchangeType = 2; // NSE FO
+  const CHUNK = 200;
 
   for (let i = 0; i < tokens.length; i += CHUNK) {
     const batch = tokens.slice(i, i + CHUNK).map(String);
 
     const payload = {
-      correlationID: "mmpro_" + Date.now(),
-      action: 1, // subscribe
+      correlationID: "mahashakti-" + Date.now(),
+      action: 1,
       params: {
         mode: 1, // LTP
         tokenList: [
           {
-            exchangeType,
+            exchangeType: 2, // NFO
             tokens: batch
           }
         ]
       }
     };
 
-    try {
-      ws.send(JSON.stringify(payload));
-      console.log("📡 Subscribed batch:", batch.length);
-    } catch {
-      console.log("⚠ WS Send Failed — requeueing");
-      pendingTokens = tokens;
-      return;
-    }
+    ws.send(JSON.stringify(payload));
   }
 
-  console.log("✅ Total Tokens Subscribed:", tokens.length);
+  console.log("📡 Subscribed Tokens:", tokens.length);
 }
 
-// ================================
-// EXPORTS
 // ================================
 module.exports = {
   connectAngelSocket,
