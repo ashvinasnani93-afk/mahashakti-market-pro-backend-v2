@@ -1,18 +1,13 @@
 // ==========================================
 // ANGEL LIVE DATA ENGINE — ENTERPRISE GRADE
 // MAHASHAKTI MARKET PRO
-// WS 2.0 | BINARY DECODE | CHUNK SUBSCRIBE | HEARTBEAT | RECONNECT
-// SINGLE SOURCE OF TRUTH FOR LIVE LTP BUS
+// WS 2.0 | MIXED TOKEN SUBSCRIBE | HEARTBEAT | RECONNECT
 // ==========================================
-
-"use strict";
 
 const WebSocket = require("ws");
 const { fetchOptionTokens } = require("./services/angel/angelTokens");
 const { getAllSymbols } = require("./symbol.service");
 
-// ==========================================
-// ENGINE STATE
 // ==========================================
 let ws = null;
 let wsConnected = false;
@@ -21,84 +16,42 @@ let engineRunning = false;
 let heartbeatTimer = null;
 let reconnectTimer = null;
 
-// ==========================================
-// LIVE LTP STORE (GLOBAL BUS)
-// ==========================================
-if (!global.latestLTP) {
-  global.latestLTP = {};
-}
-
-// ==========================================
-// SYMBOL MASTER (TOKEN → META MAP)
-// ==========================================
-// { token: { exchangeType, symbol } }
+// token -> { exchangeType, symbol }
 let SYMBOL_MASTER = {};
 
 // ==========================================
-// SYMBOL MASTER LINK
-// server.js / token.service injects this
+if (!global.latestLTP) global.latestLTP = {};
+
 // ==========================================
 function setSymbolMaster(map) {
-  try {
-    if (!map || typeof map !== "object") {
-      console.log("⚠️ ENGINE: Invalid symbol master");
-      return;
-    }
-
-    SYMBOL_MASTER = map;
-    console.log(
-      "🧠 ENGINE: Symbol master linked:",
-      Object.keys(SYMBOL_MASTER).length
-    );
-  } catch (e) {
-    console.error("❌ ENGINE: setSymbolMaster failed:", e.message);
-  }
+  if (!map || typeof map !== "object") return;
+  SYMBOL_MASTER = map;
+  console.log("🧠 ENGINE: Symbol master linked:", Object.keys(map).length);
 }
 
 // ==========================================
-// LTP UPDATE (GLOBAL BUS)
-// ==========================================
-function updateLtp(token, ltp, exchangeType) {
-  const meta = SYMBOL_MASTER[String(token)];
-
-  global.latestLTP[String(token)] = {
-    token: String(token),
-    exchangeType:
-      exchangeType ||
-      meta?.exchangeType ||
-      2, // default NFO
-    symbol: meta?.symbol || "",
-    ltp: Number(ltp),
+function updateLtp(token, exchangeType, ltp) {
+  global.latestLTP[token] = {
+    token,
+    exchangeType,
+    ltp,
     time: Date.now()
   };
 }
 
 // ==========================================
-// BINARY TICK DECODER (ANGEL WS 2.0 FORMAT)
+// BINARY DECODER
 // ==========================================
-// Structure (Big Endian):
-// [0..1]   exchangeType (uint16)
-// [2..5]   token (uint32)
-// [6..13]  ltp (float64)
 function decodeBinaryTick(buffer) {
   try {
-    const buf = Buffer.isBuffer(buffer)
-      ? buffer
-      : Buffer.from(buffer);
-
-    if (buf.length < 14) return null;
+    const buf = Buffer.from(buffer);
 
     const exchangeType = buf.readUInt16BE(0);
-    const token = buf.readUInt32BE(2);
+    const token = String(buf.readUInt32BE(2));
     const ltp = buf.readDoubleBE(6);
 
-    if (!token || Number.isNaN(ltp)) return null;
-
-    return {
-      exchangeType,
-      token: String(token),
-      ltp
-    };
+    if (!token || !ltp) return null;
+    return { exchangeType, token, ltp };
   } catch {
     return null;
   }
@@ -109,7 +62,6 @@ function decodeBinaryTick(buffer) {
 // ==========================================
 function startHeartbeat() {
   stopHeartbeat();
-
   heartbeatTimer = setInterval(() => {
     if (ws && wsConnected) {
       try {
@@ -125,45 +77,57 @@ function stopHeartbeat() {
 }
 
 // ==========================================
-// TOKEN SUBSCRIBE (ANGEL SAFE LIMIT)
-// 1000 tokens / WS message
+// MIXED TOKEN SUBSCRIBE
 // ==========================================
-function subscribeTokens(tokenList) {
-  if (!ws || !wsConnected || !Array.isArray(tokenList)) return;
+function subscribeTokens(symbols) {
+  if (!ws || !wsConnected || !Array.isArray(symbols)) return;
 
   const CHUNK = 1000;
+  const grouped = {};
 
-  for (let i = 0; i < tokenList.length; i += CHUNK) {
-    const batch = tokenList.slice(i, i + CHUNK);
-
-    const payload = {
-      action: "subscribe",
-      params: {
-        mode: "LTP",
-        tokenList: [
-          {
-            exchangeType: 2, // Angel allows mixed tokens; actual exchangeType comes in tick
-            tokens: batch.map(String)
-          }
-        ]
-      }
-    };
-
-    try {
-      ws.send(JSON.stringify(payload));
-    } catch {
-      console.log("⚠️ ENGINE: WS chunk send failed");
-      return;
-    }
+  // group by exchangeType
+  for (const s of symbols) {
+    if (!s?.token || s.exchangeType === undefined) continue;
+    if (!grouped[s.exchangeType]) grouped[s.exchangeType] = [];
+    grouped[s.exchangeType].push(String(s.token));
   }
 
-  console.log("📡 ENGINE: Subscribed tokens:", tokenList.length);
+  for (const exchangeType of Object.keys(grouped)) {
+    const tokens = grouped[exchangeType];
+
+    for (let i = 0; i < tokens.length; i += CHUNK) {
+      const batch = tokens.slice(i, i + CHUNK);
+
+      const payload = {
+        action: "subscribe",
+        params: {
+          mode: "LTP",
+          tokenList: [
+            {
+              exchangeType: Number(exchangeType),
+              tokens: batch
+            }
+          ]
+        }
+      };
+
+      try {
+        ws.send(JSON.stringify(payload));
+      } catch {
+        console.log("⚠️ ENGINE: WS send failed");
+        return;
+      }
+    }
+
+    console.log(
+      `📡 ENGINE: Subscribed ${tokens.length} tokens for EXCHANGE`,
+      exchangeType
+    );
+  }
 }
 
 // ==========================================
-// WS CONNECT
-// ==========================================
-function connectWS(feedToken, clientCode, tokens) {
+function connectWS(feedToken, clientCode, symbols) {
   console.log("🔌 ENGINE: Connecting Angel WS...");
 
   ws = new WebSocket(
@@ -185,7 +149,6 @@ function connectWS(feedToken, clientCode, tokens) {
 
   ws.on("message", (data) => {
     try {
-      // AUTH / CONTROL FRAMES (JSON TEXT)
       if (typeof data === "string") {
         const msg = JSON.parse(data);
 
@@ -193,41 +156,30 @@ function connectWS(feedToken, clientCode, tokens) {
           console.log("🔓 ENGINE: WS AUTH SUCCESS");
           systemReady = true;
           startHeartbeat();
-          subscribeTokens(tokens);
+          subscribeTokens(symbols);
         }
-
         return;
       }
 
-      // BINARY TICKS
       const tick = decodeBinaryTick(data);
       if (!tick) return;
 
-      updateLtp(
-        tick.token,
-        tick.ltp,
-        tick.exchangeType
-      );
-    } catch {
-      // silent
-    }
+      updateLtp(tick.token, tick.exchangeType, tick.ltp);
+    } catch {}
   });
 
   ws.on("close", () => {
     console.log("🔴 ENGINE: WS Closed — reconnecting...");
     cleanupWS();
-    reconnect(feedToken, clientCode, tokens);
+    reconnect(feedToken, clientCode, symbols);
   });
 
-  ws.on("error", (err) => {
-    console.log("❌ ENGINE: WS Error:", err.message);
+  ws.on("error", () => {
     cleanupWS();
-    reconnect(feedToken, clientCode, tokens);
+    reconnect(feedToken, clientCode, symbols);
   });
 }
 
-// ==========================================
-// RECONNECT
 // ==========================================
 function cleanupWS() {
   wsConnected = false;
@@ -239,58 +191,36 @@ function cleanupWS() {
   ws = null;
 }
 
-function reconnect(feedToken, clientCode, tokens) {
+function reconnect(feedToken, clientCode, symbols) {
   if (reconnectTimer) return;
-
   reconnectTimer = setTimeout(() => {
     reconnectTimer = null;
-    connectWS(feedToken, clientCode, tokens);
+    connectWS(feedToken, clientCode, symbols);
   }, 5000);
 }
 
 // ==========================================
-// ENGINE BOOT
-// ==========================================
 async function startAngelEngine() {
-  if (engineRunning) {
-    console.log("⚠️ ENGINE: Already running");
-    return;
-  }
-
+  if (engineRunning) return;
   engineRunning = true;
+
   console.log("🚀 ENGINE: Booting Angel Live Engine...");
 
   try {
-    // Fetch auth + feed bundle
     const bundle = await fetchOptionTokens();
-
-    if (!bundle || !bundle.feedToken || !bundle.clientCode) {
+    if (!bundle?.feedToken || !bundle?.clientCode) {
       throw new Error("Invalid token bundle");
     }
 
-    // Get ALL tokens (Stocks + FO + Commodities + Options)
-    const allSymbols = getAllSymbols();
+    const symbols = getAllSymbols();
+    if (!symbols.length) throw new Error("No symbols from Symbol Service");
 
-    if (!Array.isArray(allSymbols) || allSymbols.length === 0) {
-      throw new Error(
-        "No symbols available from Symbol Service"
-      );
-    }
-
-    // Build token list for WS
-    const tokens = allSymbols.map((s) =>
-      String(s.token || s)
-    );
-
-    console.log(
-      "🧠 ENGINE: FULL MODE TOKENS READY:",
-      tokens.length
-    );
+    console.log("🧠 ENGINE: FULL MODE SYMBOLS:", symbols.length);
 
     connectWS(
       bundle.feedToken,
       bundle.clientCode,
-      tokens
+      symbols
     );
   } catch (e) {
     engineRunning = false;
@@ -298,8 +228,6 @@ async function startAngelEngine() {
   }
 }
 
-// ==========================================
-// STATUS
 // ==========================================
 function isSystemReady() {
   return systemReady;
@@ -309,9 +237,6 @@ function isWsConnected() {
   return wsConnected;
 }
 
-// ==========================================
-// EXPORTS
-// ==========================================
 module.exports = {
   startAngelEngine,
   isSystemReady,
