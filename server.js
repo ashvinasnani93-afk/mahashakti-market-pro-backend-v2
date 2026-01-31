@@ -553,7 +553,7 @@ app.listen(SERVER_PORT, async () => {
 
     // Load Symbols (All segments)
     await loadSymbolMaster();
-    setAllSymbols(Object.keys(symbolTokenMap));
+   setAllSymbols(Object.values(symbolTokenMap));
 
     // Load Option Master (42K+)
     if (loadOptionMaster) {
