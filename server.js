@@ -1,9 +1,6 @@
 // ==========================================
 // MAHASHAKTI MARKET PRO — ENTERPRISE SERVER
-// CARRY-1 FINAL
-// SINGLE SOURCE OF TRUTH:
-//   - WS + LTP BUS = src.angelEngine.js
-//   - server.js = LOGIN + SYMBOL MASTER + API LAYER
+// SYMBOL → TOKEN → WS → LTP MODE (CARRY-1.5 FINAL)
 // ==========================================
 
 "use strict";
@@ -14,9 +11,6 @@ const https = require("https");
 const { SmartAPI } = require("smartapi-javascript");
 const { authenticator } = require("otplib");
 
-// ==========================================
-// ROUTES / APIS
-// ==========================================
 const signalRoutes = require("./routes/signal.routes");
 const { getSignal } = require("./signal.api");
 const optionChainRoutes = require("./optionchain.api");
@@ -53,76 +47,26 @@ const {
 } = require("./src.angelEngine");
 
 // ==========================================
-// APP BOOT
-// ==========================================
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: "2mb" }));
 
-// ==========================================
-// BASIC ROUTES
-// ==========================================
 app.get("/", (req, res) => {
-  res.send("Mahashakti Market Pro API is LIVE 🚀 (ENTERPRISE MODE)");
+  res.send("Mahashakti Market Pro API is LIVE 🚀 (SYMBOL LTP MODE)");
 });
 
-// ==========================================
-// SYSTEM STATUS
-// ==========================================
 app.get("/api/status", (req, res) => {
-  try {
-    return res.json({
-      status: true,
-      ready: isSystemReady(),
-      ws: isWsConnected(),
-      mode: "ENTERPRISE",
-      service: "Mahashakti Market Pro",
-      timestamp: new Date().toISOString()
-    });
-  } catch (e) {
-    return res.status(500).json({
-      status: false,
-      ready: false,
-      ws: false,
-      error: e.message
-    });
-  }
-});
-
-// ==========================================
-// HEALTH
-// ==========================================
-app.get("/health", (req, res) => {
   res.json({
-    status: "ok",
-    uptime: process.uptime(),
-    timestamp: Date.now()
+    status: true,
+    ready: isSystemReady(),
+    ws: isWsConnected(),
+    mode: "SYMBOL_LTP_ENTERPRISE",
+    timestamp: new Date().toISOString()
   });
 });
 
 // ==========================================
-// ROUTE WIRING
-// ==========================================
-app.use("/api", signalRoutes);
-
-// CORE APIs
-app.post("/signal", getSignal);
-app.get("/signal", getSignal);
-
-app.post("/index/config", getIndexConfigAPI);
-app.post("/commodity", getCommodity);
-
-app.use("/scanner", momentumScannerApi);
-app.use("/institutional", institutionalFlowApi);
-app.use("/sector", sectorParticipationApi);
-app.use("/scanner", moversApi);
-app.use("/signals", batchSignalsApi);
-
-// OPTION CHAIN
-app.use("/angel/option-chain", optionChainRoutes);
-
-// ==========================================
-// ENV CHECK
+// ENV
 // ==========================================
 const {
   ANGEL_API_KEY,
@@ -138,53 +82,12 @@ if (!ANGEL_PASSWORD) throw new Error("ANGEL_PASSWORD missing");
 if (!ANGEL_TOTP_SECRET) throw new Error("ANGEL_TOTP_SECRET missing");
 
 // ==========================================
-// GLOBAL STATE
+// GLOBAL WS BUS
 // ==========================================
-let smartApi = null;
-let isLoggingIn = false;
-let angelLoggedIn = false;
-
-let feedToken = null;
-let jwtToken = null;
-let refreshToken = null;
-
-// Global LTP bus (engine writes, API reads)
-if (!global.latestLTP) {
-  global.latestLTP = {};
-}
+if (!global.latestLTP) global.latestLTP = {};
 
 // ==========================================
-// RATE LIMIT
-// ==========================================
-const rateLimitMap = {};
-
-function checkRateLimit(req, limit = 240, windowMs = 60000) {
-  const ip =
-    req.headers["x-forwarded-for"] ||
-    req.socket.remoteAddress ||
-    "unknown";
-
-  const now = Date.now();
-
-  if (!rateLimitMap[ip]) {
-    rateLimitMap[ip] = { count: 1, lastReset: now };
-    return true;
-  }
-
-  const entry = rateLimitMap[ip];
-
-  if (now - entry.lastReset > windowMs) {
-    entry.count = 1;
-    entry.lastReset = now;
-    return true;
-  }
-
-  entry.count += 1;
-  return entry.count <= limit;
-}
-
-// ==========================================
-// SYMBOL MASTER (ALL SEGMENTS)
+// SYMBOL MASTER
 // ==========================================
 let symbolTokenMap = {};
 
@@ -205,14 +108,13 @@ function loadSymbolMaster() {
               json.forEach((item) => {
                 if (!item.symbol || !item.token) return;
 
-                const exch = (item.exch_seg || item.exchSeg || "").toUpperCase();
+                const exch = (item.exch_seg || "").toUpperCase();
                 let exchangeType = null;
 
-                // Angel official mapping
-                if (exch === "NSE") exchangeType = 1; // NSE CM
-                if (exch === "BSE") exchangeType = 3; // BSE CM
-                if (exch === "NFO") exchangeType = 2; // NSE FO
-                if (exch === "MCX") exchangeType = 5; // MCX FO
+                if (exch === "NSE") exchangeType = 1;
+                if (exch === "BSE") exchangeType = 3;
+                if (exch === "NFO") exchangeType = 2;
+                if (exch === "MCX") exchangeType = 5;
 
                 if (!exchangeType) return;
 
@@ -225,10 +127,7 @@ function loadSymbolMaster() {
                 };
               });
 
-              console.log(
-                "✅ SYMBOLS Loaded:",
-                Object.keys(symbolTokenMap).length
-              );
+              console.log("✅ SYMBOLS Loaded:", Object.keys(symbolTokenMap).length);
               resolve();
             } catch (e) {
               reject(e);
@@ -243,6 +142,10 @@ function loadSymbolMaster() {
 // ==========================================
 // ANGEL LOGIN
 // ==========================================
+let smartApi = null;
+let isLoggingIn = false;
+let angelLoggedIn = false;
+
 async function angelLogin() {
   if (isLoggingIn) return;
   isLoggingIn = true;
@@ -259,24 +162,20 @@ async function angelLogin() {
       otp
     );
 
-    jwtToken = session?.data?.jwtToken || null;
-    refreshToken = session?.data?.refreshToken || null;
-    feedToken = session?.data?.feedToken || null;
+    const jwtToken = session?.data?.jwtToken;
+    const feedToken = session?.data?.feedToken;
 
     if (!jwtToken || !feedToken) {
-      throw new Error("Invalid token response from Angel");
+      throw new Error("Invalid token bundle");
     }
 
     smartApi.setAccessToken(jwtToken);
-
-    // Export for engine
     process.env.ANGEL_ACCESS_TOKEN = jwtToken;
     process.env.ANGEL_FEED_TOKEN = feedToken;
 
     angelLoggedIn = true;
     console.log("✅ Angel Login SUCCESS");
 
-    // Link SmartAPI to services
     setSmartApi(smartApi);
   } catch (e) {
     angelLoggedIn = false;
@@ -288,23 +187,28 @@ async function angelLogin() {
 }
 
 // ==========================================
-// LTP API (ENTERPRISE — WS BUS ONLY)
+// LTP API — SYMBOL OR TOKEN
 // ==========================================
-app.get("/angel/ltp", async (req, res) => {
+app.get("/angel/ltp", (req, res) => {
   try {
-    if (!checkRateLimit(req, 240, 60000)) {
-      return res.status(429).json({
-        status: false,
-        message: "Rate limit exceeded"
-      });
-    }
+    let { symbol, token } = req.query;
 
-    const { token } = req.query;
+    // Resolve SYMBOL → TOKEN
+    if (!token && symbol) {
+      const entry = symbolTokenMap[symbol.toUpperCase()];
+      if (!entry) {
+        return res.status(404).json({
+          status: false,
+          message: "Symbol not found in master"
+        });
+      }
+      token = entry.token;
+    }
 
     if (!token) {
       return res.status(400).json({
         status: false,
-        message: "token required"
+        message: "symbol or token required"
       });
     }
 
@@ -320,14 +224,12 @@ app.get("/angel/ltp", async (req, res) => {
     return res.json({
       status: true,
       source: "ws",
-      token: data.token,
-      exchangeType: data.exchangeType,
-      symbol: data.symbol,
+      token,
       ltp: data.ltp,
       time: data.time
     });
   } catch (e) {
-    res.status(500).json({
+    return res.status(500).json({
       status: false,
       error: e.message
     });
@@ -335,126 +237,72 @@ app.get("/angel/ltp", async (req, res) => {
 });
 
 // ==========================================
-// LOGIN LOOP
+// ROUTES
 // ==========================================
-function startAngelLoginLoop() {
-  setTimeout(angelLogin, 2000);
+app.use("/api", signalRoutes);
+app.post("/signal", getSignal);
+app.get("/signal", getSignal);
+app.post("/index/config", getIndexConfigAPI);
+app.post("/commodity", getCommodity);
 
-  setInterval(() => {
-    if (!angelLoggedIn && !isLoggingIn) {
-      console.log("🔁 Retrying Angel login...");
-      angelLogin();
-    }
-  }, 60000);
-}
+app.use("/scanner", momentumScannerApi);
+app.use("/institutional", institutionalFlowApi);
+app.use("/sector", sectorParticipationApi);
+app.use("/scanner", moversApi);
+app.use("/signals", batchSignalsApi);
+app.use("/angel/option-chain", optionChainRoutes);
 
 // ==========================================
-// SERVER START
+// START
 // ==========================================
 const SERVER_PORT = PORT || 3000;
 
 app.listen(SERVER_PORT, async () => {
-  console.log("🚀 Server running on port", SERVER_PORT);
+  console.log("🚀 Server running on", SERVER_PORT);
 
   try {
-    // Token Service baseline
     await initializeTokenService();
-
-    // Load Symbols (ALL segments)
     await loadSymbolMaster();
 
-    // Register stock / FO / commodity tokens
     setAllSymbols(Object.values(symbolTokenMap));
 
-    // Load Option Master (42K+)
     if (loadOptionMaster) {
       await loadOptionMaster(true);
     } else {
       await loadOptionSymbolMaster();
     }
 
-    const optionMaster = getAllOptionMaster
-      ? getAllOptionMaster()
-      : tokenService.getAllOptionMaster
-      ? tokenService.getAllOptionMaster()
-      : null;
+    const optionMaster = getAllOptionMaster();
 
-    if (!optionMaster || Object.keys(optionMaster).length === 0) {
-      throw new Error("Option Master empty");
-    }
+    setOptionSymbolMaster(optionMaster || {});
 
-    // Inject option tokens into symbol service
-    setOptionSymbolMaster(optionMaster);
-
-    // Build token→meta map for engine
     const tokenMetaMap = {};
 
     Object.values(symbolTokenMap).forEach((s) => {
-      tokenMetaMap[String(s.token)] = {
+      tokenMetaMap[s.token] = {
         exchangeType: s.exchangeType,
         symbol: s.symbol
       };
     });
 
-    // Option master entries (merge)
-    Object.values(optionMaster).forEach((o) => {
-      if (!o || !o.token) return;
-      tokenMetaMap[String(o.token)] = {
+    Object.values(optionMaster || {}).forEach((o) => {
+      if (!o?.token) return;
+      tokenMetaMap[o.token] = {
         exchangeType: o.exchangeType || 2,
         symbol: o.symbol || ""
       };
     });
 
-    // Inject into engine
     setSymbolMaster(tokenMetaMap);
 
-    // Start Login Loop
-    startAngelLoginLoop();
+    setTimeout(angelLogin, 2000);
 
-    // Boot WS Engine after infra ready
     setTimeout(() => {
       console.log("🧠 Booting Angel LIVE Engine...");
       startAngelEngine();
     }, 8000);
   } catch (e) {
-    console.error("❌ Startup failed:", e);
+    console.error("❌ Startup failed:", e.message);
     process.exit(1);
   }
 });
-
-// ==========================================
-// SAFE SHUTDOWN
-// ==========================================
-function gracefulShutdown(signal) {
-  console.log(`🛑 ${signal} received. Shutting down safely...`);
-
-  setTimeout(() => {
-    console.log("✅ Process exited cleanly");
-    process.exit(0);
-  }, 1000);
-}
-
-process.on("SIGTERM", gracefulShutdown);
-process.on("SIGINT", gracefulShutdown);
-
-process.on("uncaughtException", (err) => {
-  console.error("🔥 Uncaught Exception:", err);
-  gracefulShutdown("uncaughtException");
-});
-
-process.on("unhandledRejection", (reason) => {
-  console.error("🔥 Unhandled Rejection:", reason);
-  gracefulShutdown("unhandledRejection");
-});
-
-// ==========================================
-// RATE LIMIT CLEANUP
-// ==========================================
-setInterval(() => {
-  const now = Date.now();
-  for (const ip in rateLimitMap) {
-    if (now - rateLimitMap[ip].lastReset > 5 * 60 * 1000) {
-      delete rateLimitMap[ip];
-    }
-  }
-}, 60000);
