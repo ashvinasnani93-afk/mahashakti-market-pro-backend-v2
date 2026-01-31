@@ -31,58 +31,40 @@ function setSmartApi(instance) {
 }  
   
 // 📡 FETCH OPTION TOKENS USING OPTION MASTER  
-async function fetchOptionTokens(optionSymbols = []) {  
-  try {  
-    // If smartApi is available, we can use it for additional validation  
-    if (smartApi) {  
-      console.log("📡 SmartAPI available for token fetching");  
-    }  
-  
-    // ✅ AUTO PULL FROM OPTION MASTER  
-    if (!optionSymbols.length) {  
-      console.log("📥 No symbols passed — pulling OPTION symbols from Token Master");  
-        
-     const { getAllOptionSymbols } = require("../optionsMaster.service");
-      const optionMaster = await getAllOptionSymbols();  
-        
-      if (!optionMaster || !optionMaster.length) {  
-        throw new Error("Option master empty — token.service not loaded");  
-      }  
-  
-      // Get all option tokens  
-      const tokens = optionMaster.map(opt => opt.token).filter(Boolean);  
-        
-      console.log("📥 Pulled OPTION tokens from master:", tokens.length);  
-        
-      // Return proper structure for Angel Engine  
-      return {  
-        feedToken: process.env.ANGEL_FEED_TOKEN || process.env.ANGEL_ACCESS_TOKEN,  
-        clientCode: process.env.ANGEL_CLIENT_ID,  
-        tokens: tokens  
-      };  
-    }  
-  
-    console.log("📡 Fetching Angel OPTION tokens:", optionSymbols.length);  
-  
-    // If specific symbols provided, fetch their tokens  
-    const tokens = [];  
-    for (const symbol of optionSymbols) {  
-      const tokenData = await getOptionToken(symbol);  
-      if (tokenData && tokenData.token) {  
-        tokens.push(tokenData.token);  
-      }  
-    }  
-  
-    return {  
-      feedToken: process.env.ANGEL_FEED_TOKEN || process.env.ANGEL_ACCESS_TOKEN,  
-      clientCode: process.env.ANGEL_CLIENT_ID,  
-      tokens: tokens  
-    };  
-  } catch (err) {  
-    console.error("❌ fetchOptionTokens error:", err.message);  
-    throw err;  
-  }  
-}  
+async function fetchOptionTokens() {
+  if (!smartApi) {
+    throw new Error("SmartAPI not linked");
+  }
+
+  const feedToken = process.env.ANGEL_FEED_TOKEN;
+  const clientCode = process.env.ANGEL_CLIENT_ID;
+
+  if (!feedToken || !clientCode) {
+    throw new Error("Missing ANGEL_FEED_TOKEN or ANGEL_CLIENT_ID");
+  }
+
+  // 🔥 Pull from OPTION MASTER (single source of truth)
+  const tokenService = require("../../token.service");
+  const optionMaster = tokenService.getAllOptionMaster();
+
+  if (!Array.isArray(optionMaster) || optionMaster.length === 0) {
+    throw new Error("Option master empty — cannot subscribe WS");
+  }
+
+  const tokens = optionMaster.map(o => String(o.token));
+
+  console.log("📦 Angel Token Bundle Ready:", {
+    feedToken: feedToken.slice(0, 6) + "****",
+    clientCode,
+    tokens: tokens.length
+  });
+
+  return {
+    feedToken,   // ✅ ONLY FEED TOKEN — NO JWT FALLBACK
+    clientCode,
+    tokens
+  };
+}
   
 module.exports = {  
   setSmartApi,  
