@@ -6,7 +6,7 @@
 
 const WebSocket = require("ws");
 const { fetchOptionTokens } = require("./services/angel/angelTokens");
-const { getAllSymbols } = require("../symbol.service");
+const { getAllSymbols } = require("./symbol.service");
 
 // ==========================================
 // ENGINE STATE
