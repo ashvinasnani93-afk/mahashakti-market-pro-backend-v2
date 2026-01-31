@@ -1,12 +1,11 @@
 // ==========================================
-// ANGEL LIVE DATA ENGINE (PRODUCTION)
+// ANGEL LIVE DATA ENGINE (SINGLE SOURCE)
 // MAHASHAKTI MARKET PRO
-// PRO WS ENGINE — HEARTBEAT + RECONNECT + DUPLICATE LOCK
+// PRO WS ENGINE — AUTH + CHUNK + HEARTBEAT + RECONNECT
 // ==========================================
 
 const WebSocket = require("ws");
 const { fetchOptionTokens } = require("./services/angel/angelTokens");
-const { getAllSymbols } = require("./symbol.service");
 
 // ================================
 // ENGINE STATE
@@ -16,47 +15,46 @@ let wsConnected = false;
 let systemReady = false;
 let engineRunning = false;
 let heartbeatTimer = null;
-let reconnectLock = false;
+let reconnectTimer = null;
+let OPTION_SYMBOLS = [];
 
 // ================================
 // LIVE LTP STORE
 // ================================
 const latestLtpStore = {};
 
-// ===================================
-// OPTION SYMBOL MASTER LINK
-// ===================================
-let OPTION_SYMBOLS = {};
-
+// ================================
+// OPTION MASTER LINK
+// ================================
 function setSymbolMaster(map) {
   if (!map || typeof map !== "object") {
-    console.log("⚠️ setSymbolMaster called with invalid map");
+    console.log("⚠️ setSymbolMaster invalid map");
     return;
   }
 
-  OPTION_SYMBOLS = map;
-  
+  OPTION_SYMBOLS = Array.isArray(map)
+    ? map
+    : Object.keys(map);
+
+  console.log("🧠 Angel Engine linked OPTION symbols:", OPTION_SYMBOLS.length);
 }
 
-/**
- * Internal update hook
- */
+// ================================
+// LTP UPDATE
+// ================================
 function updateLtp(symbol, ltp) {
   latestLtpStore[symbol] = {
     ltp,
-    time: Date.now(),
+    time: Date.now()
   };
 }
 
-/**
- * Get latest LTP (used by APIs)
- */
 function getLtp(symbol) {
   return latestLtpStore[symbol] || null;
 }
 
 // ================================
-// HEARTBEAT SYSTEM
+// HEARTBEAT
 // ================================
 function startHeartbeat() {
   stopHeartbeat();
@@ -66,108 +64,136 @@ function startHeartbeat() {
       try {
         ws.send(JSON.stringify({ action: "ping" }));
         console.log("❤️ WS Heartbeat");
-      } catch (e) {
+      } catch {
         console.log("⚠️ WS Heartbeat failed");
       }
     }
-  }, 25000); // Angel safe zone
+  }, 25000);
 }
 
 function stopHeartbeat() {
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer);
-    heartbeatTimer = null;
-  }
+  if (heartbeatTimer) clearInterval(heartbeatTimer);
+  heartbeatTimer = null;
 }
 
 // ================================
-// WEBSOCKET STARTER
-// ================================
-function startWebSocket(feedToken, clientCode, tokens) {
-  if (wsConnected || reconnectLock) {
-    console.log("⚠️ WS already active — skipping start");
-    return;
-  }
-
-  reconnectLock = true;
-  console.log("🔌 Starting Angel WebSocket...");
-
-  const url = "wss://smartapisocket.angelone.in/smart-stream";
-
-  ws = new WebSocket(url, {
-    headers: {
-      Authorization: `Bearer ${feedToken}`,
-      "x-client-code": clientCode,
-      "x-feed-token": feedToken,
-    },
-  });
-
-  ws.on("open", () => {
-    wsConnected = true;
-    reconnectLock = false;
-
-    console.log("🟢 WebSocket Connected");
-
-    startHeartbeat();
-    subscribeTokens(tokens);
-  });
-
-  ws.on("message", (data) => {
-    try {
-      const tick = JSON.parse(data.toString());
-
-      if (tick && tick.token && tick.ltp) {
-        updateLtp(tick.token, tick.ltp);
-      }
-    } catch (err) {
-      console.log("⚠️ WS Parse Error");
-    }
-  });
-
-  ws.on("close", () => {
-    console.log("🔴 WebSocket Disconnected");
-
-    wsConnected = false;
-    systemReady = false;
-    engineRunning = false;
-
-    stopHeartbeat();
-
-    setTimeout(() => {
-      console.log("🔁 Reconnecting Angel Engine...");
-    }, 5000);
-  });
-
-  ws.on("error", (err) => {
-    console.log("❌ WS ERROR:", err.message);
-    try {
-      ws.close();
-    } catch (e) {}
-  });
-}
-
-// ================================
-// TOKEN SUBSCRIBE
+// TOKEN SUBSCRIBE (CHUNK SAFE)
 // ================================
 function subscribeTokens(tokens) {
   if (!ws || !wsConnected || !Array.isArray(tokens)) return;
 
-  const payload = {
-    action: "subscribe",
-    mode: "LTP",
-    tokens,
-  };
+  const CHUNK = 200;
 
-  try {
-    ws.send(JSON.stringify(payload));
-    console.log(`📡 Subscribed Tokens: ${tokens.length}`);
-  } catch (err) {
-    console.log("⚠️ Token subscribe failed");
+  for (let i = 0; i < tokens.length; i += CHUNK) {
+    const batch = tokens.slice(i, i + CHUNK).map(String);
+
+    const payload = {
+      action: "subscribe",
+      params: {
+        mode: "LTP",
+        tokenList: [
+          {
+            exchangeType: 2,
+            tokens: batch
+          }
+        ]
+      }
+    };
+
+    try {
+      ws.send(JSON.stringify(payload));
+    } catch {
+      console.log("⚠️ WS chunk send failed");
+      return;
+    }
   }
+
+  console.log("📡 Subscribed Tokens:", tokens.length);
 }
 
 // ================================
-// MAIN ENGINE BOOT
+// WS CONNECT
+// ================================
+function connectWS(feedToken, clientCode, tokens) {
+  console.log("🔌 Connecting Angel WS...");
+
+  ws = new WebSocket("wss://smartapis.angelone.in/smart-stream");
+
+  ws.on("open", () => {
+    wsConnected = true;
+    console.log("🟢 WS Connected");
+
+    // AUTH
+    ws.send(JSON.stringify({
+      action: "authenticate",
+      params: {
+        feedToken,
+        clientCode
+      }
+    }));
+
+    console.log("🔐 WS AUTH SENT");
+  });
+
+  ws.on("message", (data) => {
+    try {
+      const msg = JSON.parse(data.toString());
+
+      // AUTH CONFIRM
+      if (msg?.status === true && msg?.type === "cn") {
+        console.log("🔓 WS AUTH SUCCESS");
+        systemReady = true;
+        startHeartbeat();
+        subscribeTokens(tokens);
+        return;
+      }
+
+      // TICKS
+      if (msg?.symbol && msg?.ltp) {
+        updateLtp(msg.symbol, msg.ltp);
+      }
+    } catch {
+      // ignore noise
+    }
+  });
+
+  ws.on("close", () => {
+    console.log("🔴 WS Closed — reconnecting...");
+    cleanupWS();
+    reconnect(feedToken, clientCode, tokens);
+  });
+
+  ws.on("error", (err) => {
+    console.log("❌ WS Error:", err.message);
+    cleanupWS();
+    reconnect(feedToken, clientCode, tokens);
+  });
+}
+
+// ================================
+// RECONNECT
+// ================================
+function cleanupWS() {
+  wsConnected = false;
+  systemReady = false;
+  stopHeartbeat();
+  try {
+    if (ws) ws.close();
+  } catch {}
+  ws = null;
+}
+
+function reconnect(feedToken, clientCode, tokens) {
+  if (reconnectTimer) return;
+
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connectWS(feedToken, clientCode, tokens);
+  }, 5000);
+}
+
+// ================================
+// ENGINE BOOT
 // ================================
 async function startAngelEngine() {
   if (engineRunning) {
@@ -176,46 +202,34 @@ async function startAngelEngine() {
   }
 
   engineRunning = true;
-  console.log("🚀 Angel LIVE Engine Booting...");
-
-  const symbols = getAllSymbols();
-
-  if (!symbols || !Array.isArray(symbols) || symbols.length === 0) {
-    console.log("⏳ Angel Engine waiting: Symbol Master not ready yet");
-    engineRunning = false;
-    return;
-  }
+  console.log("🚀 Angel Engine Booting...");
 
   try {
-    const tokenData = await fetchOptionTokens();
+    const bundle = await fetchOptionTokens();
 
     if (
-      !tokenData ||
-      !tokenData.feedToken ||
-      !tokenData.clientCode ||
-      !Array.isArray(tokenData.tokens)
+      !bundle ||
+      !bundle.feedToken ||
+      !bundle.clientCode ||
+      !Array.isArray(bundle.tokens)
     ) {
-      throw new Error("Invalid Angel token bundle");
+      throw new Error("Invalid token bundle");
     }
 
-    systemReady = true;
-    console.log("🧠 SYSTEM STATE: READY");
-
-    startWebSocket(
-      tokenData.feedToken,
-      tokenData.clientCode,
-      tokenData.tokens
+    console.log("🧠 SYSTEM READY");
+    connectWS(
+      bundle.feedToken,
+      bundle.clientCode,
+      bundle.tokens
     );
-  } catch (err) {
-    console.error("❌ Angel Engine Boot Failed:", err.message);
-    wsConnected = false;
-    systemReady = false;
+  } catch (e) {
     engineRunning = false;
+    console.log("❌ Engine boot failed:", e.message);
   }
 }
 
 // ================================
-// SYSTEM STATUS GETTERS
+// STATUS
 // ================================
 function isSystemReady() {
   return systemReady;
@@ -230,5 +244,5 @@ module.exports = {
   getLtp,
   isSystemReady,
   isWsConnected,
-  setSymbolMaster   // 🔥 REQUIRED FOR OPTION MASTER LINK
+  setSymbolMaster
 };
