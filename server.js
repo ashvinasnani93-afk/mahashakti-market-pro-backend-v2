@@ -247,17 +247,14 @@ function loadSymbolMaster() {
               json.forEach((item) => {
                 if (!item.symbol || !item.token) return;
 
-                const seg = (item.exch_seg || "").toLowerCase();
-                let exchangeType = null;
+               const exch = (item.exch_seg || item.exchSeg || "").toUpperCase();
+               let exchangeType = null;
 
-                // Angel exchangeType map
-                if (seg === "nse_cm") exchangeType = 1;
-                if (seg === "nse_fo") exchangeType = 2;
-                if (seg === "bse_cm") exchangeType = 3;
-                if (seg === "bse_fo") exchangeType = 4;
-                if (seg === "mcx_fo") exchangeType = 5;
-                if (seg === "ncx_fo") exchangeType = 7;
-                if (seg === "cde_fo") exchangeType = 13;
+               // Angel official mapping
+               if (exch === "NSE") exchangeType = 1;   // NSE CM
+               if (exch === "BSE") exchangeType = 3;   // BSE CM
+               if (exch === "NFO") exchangeType = 2;   // NSE FO (Options/Futures)
+               if (exch === "MCX") exchangeType = 5;   // MCX FO
 
                 if (!exchangeType) return;
 
