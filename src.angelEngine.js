@@ -6,6 +6,7 @@
 
 const WebSocket = require("ws");
 const { fetchOptionTokens } = require("./services/angel/angelTokens");
+const { getAllSymbols } = require("./services/symbol.service");
 
 // ==========================================
 // ENGINE STATE
@@ -231,24 +232,31 @@ async function startAngelEngine() {
   console.log("🚀 ENGINE: Booting Angel Live Engine...");
 
   try {
-    const bundle = await fetchOptionTokens();
+   // 🔥 FULL SYMBOL MODE (Stock + FO + Commodity + Options)
+const bundle = await fetchOptionTokens();
 
-    if (
-      !bundle ||
-      !bundle.feedToken ||
-      !bundle.clientCode ||
-      !Array.isArray(bundle.tokens)
-    ) {
-      throw new Error("Invalid token bundle");
-    }
+if (!bundle || !bundle.feedToken || !bundle.clientCode) {
+  throw new Error("Invalid token bundle");
+}
 
-    console.log("🧠 ENGINE: Token bundle ready:", bundle.tokens.length);
+// Get ALL tokens from SYMBOL SERVICE
+const allSymbols = getAllSymbols();
 
-    connectWS(
-      bundle.feedToken,
-      bundle.clientCode,
-      bundle.tokens
-    );
+if (!Array.isArray(allSymbols) || allSymbols.length === 0) {
+  throw new Error("No symbols available from Symbol Service");
+}
+
+// Extract token list
+const tokens = allSymbols.map(s => String(s.token || s));
+
+console.log("🧠 ENGINE: FULL MODE TOKENS READY:", tokens.length);
+
+connectWS(
+  bundle.feedToken,
+  bundle.clientCode,
+  tokens
+);
+    
   } catch (e) {
     engineRunning = false;
     console.log("❌ ENGINE: Boot failed:", e.message);
