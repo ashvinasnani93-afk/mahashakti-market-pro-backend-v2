@@ -187,28 +187,40 @@ async function angelLogin() {
 }
 
 // ==========================================
-// LTP API — SYMBOL OR TOKEN
+// LTP API — SYMBOL + TOKEN RESOLVER
 // ==========================================
-app.get("/angel/ltp", (req, res) => {
+app.get("/angel/ltp", async (req, res) => {
   try {
-    let { symbol, token } = req.query;
+    if (!checkRateLimit(req, 240, 60000)) {
+      return res.status(429).json({
+        status: false,
+        message: "Rate limit exceeded"
+      });
+    }
+
+    let { symbol, token, exchangeType } = req.query;
 
     // Resolve SYMBOL → TOKEN
     if (!token && symbol) {
-      const entry = symbolTokenMap[symbol.toUpperCase()];
-      if (!entry) {
+      const key = symbol.toUpperCase();
+      const meta = symbolTokenMap[key];
+
+      if (!meta) {
         return res.status(404).json({
           status: false,
-          message: "Symbol not found in master"
+          message: "Symbol not found in master",
+          symbol: key
         });
       }
-      token = entry.token;
+
+      token = meta.token;
+      exchangeType = meta.exchangeType;
     }
 
     if (!token) {
       return res.status(400).json({
         status: false,
-        message: "symbol or token required"
+        message: "token or symbol required"
       });
     }
 
@@ -217,7 +229,9 @@ app.get("/angel/ltp", (req, res) => {
     if (!data) {
       return res.status(503).json({
         status: false,
-        message: "LTP not in stream yet"
+        message: "LTP not in stream yet",
+        token,
+        exchangeType
       });
     }
 
@@ -225,6 +239,8 @@ app.get("/angel/ltp", (req, res) => {
       status: true,
       source: "ws",
       token,
+      exchangeType: data.exchangeType || exchangeType,
+      symbol,
       ltp: data.ltp,
       time: data.time
     });
