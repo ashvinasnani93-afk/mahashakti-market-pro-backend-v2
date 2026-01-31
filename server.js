@@ -473,29 +473,25 @@ exchange = exchange || exchangeType;
       });
     }
 
-    // REST fallback
-    if (!symbol) {
-      return res.status(503).json({
-        status: false,
-        message: "Symbol required for REST fallback"
-      });
-    }
+    // WS LTP SOURCE (ENTERPRISE MODE)
+const ltpData = global.latestLTP?.[String(token)];
 
-    const ltp = await getSmartApiLTP("NSE", symbol, token);
+if (!ltpData) {
+  return res.status(503).json({
+    status: false,
+    message: "LTP not in stream yet"
+  });
+}
 
-    if (!ltp) {
-      return res.status(503).json({
-        status: false,
-        message: "LTP unavailable"
-      });
-    }
-
-    res.json({
-      status: true,
-      source: "rest",
-      token,
-      ltp
-    });
+return res.json({
+  status: true,
+  source: "ws",
+  exchangeType,
+  token,
+  symbol,
+  ltp: ltpData.ltp,
+  time: ltpData.time
+});
   } catch (e) {
     res.status(500).json({
       status: false,
