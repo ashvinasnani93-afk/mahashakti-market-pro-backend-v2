@@ -131,23 +131,21 @@ if (!ANGEL_TOTP_SECRET) throw new Error("ANGEL_TOTP_SECRET missing");
 // GLOBAL STATE (SAFE SINGLE SOURCE)
 // ==========================================
 let smartApi;
-let ws;
-let feedToken = null;
+
+
 let isLoggingIn = false;
 
 let symbolTokenMap = {};
 let tokenSymbolMap = {};
-let subscribedTokens = new Set();
-let latestLTP = {};
-let symbolLastSeen = {};
 
+
+const latestLTP = {};
 global.latestLTP = latestLTP;
 global.subscribeSymbol = null;
 global.symbolOpenPrice = {};
 
 // Runtime flags
-let wsConnected = false;
-let wsStarting = false;
+
 let angelLoggedIn = false;
 
 // ==========================================
@@ -178,15 +176,6 @@ function checkRateLimit(req, limit = 20, windowMs = 60000) {
 
   entry.count += 1;
   return entry.count <= limit;
-}
-
-// ==========================================
-// LTP DECODER
-// ==========================================
-function decodeLTP(buffer) {
-  if (buffer.length !== 51) return null;
-  const pricePaise = buffer.readInt32LE(43);
-  return pricePaise / 100;
 }
 
 // ==========================================
@@ -263,9 +252,7 @@ process.env.ANGEL_FEED_TOKEN = session.data.feedToken;   // ← ADD THIS LINE
     // 🔥 LINK SMARTAPI TO TOKEN SERVICE (Carry-2B FIX)
     setSmartApi(smartApi);
 
-    if (!wsConnected && !wsStarting) {
-      startWebSocket();
-    }
+   
   } catch (e) {
     angelLoggedIn = false;
     console.error("❌ Angel Login Error:", e.message);
@@ -291,150 +278,6 @@ async function getSmartApiLTP(exchange, symbol, token) {
     return null;
   }
 }
-
-// ==========================================
-// HEARTBEAT
-// ==========================================
-let heartbeatTimer = null;
-
-function stopHeartbeat() {
-  if (heartbeatTimer) clearInterval(heartbeatTimer);
-  heartbeatTimer = null;
-}
-
-function startHeartbeat() {
-  stopHeartbeat();
-
-  heartbeatTimer = setInterval(() => {
-    if (ws && wsConnected) {
-      try {
-        ws.ping();
-        console.log("❤️ WS Heartbeat Ping");
-      } catch {
-        console.log("⚠️ WS Heartbeat Failed");
-      }
-    }
-  }, 20000);
-}
-
-// ==========================================
-// WEBSOCKET
-// ==========================================
-function startWebSocket() {
-  if (!feedToken || wsConnected || wsStarting) return;
-
-  wsStarting = true;
-
-  const wsUrl =
-    `wss://smartapisocket.angelone.in/smart-stream` +
-    `?clientCode=${ANGEL_CLIENT_ID}` +
-    `&feedToken=${feedToken}` +
-    `&apiKey=${ANGEL_API_KEY}`;
-
-  ws = new WebSocket(wsUrl);
-
-  ws.on("open", () => {
-    console.log("🟢 WebSocket Connected");
-    wsConnected = true;
-    wsStarting = false;
-    startHeartbeat();
-    subscribedTokens.clear();
-    resubscribeAllSymbols();
-  });
-
-  ws.on("message", (data) => {
-    if (!Buffer.isBuffer(data)) return;
-    if (data.length !== 51) return;
-
-    const ltp = decodeLTP(data);
-    const token = data.toString("utf8", 2, 27).replace(/\0/g, "");
-    const symbol = tokenSymbolMap[token];
-
-    if (symbol && ltp) {
-      latestLTP[symbol] = ltp;
-      symbolLastSeen[symbol] = Date.now();
-
-      if (!global.symbolOpenPrice[symbol]) {
-        global.symbolOpenPrice[symbol] = ltp;
-        console.log("🟢 OPEN PRICE SET:", symbol, "=>", ltp);
-      }
-    }
-  });
-
-  ws.on("error", (err) => {
-    console.error("❌ WebSocket error:", err.message);
-    wsConnected = false;
-    wsStarting = false;
-    stopHeartbeat();
-  });
-
-  ws.on("close", () => {
-    console.log("🔴 WebSocket Disconnected");
-    wsConnected = false;
-    wsStarting = false;
-    stopHeartbeat();
-
-    setTimeout(() => {
-      console.log("🔁 Reconnecting WebSocket...");
-      startWebSocket();
-    }, 5000);
-  });
-}
-
-// ==========================================
-// RESUBSCRIBE
-// ==========================================
-function resubscribeAllSymbols() {
-  if (!ws || ws.readyState !== 1) return;
-  Object.keys(latestLTP).forEach((symbol) => {
-    subscribeSymbol(symbol);
-  });
-}
-
-// ==========================================
-// SUBSCRIBE SYMBOL
-// ==========================================
-function subscribeSymbol(symbol) {
-  const info = symbolTokenMap[symbol];
-  if (!info || !ws || ws.readyState !== 1) return;
-  if (subscribedTokens.has(info.token)) return;
-
-  ws.send(
-    JSON.stringify({
-      action: 1,
-      params: {
-        mode: 1,
-        tokenList: [
-          { exchangeType: info.exchangeType, tokens: [info.token] }
-        ]
-      }
-    })
-  );
-
-  subscribedTokens.add(info.token);
-}
-
-global.subscribeSymbol = subscribeSymbol;
-
-// ==========================================
-// CLEANUP IDLE SYMBOLS
-// ==========================================
-setInterval(() => {
-  const now = Date.now();
-  const MAX_IDLE = 2 * 60 * 1000;
-
-  Object.keys(symbolLastSeen).forEach((symbol) => {
-    if (now - symbolLastSeen[symbol] > MAX_IDLE) {
-      const info = symbolTokenMap[symbol];
-      if (info) subscribedTokens.delete(info.token);
-
-      delete latestLTP[symbol];
-      delete symbolLastSeen[symbol];
-
-      console.log("🧹 Removed inactive symbol:", symbol);
-    }
-  });
-}, 120000);
 
 // ==========================================
 // LTP API
@@ -517,8 +360,7 @@ global.OPTION_SYMBOLS = require("./token.service").getLoadedCount
   : null;
 
 // OR BETTER (CLEAN WAY)
-const tokenService = require("./token.service");
-global.OPTION_SYMBOLS = tokenService;
+global.OPTION_SYMBOLS = tokenService.getAllOptionMaster();
 
 // 🔥 INJECT INTO ENGINE
 setSymbolMaster(global.OPTION_SYMBOLS);
@@ -542,14 +384,7 @@ startAngelLoginLoop();
 function gracefulShutdown(signal) {
   console.log(`🛑 ${signal} received. Shutting down safely...`);
 
-  try {
-    if (ws) {
-      ws.close();
-      console.log("🔌 WebSocket closed");
-    }
-  } catch (e) {
-    console.error("❌ Error closing WebSocket", e);
-  }
+ 
 
   setTimeout(() => {
     console.log("✅ Process exited cleanly");
