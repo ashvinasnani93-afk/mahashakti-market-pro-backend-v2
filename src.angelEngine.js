@@ -31,12 +31,26 @@ let SYMBOL_MASTER = {};
 if (!global.latestLTP) global.latestLTP = {};
 
 // ==========================================
-// SEGMENT STORES (SEPARATED LOGIC)
+// SEGMENT STORES
 // ==========================================
 let STOCK_SYMBOLS = [];
 let INDEX_SYMBOLS = [];
 let COMMODITY_SYMBOLS = [];
 let OPTION_SYMBOLS = [];
+
+// ==========================================
+// SEGMENT DETECTOR (SAFE DEFAULT)
+// ==========================================
+function detectSegment(meta) {
+  const ex = Number(meta.exchangeType);
+
+  if (ex === 1 || ex === 3) return "STOCK";   // NSE / BSE CM
+  if (ex === 5) return "COMMODITY";           // MCX
+  if (ex === 2 && meta.symbol?.includes("NIFTY")) return "INDEX";
+  if (ex === 2) return "OPTION";              // FO default
+
+  return "OPTION";
+}
 
 // ==========================================
 // SYMBOL MASTER LINK
@@ -46,7 +60,7 @@ function setSymbolMaster(map) {
 
   SYMBOL_MASTER = map;
 
-  // RESET SEGMENTS
+  // Reset segments
   STOCK_SYMBOLS = [];
   INDEX_SYMBOLS = [];
   COMMODITY_SYMBOLS = [];
@@ -77,27 +91,13 @@ function setSymbolMaster(map) {
 }
 
 // ==========================================
-// SEGMENT DETECTOR (AUTO SAFETY)
-// ==========================================
-function detectSegment(meta) {
-  const ex = Number(meta.exchangeType);
-
-  if (ex === 1 || ex === 3) return "STOCK";      // NSE / BSE CM
-  if (ex === 5) return "COMMODITY";              // MCX
-  if (ex === 2 && meta.symbol?.includes("NIFTY")) return "INDEX"; // Index FO
-  if (ex === 2) return "OPTION";                 // FO default
-
-  return "OPTION";
-}
-
-// ==========================================
 // LTP UPDATE BUS
 // ==========================================
 function updateLtp(token, exchangeType, ltp) {
   const meta = SYMBOL_MASTER[token] || {};
 
   global.latestLTP[token] = {
-    token,
+    token: String(token),
     exchangeType,
     symbol: meta.symbol || "",
     segment: meta.segment || detectSegment(meta),
@@ -107,17 +107,18 @@ function updateLtp(token, exchangeType, ltp) {
 }
 
 // ==========================================
-// BINARY DECODER (ANGEL WS 2.0)
+// BINARY DECODER (ANGEL WS 2.0 LTP MODE)
 // ==========================================
 function decodeBinaryTick(buffer) {
   try {
     const buf = Buffer.from(buffer);
 
+    // [0..1] exchangeType | [2..5] token | [6..13] ltp
     const exchangeType = buf.readUInt16BE(0);
     const token = String(buf.readUInt32BE(2));
     const ltp = buf.readDoubleBE(6);
 
-    if (!token || !ltp) return null;
+    if (!token || !Number.isFinite(ltp)) return null;
     return { exchangeType, token, ltp };
   } catch {
     return null;
@@ -144,8 +145,7 @@ function stopHeartbeat() {
 }
 
 // ==========================================
-// ENTERPRISE GROUPED SUBSCRIBE
-// STOCK | INDEX | COMMODITY | OPTION
+// GROUPED SUBSCRIBE BY SEGMENT + EXCHANGE
 // ==========================================
 function subscribeTokensBySegment() {
   if (!ws || !wsConnected) return;
@@ -241,7 +241,6 @@ function connectWS(feedToken, clientCode) {
       // AUTH CONFIRM
       if (typeof data === "string") {
         const msg = JSON.parse(data);
-
         if (msg?.status === true && msg?.type === "cn") {
           console.log("🔓 ENGINE: WS AUTH SUCCESS");
           systemReady = true;
@@ -309,5 +308,37 @@ async function startAngelEngine() {
     }
 
     const symbols = getAllSymbols();
-    if (!symbols.length) {
-      throw new
+    if (!Array.isArray(symbols) || !symbols.length) {
+      throw new Error("No symbols from Symbol Service");
+    }
+
+    console.log("🧠 ENGINE: TOTAL SYMBOLS TO SUBSCRIBE:", symbols.length);
+
+    connectWS(
+      bundle.feedToken,
+      bundle.clientCode
+    );
+  } catch (e) {
+    engineRunning = false;
+    console.log("❌ ENGINE: Boot failed:", e.message);
+  }
+}
+
+// ==========================================
+// STATUS
+// ==========================================
+function isSystemReady() {
+  return systemReady;
+}
+
+function isWsConnected() {
+  return wsConnected;
+}
+
+// ==========================================
+module.exports = {
+  startAngelEngine,
+  isSystemReady,
+  isWsConnected,
+  setSymbolMaster
+};
