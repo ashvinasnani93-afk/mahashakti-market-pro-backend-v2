@@ -431,17 +431,32 @@ function subscribeAllStocksToWS() {
 // SMARTAPI DIRECT LTP (FALLBACK)
 // ==========================================
 async function getSmartApiLTP(exchange, symbol, token) {
-  if (!smartApi) throw new Error("SmartAPI not initialized");
-
   try {
+    // 🔥 1. WS MEMORY FIRST (FAST MODE)
+    if (global.latestLTP && global.latestLTP[token]) {
+      return global.latestLTP[token];
+    }
+
+    // 🔁 2. FALLBACK TO SMARTAPI REST
+    if (!smartApi) {
+      console.log("⚠️ LTP: SmartAPI not initialized");
+      return null;
+    }
+
     const res = await smartApi.getLTP(exchange, symbol, token);
-    return res?.data?.ltp || null;
+    const ltp = res?.data?.ltp || null;
+
+    if (ltp) {
+      // Cache it
+      global.latestLTP[token] = ltp;
+    }
+
+    return ltp;
   } catch (e) {
     console.error("❌ SmartAPI LTP Error:", e.message);
     return null;
   }
 }
-
 // ==========================================
 // LTP API (REDIS → WS → REST)
 // ==========================================
@@ -454,7 +469,8 @@ app.get("/angel/ltp", async (req, res) => {
       });
     }
 
-    const { exchangeType, symbol, token } = req.query;
+  let { exchange, exchangeType, symbol, token } = req.query;
+exchange = exchange || exchangeType;
 
     if (!exchangeType || !token) {
       return res.status(400).json({
