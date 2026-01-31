@@ -3,10 +3,11 @@ const WebSocket = require("ws");
 let ws = null;
 let tickHandler = null;
 let isAuthed = false;
+let pendingTokens = [];
 
-// ==========================================
-// CONNECT + AUTH FIRST, THEN SUBSCRIBE
-// ==========================================
+// ===================================================
+// CONNECT + AUTH FIRST, THEN SUBSCRIBE (STABLE FLOW)
+// ===================================================
 function connectAngelSocket(onTick) {
   tickHandler = onTick;
 
@@ -21,14 +22,25 @@ function connectAngelSocket(onTick) {
     try {
       const msg = JSON.parse(data.toString());
 
+      // =========================
       // AUTH CONFIRM
+      // =========================
       if (msg?.status === true && msg?.type === "cn") {
         isAuthed = true;
         console.log("🔐 Angel WS AUTH SUCCESS");
+
+        // Auto subscribe after auth
+        if (pendingTokens.length) {
+          console.log("🚀 Auto-subscribing after AUTH:", pendingTokens.length);
+          subscribeTokens(pendingTokens);
+          pendingTokens = [];
+        }
         return;
       }
 
+      // =========================
       // TICKS
+      // =========================
       if (tickHandler) {
         tickHandler(msg);
       }
@@ -38,7 +50,10 @@ function connectAngelSocket(onTick) {
   ws.on("close", () => {
     console.log("🔴 Angel WebSocket CLOSED — reconnecting...");
     isAuthed = false;
-    setTimeout(() => connectAngelSocket(tickHandler), 3000);
+
+    setTimeout(() => {
+      connectAngelSocket(tickHandler);
+    }, 3000);
   });
 
   ws.on("error", (err) => {
@@ -46,9 +61,9 @@ function connectAngelSocket(onTick) {
   });
 }
 
-// ==========================================
+// ===================================================
 // AUTH PAYLOAD (MANDATORY FOR STABILITY)
-// ==========================================
+// ===================================================
 function authenticate() {
   if (!ws || ws.readyState !== 1) return;
 
@@ -75,19 +90,19 @@ function authenticate() {
   console.log("🔐 Angel WS AUTH SENT");
 }
 
-// ==========================================
-// SUBSCRIBE TOKENS (ONLY AFTER AUTH)
-// ==========================================
+// ===================================================
+// SUBSCRIBE TOKENS (ONLY AFTER AUTH, SAFE CHUNKING)
+// ===================================================
 function subscribeTokens(tokens = []) {
   if (!ws || ws.readyState !== 1) return;
 
   if (!isAuthed) {
-    console.log("⏳ WS not authed yet — delaying subscribe");
-    setTimeout(() => subscribeTokens(tokens), 1000);
+    console.log("⏳ WS not authed yet — queuing tokens:", tokens.length);
+    pendingTokens = tokens;
     return;
   }
 
-  // ⚠ Angel LIMIT SAFE CHUNKING (OFFICIAL FORMAT)
+  // Angel limit safe chunk size
   const CHUNK = 200;
 
   for (let i = 0; i < tokens.length; i += CHUNK) {
