@@ -53,17 +53,26 @@ async function fetchOptionTokens() {
 
   const tokens = optionMaster.map(o => String(o.token));
 
-  console.log("📦 Angel Token Bundle Ready:", {
-    feedToken: feedToken.slice(0, 6) + "****",
-    clientCode,
-    tokens: tokens.length
-  });
+ console.log("📦 Angel Token Bundle Ready:", {
+  feedToken: feedToken.slice(0, 6) + "*****",
+  clientCode,
+  tokens: tokens.length
+});
 
-  return {
-    feedToken,   // ✅ ONLY FEED TOKEN — NO JWT FALLBACK
-    clientCode,
-    tokens
-  };
+// 🔐 SYNC INTO PROCESS ENV FOR WEBSOCKET
+process.env.ANGEL_FEED_TOKEN = feedToken;
+process.env.ANGEL_CLIENT_ID = clientCode;
+
+console.log("🔐 ENV SYNC CONFIRM:", {
+  FEED: !!process.env.ANGEL_FEED_TOKEN,
+  CLIENT: process.env.ANGEL_CLIENT_ID
+});
+
+return {
+  feedToken, // ✅ ONLY FEED TOKEN — NO JWT FALLBACK
+  clientCode,
+  tokens
+};
 }
   
 module.exports = {  
