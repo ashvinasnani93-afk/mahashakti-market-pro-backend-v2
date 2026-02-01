@@ -336,9 +336,81 @@ function isWsConnected() {
 }
 
 // ==========================================
+// CARRY-2: SELECTIVE LIVE CONTROL
+// ==========================================
+
+// tokenKey = "exchangeType:token"
+const ACTIVE_TOKENS = new Set();
+
+function subscribeOne(symbolMeta) {
+  if (!ws || !wsConnected) return false;
+  if (!symbolMeta?.token) return false;
+
+  const key = `${symbolMeta.exchangeType}:${symbolMeta.token}`;
+  if (ACTIVE_TOKENS.has(key)) return true;
+
+  const payload = {
+    action: "subscribe",
+    params: {
+      mode: "LTP",
+      tokenList: [
+        {
+          exchangeType: Number(symbolMeta.exchangeType),
+          tokens: [String(symbolMeta.token)]
+        }
+      ]
+    }
+  };
+
+  try {
+    ws.send(JSON.stringify(payload));
+    ACTIVE_TOKENS.add(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function unsubscribeOne(symbolMeta) {
+  if (!ws || !wsConnected) return false;
+  if (!symbolMeta?.token) return false;
+
+  const key = `${symbolMeta.exchangeType}:${symbolMeta.token}`;
+  if (!ACTIVE_TOKENS.has(key)) return true;
+
+  const payload = {
+    action: "unsubscribe",
+    params: {
+      mode: "LTP",
+      tokenList: [
+        {
+          exchangeType: Number(symbolMeta.exchangeType),
+          tokens: [String(symbolMeta.token)]
+        }
+      ]
+    }
+  };
+
+  try {
+    ws.send(JSON.stringify(payload));
+    ACTIVE_TOKENS.delete(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getActiveCount() {
+  return ACTIVE_TOKENS.size;
+}
+
+// ==========================================
 module.exports = {
   startAngelEngine,
   isSystemReady,
   isWsConnected,
-  setSymbolMaster
+  setSymbolMaster,
+  subscribeOne,
+  unsubscribeOne,
+  getActiveCount
 };
