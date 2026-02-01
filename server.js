@@ -43,7 +43,10 @@ const {
   startAngelEngine,
   isSystemReady,
   isWsConnected,
-  setSymbolMaster
+  setSymbolMaster,
+  subscribeOne,
+  unsubscribeOne,
+  getActiveCount
 } = require("./src.angelEngine");
 
 // ==========================================
@@ -217,9 +220,9 @@ function checkRateLimit(req, limit = 240, windowMs = 60000) {
 }
 
 // ==========================================
-// LTP API — SYMBOL + TOKEN RESOLVER
+// CARRY-2 LTP API — BROKER GRADE (WS + FALLBACK)
 // ==========================================
-app.get("/angel/ltp", (req, res) => {
+app.get("/angel/ltp", async (req, res) => {
   try {
     if (!checkRateLimit(req, 240, 60000)) {
       return res.status(429).json({
@@ -240,32 +243,73 @@ app.get("/angel/ltp", (req, res) => {
     const info = symbolTokenMap[symbol];
     const token = String(info.token);
 
-    // 🔥 Trigger WS subscribe if not live yet
+    // 🔥 Always try WS first (broker style)
     if (global.subscribeSymbol) {
       global.subscribeSymbol(symbol);
     }
 
-    const data = global.latestLTP[token];
+    const wsData = global.latestLTP[token];
 
-    if (!data) {
+    // ✅ WS DATA FOUND
+    if (wsData) {
+      return res.json({
+        status: true,
+        source: "ws",
+        symbol,
+        token,
+        exchangeType: wsData.exchangeType,
+        segment: wsData.segment,
+        ltp: wsData.ltp,
+        time: wsData.time
+      });
+    }
+
+    // ⚠️ FALLBACK TO SMARTAPI (Guarantee LTP)
+    if (!smartApi) {
       return res.json({
         status: false,
-        message: "LTP not in stream yet",
+        message: "WS warming up & SmartAPI not ready",
         token,
         exchangeType: info.exchangeType
       });
     }
 
-    return res.json({
-      status: true,
-      source: "ws",
-      symbol,
-      token,
-      exchangeType: data.exchangeType,
-      segment: data.segment,
-      ltp: data.ltp,
-      time: data.time
-    });
+    try {
+      const ltpRes = await smartApi.getLTP({
+        exchange:
+          info.exchangeType === 1
+            ? "NSE"
+            : info.exchangeType === 3
+            ? "BSE"
+            : info.exchangeType === 5
+            ? "MCX"
+            : "NFO",
+        tradingsymbol: symbol,
+        symboltoken: token
+      });
+
+      const ltp = ltpRes?.data?.ltp;
+
+      if (!ltp) throw new Error("No LTP from SmartAPI");
+
+      return res.json({
+        status: true,
+        source: "smartapi",
+        symbol,
+        token,
+        exchangeType: info.exchangeType,
+        segment: "FALLBACK",
+        ltp,
+        time: Date.now()
+      });
+    } catch (e) {
+      return res.json({
+        status: false,
+        message: "LTP not available yet",
+        token,
+        exchangeType: info.exchangeType
+      });
+    }
   } catch (e) {
     return res.status(500).json({
       status: false,
@@ -273,6 +317,7 @@ app.get("/angel/ltp", (req, res) => {
     });
   }
 });
+
 // ==========================================
 // ROUTES
 // ==========================================
