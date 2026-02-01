@@ -8,6 +8,13 @@ const axios = require("axios");
 const { authenticator } = require("otplib");
 const path = require("path");
 
+// 🔌 WebSocket Bridge (58-files baseline safe)
+const {
+  startAngelWebSocket,
+  setClientCode,
+  setSessionTokens
+} = require("./angelWebSocket.service");
+
 const { BASE_URL, ENDPOINTS, HEADERS, TIMEOUT } = require(
   path.join(process.cwd(), "config", "angel.config.js")
 );
@@ -54,12 +61,26 @@ async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
     const data = response.data;
 
     if (data.status === true && data.data) {
+      const jwtToken = data.data.jwtToken;
+      const refreshToken = data.data.refreshToken;
+      const feedToken = data.data.feedToken;
+      const resolvedClientCode = data.data.clientcode;
+
+      // ==============================
+      // 🔗 WS BRIDGE (CRITICAL FIX)
+      // ==============================
+      setClientCode(resolvedClientCode);
+      setSessionTokens(feedToken, apiKey);
+
+      // Start Angel WebSocket
+      startAngelWebSocket(feedToken, resolvedClientCode, apiKey);
+
       return {
         success: true,
-        jwtToken: data.data.jwtToken,
-        refreshToken: data.data.refreshToken,
-        feedToken: data.data.feedToken,
-        clientCode: data.data.clientcode
+        jwtToken,
+        refreshToken,
+        feedToken,
+        clientCode: resolvedClientCode
       };
     }
 
@@ -113,11 +134,20 @@ async function generateToken(refreshToken, apiKey) {
     const data = response.data;
 
     if (data.status === true && data.data) {
+      const jwtToken = data.data.jwtToken;
+      const newRefreshToken = data.data.refreshToken;
+      const feedToken = data.data.feedToken;
+
+      // ==============================
+      // 🔗 WS TOKEN REFRESH BRIDGE
+      // ==============================
+      setSessionTokens(feedToken, apiKey);
+
       return {
         success: true,
-        jwtToken: data.data.jwtToken,
-        refreshToken: data.data.refreshToken,
-        feedToken: data.data.feedToken
+        jwtToken,
+        refreshToken: newRefreshToken,
+        feedToken
       };
     }
 
