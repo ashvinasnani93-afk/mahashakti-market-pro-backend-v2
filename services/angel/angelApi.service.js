@@ -1,24 +1,43 @@
 // ==========================================
 // ANGEL ONE API SERVICE
 // All Angel One REST API Calls
-// Following Official Documentation
+// FINAL ENGINE (58 FILE BASELINE SAFE)
 // ==========================================
 
 const axios = require("axios");
 
+// ==========================================
+// BASE CONFIG
+// ==========================================
 const BASE_URL = "https://apiconnect.angelone.in";
 
-// Global tokens (set by auth service)
+// ==========================================
+// GLOBAL SESSION BRIDGE
+// ==========================================
 let globalJwtToken = null;
 let globalApiKey = null;
+let globalClientCode = null;
 
-function setGlobalTokens(jwtToken, apiKey) {
+// ==========================================
+// SESSION SETTERS (CALLED FROM AUTH SERVICE)
+// ==========================================
+function setGlobalTokens(jwtToken, apiKey, clientCode) {
   globalJwtToken = jwtToken;
   globalApiKey = apiKey;
+  globalClientCode = clientCode;
+
+  console.log("🔗 API SESSION SET");
+  console.log("🔗 ClientCode:", clientCode);
+
+  // Push into global angel session for WS Engine
+  global.angelSession = global.angelSession || {};
+  global.angelSession.jwtToken = jwtToken;
+  global.angelSession.apiKey = apiKey;
+  global.angelSession.clientCode = clientCode;
 }
 
 // ==========================================
-// COMMON HEADERS FOR ANGEL API
+// COMMON HEADERS
 // ==========================================
 function getHeaders(jwtToken = null) {
   return {
@@ -35,14 +54,14 @@ function getHeaders(jwtToken = null) {
 }
 
 // ==========================================
-// GET LTP DATA (Multiple Symbols)
+// LTP DATA
 // ==========================================
 async function getLtpData(exchange, tradingSymbol, symbolToken) {
   try {
     const response = await axios.post(
       `${BASE_URL}/rest/secure/angelbroking/order/v1/getLtpData`,
       {
-        exchange: exchange,
+        exchange,
         tradingsymbol: tradingSymbol,
         symboltoken: symbolToken
       },
@@ -70,7 +89,7 @@ async function getLtpData(exchange, tradingSymbol, symbolToken) {
 }
 
 // ==========================================
-// GET RMS (Funds & Margin)
+// RMS (FUNDS & MARGIN)
 // ==========================================
 async function getRMS() {
   try {
@@ -100,7 +119,7 @@ async function getRMS() {
 }
 
 // ==========================================
-// GET ORDER BOOK
+// ORDER BOOK
 // ==========================================
 async function getOrderBook() {
   try {
@@ -130,7 +149,7 @@ async function getOrderBook() {
 }
 
 // ==========================================
-// GET TRADE BOOK
+// TRADE BOOK
 // ==========================================
 async function getTradeBook() {
   try {
@@ -160,7 +179,7 @@ async function getTradeBook() {
 }
 
 // ==========================================
-// PLACE ORDER (Real Angel One Order)
+// PLACE ORDER
 // ==========================================
 async function placeOrder(orderParams) {
   try {
@@ -192,6 +211,9 @@ async function placeOrder(orderParams) {
   }
 }
 
+// ==========================================
+// EXPORTS
+// ==========================================
 module.exports = {
   setGlobalTokens,
   getLtpData,
