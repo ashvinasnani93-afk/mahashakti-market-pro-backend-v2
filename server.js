@@ -37,7 +37,7 @@ const {
 } = tokenService;
 
 const { setAllSymbols, setOptionSymbolMaster } = require("./symbol.service");
-const { setSmartApi } = require("./services/angel/angelTokens");
+const { setAngelSession } = require("./services/angel/angelTokens");
 
 const {
   startAngelEngine,
@@ -179,7 +179,7 @@ async function angelLogin() {
     angelLoggedIn = true;
     console.log("✅ Angel Login SUCCESS");
 
-    setSmartApi(smartApi);
+    setAngelSession(feedToken, ANGEL_CLIENT_ID);
   } catch (e) {
     angelLoggedIn = false;
     console.error("❌ Angel Login Error:", e.message);
