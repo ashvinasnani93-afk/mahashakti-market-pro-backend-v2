@@ -219,7 +219,7 @@ function checkRateLimit(req, limit = 240, windowMs = 60000) {
 // ==========================================
 // LTP API — SYMBOL + TOKEN RESOLVER
 // ==========================================
-app.get("/angel/ltp", async (req, res) => {
+app.get("/angel/ltp", (req, res) => {
   try {
     if (!checkRateLimit(req, 240, 60000)) {
       return res.status(429).json({
@@ -228,49 +228,41 @@ app.get("/angel/ltp", async (req, res) => {
       });
     }
 
-    let { symbol, token, exchangeType } = req.query;
+    const symbol = req.query.symbol?.toUpperCase();
 
-    // Resolve SYMBOL → TOKEN
-    if (!token && symbol) {
-      const key = symbol.toUpperCase();
-      const meta = symbolTokenMap[key];
-
-      if (!meta) {
-        return res.status(404).json({
-          status: false,
-          message: "Symbol not found in master",
-          symbol: key
-        });
-      }
-
-      token = meta.token;
-      exchangeType = meta.exchangeType;
-    }
-
-    if (!token) {
-      return res.status(400).json({
+    if (!symbol || !symbolTokenMap[symbol]) {
+      return res.json({
         status: false,
-        message: "token or symbol required"
+        message: "symbol invalid"
       });
     }
 
-    const data = global.latestLTP[String(token)];
+    const info = symbolTokenMap[symbol];
+    const token = String(info.token);
+
+    // 🔥 Trigger WS subscribe if not live yet
+    if (global.subscribeSymbol) {
+      global.subscribeSymbol(symbol);
+    }
+
+    const data = global.latestLTP[token];
 
     if (!data) {
-      return res.status(503).json({
+      return res.json({
         status: false,
         message: "LTP not in stream yet",
         token,
-        exchangeType
+        exchangeType: info.exchangeType
       });
     }
 
     return res.json({
       status: true,
       source: "ws",
-      token,
-      exchangeType: data.exchangeType || exchangeType,
       symbol,
+      token,
+      exchangeType: data.exchangeType,
+      segment: data.segment,
       ltp: data.ltp,
       time: data.time
     });
@@ -281,7 +273,6 @@ app.get("/angel/ltp", async (req, res) => {
     });
   }
 });
-
 // ==========================================
 // ROUTES
 // ==========================================
