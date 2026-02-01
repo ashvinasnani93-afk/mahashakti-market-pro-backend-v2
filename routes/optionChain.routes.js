@@ -6,7 +6,7 @@
 
 const express = require("express");
 const router = express.Router();
-const { buildOptionChainFromAngel } = require("../services/optionChain.service");
+const { buildOptionChainFromAngel } = require("../optionchain.service");
 
 /**
  * GET /api/option-chain?symbol=NIFTY
