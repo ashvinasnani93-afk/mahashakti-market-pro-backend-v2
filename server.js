@@ -137,7 +137,11 @@ async function performAngelLogin() {
       global.angelSession.isLoggedIn = true;
 
       // Set tokens for API service
-      setGlobalTokens(result.jwtToken, ANGEL_API_KEY);
+     setGlobalTokens(
+  result.jwtToken,
+  ANGEL_API_KEY,
+  result.clientCode
+);
 
       console.log("✅ Angel One Login SUCCESS");
       console.log("📡 JWT Token:", result.jwtToken.substring(0, 20) + "...");
