@@ -1,101 +1,110 @@
-// services/angel/angelTokens.js
-// FIXED: Reliable NFO master load + debug
+// ==========================================
+// ANGEL TOKEN SERVICE — CARRY-2 FIX
+// MAHASHAKTI MARKET PRO
+// Provides LOGIN BUNDLE + OPTION MASTER
+// ==========================================
+
+"use strict";
 
 const https = require("https");
 
-const MASTER_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
+const MASTER_URL =
+  "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
 
 let optionSymbolMap = {};
 let lastLoadTime = 0;
-let loadAttempts = 0;
-const MAX_ATTEMPTS = 3;
 
-const MONTH_MAP = { JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5, JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11 };
+// =============================
+// SESSION BUNDLE (ENGINE USES)
+// =============================
+let SESSION_BUNDLE = {
+  feedToken: null,
+  clientCode: null
+};
 
-function parseExpiryDate(expiryStr) {
-  if (!expiryStr) return null;
-  const match = expiryStr.match(/(\d{1,2})([A-Z]{3})(\d{4}|\d{2})/i);
-  if (!match) return null;
+// =============================
+// SERVER CALLS THIS AFTER LOGIN
+// =============================
+function setAngelSession(feedToken, clientCode) {
+  SESSION_BUNDLE.feedToken = feedToken;
+  SESSION_BUNDLE.clientCode = clientCode;
 
-  let day = parseInt(match[1], 10);
-  let month = MONTH_MAP[match[2].toUpperCase()];
-  let year = parseInt(match[3], 10);
-  if (year < 100) year += 2000;
-
-  if (isNaN(day) || month === undefined || isNaN(year)) return null;
-  return new Date(year, month, day);
+  console.log("🔗 [TOKENS] Angel session linked");
 }
 
+// =============================
+// ENGINE CALLS THIS
+// =============================
+function fetchOptionTokens() {
+  return SESSION_BUNDLE;
+}
+
+// =============================
+// OPTION MASTER LOADER
+// =============================
 async function loadOptionTokens(force = false) {
   const now = Date.now();
-  if (!force && now - lastLoadTime < 1800000 && Object.keys(optionSymbolMap).length > 0) {
+
+  if (
+    !force &&
+    now - lastLoadTime < 30 * 60 * 1000 &&
+    Object.keys(optionSymbolMap).length > 0
+  ) {
     return;
   }
 
-  if (loadAttempts >= MAX_ATTEMPTS) {
-    console.error("[TOKENS] Max retry attempts reached. Giving up.");
-    return;
-  }
-
-  loadAttempts++;
-  console.log(`[TOKENS] Loading master attempt ${loadAttempts}...`);
+  console.log("📥 [TOKENS] Loading NFO option master...");
 
   return new Promise((resolve, reject) => {
-    https.get(MASTER_URL, { timeout: 10000 }, (res) => {
-      if (res.statusCode !== 200) {
-        console.error(`[TOKENS] HTTP ${res.statusCode}`);
-        reject();
-        return;
-      }
-
-      let data = "";
-      res.on("data", chunk => data += chunk);
+    https.get(MASTER_URL, (res) => {
+      let raw = "";
+      res.on("data", (c) => (raw += c));
       res.on("end", () => {
         try {
-          const json = JSON.parse(data);
+          const json = JSON.parse(raw);
           optionSymbolMap = {};
-          let added = 0, skipped = 0;
+          let added = 0;
 
-          json.forEach(item => {
+          json.forEach((item) => {
             if (item.exch_seg !== "NFO") return;
             if (!["OPTIDX", "OPTSTK"].includes(item.instrumenttype)) return;
+            if (!item.symbol || !item.token) return;
 
-            const sym = (item.symbol || "").trim().toUpperCase();
-            if (!sym || !item.token) return;
+            const sym = item.symbol.toUpperCase();
 
-            const expDate = parseExpiryDate(item.expiry || sym);
-            if (!expDate || expDate < new Date()) {
-              skipped++;
-              return;
-            }
+            optionSymbolMap[sym] = {
+              token: String(item.token),
+              exchangeType: 2,
+              symbol: sym
+            };
 
-            optionSymbolMap[sym] = { token: item.token, exchType: 2 };
             added++;
           });
 
-          console.log(`[TOKENS] Added ${added} option symbols | skipped expired ${skipped}`);
           lastLoadTime = now;
-          loadAttempts = 0;
+          console.log(`✅ [TOKENS] Loaded ${added} option symbols`);
           resolve();
-        } catch (err) {
-          console.error("[TOKENS] Parse error:", err.message);
+        } catch (e) {
+          console.error("❌ [TOKENS] Parse error:", e.message);
           reject();
         }
       });
-    }).on("error", err => {
-      console.error("[TOKENS] Fetch error:", err.message);
-      reject();
-    });
-  }).catch(() => {
-    setTimeout(() => loadOptionTokens(true), 10000);
+    }).on("error", reject);
   });
 }
 
+// =============================
+// LOOKUP
+// =============================
 function getOptionToken(symbol) {
-  return optionSymbolMap[(symbol || "").trim().toUpperCase()] || null;
+  if (!symbol) return null;
+  return optionSymbolMap[symbol.toUpperCase()] || null;
 }
 
-// Auto start on require
-loadOptionTokens(true);
-
-module.exports = { loadOptionTokens, getOptionToken };
+// =============================
+module.exports = {
+  loadOptionTokens,
+  getOptionToken,
+  fetchOptionTokens,
+  setAngelSession
+};
