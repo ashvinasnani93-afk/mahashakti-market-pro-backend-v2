@@ -1,89 +1,101 @@
-const axios = require("axios");  
-  
-// ✅ CORRECT PATH TO TOKEN MASTER  
-const { getOptionToken } = require("../../token.service"); 
-  
-let smartApi = null;  
-  
-const BASE = "https://apiconnect.angelone.in/rest/secure/angelbroking";  
-  
-const HEADERS = () => {  
-  if (!process.env.ANGEL_API_KEY || !process.env.ANGEL_ACCESS_TOKEN) {  
-    throw new Error("ANGEL_API_KEY / ANGEL_ACCESS_TOKEN missing");  
-  }  
-    
-  return {  
-    "X-UserType": "USER",  
-    "X-SourceID": "WEB",  
-    "X-ClientLocalIP": "127.0.0.1",  
-    "X-ClientPublicIP": "127.0.0.1",  
-    "X-MACAddress": "00:00:00:00:00:00",  
-    "X-PrivateKey": process.env.ANGEL_API_KEY,  
-    "Authorization": `Bearer ${process.env.ANGEL_ACCESS_TOKEN}`,  
-    "Content-Type": "application/json"  
-  };  
-};  
-  
-// 🔗 INJECT SMART API INSTANCE FROM SERVER  
-function setSmartApi(instance) {  
-  smartApi = instance;  
-  console.log("🔗 SmartAPI linked into Angel Token Service");  
-}  
-  
-// 📡 FETCH OPTION TOKENS USING OPTION MASTER  
-async function fetchOptionTokens() {
-  if (!smartApi) {
-    throw new Error("SmartAPI not linked");
-  }
+// services/angel/angelTokens.js
+// FIXED: Reliable NFO master load + debug
 
-  const feedToken = process.env.ANGEL_FEED_TOKEN;
-  const clientCode = process.env.ANGEL_CLIENT_ID;
+const https = require("https");
 
-  const accessToken = process.env.ANGEL_ACCESS_TOKEN;
+const MASTER_URL = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
 
-if (!accessToken) {
-  throw new Error("Missing ANGEL_ACCESS_TOKEN (JWT) – login not synced");
+let optionSymbolMap = {};
+let lastLoadTime = 0;
+let loadAttempts = 0;
+const MAX_ATTEMPTS = 3;
+
+const MONTH_MAP = { JAN:0, FEB:1, MAR:2, APR:3, MAY:4, JUN:5, JUL:6, AUG:7, SEP:8, OCT:9, NOV:10, DEC:11 };
+
+function parseExpiryDate(expiryStr) {
+  if (!expiryStr) return null;
+  const match = expiryStr.match(/(\d{1,2})([A-Z]{3})(\d{4}|\d{2})/i);
+  if (!match) return null;
+
+  let day = parseInt(match[1], 10);
+  let month = MONTH_MAP[match[2].toUpperCase()];
+  let year = parseInt(match[3], 10);
+  if (year < 100) year += 2000;
+
+  if (isNaN(day) || month === undefined || isNaN(year)) return null;
+  return new Date(year, month, day);
 }
 
-  if (!feedToken || !clientCode) {
-    throw new Error("Missing ANGEL_FEED_TOKEN or ANGEL_CLIENT_ID");
+async function loadOptionTokens(force = false) {
+  const now = Date.now();
+  if (!force && now - lastLoadTime < 1800000 && Object.keys(optionSymbolMap).length > 0) {
+    return;
   }
 
-  // 🔥 Pull from OPTION MASTER (single source of truth)
-  const tokenService = require("../../token.service");
-  const optionMaster = tokenService.getAllOptionMaster();
-
-  if (!Array.isArray(optionMaster) || optionMaster.length === 0) {
-    throw new Error("Option master empty — cannot subscribe WS");
+  if (loadAttempts >= MAX_ATTEMPTS) {
+    console.error("[TOKENS] Max retry attempts reached. Giving up.");
+    return;
   }
 
-  const tokens = optionMaster.map(o => String(o.token));
+  loadAttempts++;
+  console.log(`[TOKENS] Loading master attempt ${loadAttempts}...`);
 
- console.log("📦 Angel Token Bundle Ready:", {
-  feedToken: feedToken.slice(0, 6) + "*****",
-  clientCode,
-  tokens: tokens.length
-});
+  return new Promise((resolve, reject) => {
+    https.get(MASTER_URL, { timeout: 10000 }, (res) => {
+      if (res.statusCode !== 200) {
+        console.error(`[TOKENS] HTTP ${res.statusCode}`);
+        reject();
+        return;
+      }
 
-// 🔐 SYNC INTO PROCESS ENV FOR WEBSOCKET
-process.env.ANGEL_FEED_TOKEN = feedToken;
-process.env.ANGEL_CLIENT_ID = clientCode;
-process.env.ANGEL_ACCESS_TOKEN = accessToken;
+      let data = "";
+      res.on("data", chunk => data += chunk);
+      res.on("end", () => {
+        try {
+          const json = JSON.parse(data);
+          optionSymbolMap = {};
+          let added = 0, skipped = 0;
 
-console.log("🔐 ENV SYNC CONFIRM:", {
-  FEED: !!process.env.ANGEL_FEED_TOKEN,
-  CLIENT: process.env.ANGEL_CLIENT_ID,
-  JWT: process.env.ANGEL_ACCESS_TOKEN?.slice(0, 12) + "****"
-});
+          json.forEach(item => {
+            if (item.exch_seg !== "NFO") return;
+            if (!["OPTIDX", "OPTSTK"].includes(item.instrumenttype)) return;
 
-return {
-  feedToken, // ✅ ONLY FEED TOKEN — NO JWT FALLBACK
-  clientCode,
-  tokens
-};
+            const sym = (item.symbol || "").trim().toUpperCase();
+            if (!sym || !item.token) return;
+
+            const expDate = parseExpiryDate(item.expiry || sym);
+            if (!expDate || expDate < new Date()) {
+              skipped++;
+              return;
+            }
+
+            optionSymbolMap[sym] = { token: item.token, exchType: 2 };
+            added++;
+          });
+
+          console.log(`[TOKENS] Added ${added} option symbols | skipped expired ${skipped}`);
+          lastLoadTime = now;
+          loadAttempts = 0;
+          resolve();
+        } catch (err) {
+          console.error("[TOKENS] Parse error:", err.message);
+          reject();
+        }
+      });
+    }).on("error", err => {
+      console.error("[TOKENS] Fetch error:", err.message);
+      reject();
+    });
+  }).catch(() => {
+    setTimeout(() => loadOptionTokens(true), 10000);
+  });
 }
-  
-module.exports = {  
-  setSmartApi,  
-  fetchOptionTokens  
-};
+
+function getOptionToken(symbol) {
+  return optionSymbolMap[(symbol || "").trim().toUpperCase()] || null;
+}
+
+// Auto start on require
+loadOptionTokens(true);
+
+module.exports = { loadOptionTokens, getOptionToken };
