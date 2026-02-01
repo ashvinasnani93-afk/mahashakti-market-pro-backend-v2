@@ -278,5 +278,6 @@ function subscribeToToken(token, exchangeType = 1) {
 module.exports = {
   startAngelWebSocket,
   subscribeToToken,
+  setClientCode,
   setSessionTokens
 };
