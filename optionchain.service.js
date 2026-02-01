@@ -1,105 +1,215 @@
 // ==========================================  
-// OPTION CHAIN SERVICE – FINAL (A3.1) - FIXED  
-// Angel = SINGLE SOURCE OF TRUTH  
-// No Fake / Manual Strikes  
+// OPTION CHAIN SERVICE - REAL ANGEL DATA  
+// Builds option chain from Angel Master  
+// NO DUMMY - Pure Real Market Data  
 // ==========================================  
   
-const { formatOptionSymbol, isMonthlyExpiry } = require("./symbol.service");  
-const { getOptionToken } = require("./token.service");  
+const { getAllOptionSymbols } = require("./optionsMaster.service");  
+const { getLtpData } = require("./angel/angelApi.service");  
   
-// ==========================================  
-// BUILD OPTION CHAIN (ANGEL VALIDATED)  
-// Supports both INDEX and STOCK options  
-// ==========================================  
-function buildOptionChain({  
-  index,      // NIFTY / BANKNIFTY (optional)  
-  stock,      // RELIANCE / TCS (optional)  
-  expiryDate, // JS Date object  
-  strikes = [], // strikes from strike.service (Angel validated)  
-}) {  
-  const chain = {};  
+/**  
+ * Build Option Chain from Angel One Master  
+ */  
+async function buildOptionChainFromAngel(symbol, expiryDate = null) {  
+  try {  
+    console.log(`📊 Building chain for ${symbol}`);  
   
-  // ---------------------------------  
-  // HARD VALIDATION  
-  // ---------------------------------  
-  if (!(expiryDate instanceof Date) || !Array.isArray(strikes)) {  
-    return chain;  
-  }  
+    // Get all option symbols from Angel master  
+    const allOptions = await getAllOptionSymbols();  
   
-  if (!index && !stock) {  
-    return chain;  
-  }  
+    if (!allOptions || allOptions.length === 0) {  
+      return {  
+        status: false,  
+        message: "Option master not loaded"  
+      };  
+    }  
   
-  const symbol = index || stock;  
-  const expiryType = isMonthlyExpiry(expiryDate)  
-    ? "MONTHLY"  
-    : "WEEKLY";  
+    // Filter options for this symbol  
+    const symbolOptions = allOptions.filter(opt =>   
+      opt.name && opt.name.toUpperCase() === symbol.toUpperCase()  
+    );  
   
-  strikes.forEach((strike) => {  
-    if (typeof strike !== "number") return;  
+    if (symbolOptions.length === 0) {  
+      return {  
+        status: false,  
+        message: `No options found for ${symbol}`  
+      };  
+    }  
   
-    // ---------------------------------  
-    // FORMAT OPTION SYMBOLS  
-    // ---------------------------------  
-    const ceSymbol = formatOptionSymbol({  
-      index: index || null,  
-      stock: stock || null,  
-      expiryDate,  
-      strike,  
-      type: "CE",  
-      expiryType,  
+    // Get available expiries  
+    const expirySet = new Set();  
+    symbolOptions.forEach(opt => {  
+      if (opt.expiry) {  
+        const d = new Date(opt.expiry);  
+        if (!isNaN(d.getTime())) {  
+          expirySet.add(d.toISOString().slice(0, 10));  
+        }  
+      }  
     });  
   
-    const peSymbol = formatOptionSymbol({  
-      index: index || null,  
-      stock: stock || null,  
-      expiryDate,  
-      strike,  
-      type: "PE",  
-      expiryType,  
+    const availableExpiries = Array.from(expirySet).sort();  
+  
+    if (availableExpiries.length === 0) {  
+      return {  
+        status: false,  
+        message: "No valid expiries found"  
+      };  
+    }  
+  
+    // Select expiry  
+    const selectedExpiry = expiryDate || availableExpiries[0];  
+    const expiryDateObj = new Date(selectedExpiry);  
+  
+    // Filter by expiry  
+    const expiryOptions = symbolOptions.filter(opt => {  
+      if (!opt.expiry) return false;  
+      const optExpiry = new Date(opt.expiry);  
+      return isSameDate(optExpiry, expiryDateObj);  
     });  
   
-    // format failed → skip  
-    if (!ceSymbol && !peSymbol) return;  
+    if (expiryOptions.length === 0) {  
+      return {  
+        status: false,  
+        message: `No options for expiry ${selectedExpiry}`  
+      };  
+    }  
   
-    // ---------------------------------  
-    // FETCH TOKENS FROM ANGEL MASTER  
-    // ---------------------------------  
-    const ceToken = ceSymbol ? getOptionToken(ceSymbol) : null;  
-    const peToken = peSymbol ? getOptionToken(peSymbol) : null;  
+    // Group by strike  
+    const strikeMap = {};  
+    expiryOptions.forEach(opt => {  
+      const strike = Number(opt.strike);  
+      if (!strike) return;  
   
-    // 🚫 HARD FILTER  
-    // Angel ke paas dono nahi → strike exist hi nahi karta  
-    if (!ceToken && !peToken) return;  
+      if (!strikeMap[strike]) {  
+        strikeMap[strike] = { strike, CE: null, PE: null };  
+      }  
   
-    // ---------------------------------  
-    // FINAL STRIKE OBJECT  
-    // ---------------------------------  
-    chain[strike] = {  
-      strike,  
-      CE: ceToken  
-        ? {  
-            symbol: ceSymbol,  
-            token: ceToken.token,  
-            exchangeType: ceToken.exchangeType, // NFO  
-          }  
-        : null,  
-      PE: peToken  
-        ? {  
-            symbol: peSymbol,  
-            token: peToken.token,  
-            exchangeType: peToken.exchangeType, // NFO  
-          }  
-        : null,  
+      if (opt.type === "CE") {  
+        strikeMap[strike].CE = {  
+          token: opt.token,  
+          symbol: opt.symbol,  
+          strike: strike,  
+          ltp: null  
+        };  
+      } else if (opt.type === "PE") {  
+        strikeMap[strike].PE = {  
+          token: opt.token,  
+          symbol: opt.symbol,  
+          strike: strike,  
+          ltp: null  
+        };  
+      }  
+    });  
+  
+    // Get strikes array  
+    const strikes = Object.keys(strikeMap).map(Number).sort((a, b) => a - b);  
+  
+    // Get spot price (from cache or API)  
+    let spotPrice = null;  
+    if (global.latestLTP[symbol]) {  
+      spotPrice = global.latestLTP[symbol].ltp;  
+    } else {  
+      // Try to get from Angel API  
+      const ltpResult = await getLtpFromSymbol(symbol);  
+      if (ltpResult) {  
+        spotPrice = ltpResult;  
+      }  
+    }  
+  
+    // Calculate ATM  
+    let atmStrike = null;  
+    if (spotPrice && strikes.length > 0) {  
+      atmStrike = strikes.reduce((prev, curr) =>   
+        Math.abs(curr - spotPrice) < Math.abs(prev - spotPrice) ? curr : prev  
+      );  
+    }  
+  
+    // Get LTP for each option (from cache)  
+    Object.keys(strikeMap).forEach(strike => {  
+      const row = strikeMap[strike];  
+  
+      if (row.CE && row.CE.token) {  
+        const cached = global.latestLTP[row.CE.token];  
+        if (cached) {  
+          row.CE.ltp = cached.ltp;  
+        }  
+      }  
+  
+      if (row.PE && row.PE.token) {  
+        const cached = global.latestLTP[row.PE.token];  
+        if (cached) {  
+          row.PE.ltp = cached.ltp;  
+        }  
+      }  
+    });  
+  
+    // Determine type  
+    const indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"];  
+    const type = indices.includes(symbol.toUpperCase()) ? "INDEX" : "STOCK";  
+  
+    return {  
+      status: true,  
+      type,  
+      expiry: selectedExpiry,  
+      availableExpiries,  
+      spot: spotPrice,  
+      atmStrike,  
+      totalStrikes: strikes.length,  
+      chain: strikeMap  
     };  
-  });  
   
-  return chain;  
+  } catch (err) {  
+    console.error("❌ buildOptionChainFromAngel error:", err.message);  
+    return {  
+      status: false,  
+      message: "Option chain build failed",  
+      error: err.message  
+    };  
+  }  
 }  
   
-// ==========================================  
-// EXPORT  
-// ==========================================  
+/**  
+ * Check if two dates are same  
+ */  
+function isSameDate(d1, d2) {  
+  return (  
+    d1.getFullYear() === d2.getFullYear() &&  
+    d1.getMonth() === d2.getMonth() &&  
+    d1.getDate() === d2.getDate()  
+  );  
+}  
+  
+/**  
+ * Get LTP for symbol from Angel API  
+ */  
+async function getLtpFromSymbol(symbol) {  
+  try {  
+    const symbolMap = {  
+      "NIFTY": { exchange: "NSE", token: "99926000" },  
+      "BANKNIFTY": { exchange: "NSE", token: "99926009" },  
+      "FINNIFTY": { exchange: "NSE", token: "99926037" }  
+    };  
+  
+    if (symbolMap[symbol]) {  
+      const result = await getLtpData(  
+        symbolMap[symbol].exchange,  
+        symbol,  
+        symbolMap[symbol].token  
+      );  
+  
+      if (result.success && result.data) {  
+        return result.data.ltp || result.data.close;  
+      }  
+    }  
+  
+    return null;  
+  
+  } catch (err) {  
+    console.error("❌ getLtpFromSymbol error:", err.message);  
+    return null;  
+  }  
+}  
+  
 module.exports = {  
-  buildOptionChain,  
+  buildOptionChainFromAngel  
 };
