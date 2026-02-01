@@ -1,17 +1,17 @@
 // ==========================================
 // OPTION CHAIN ROUTES
 // Real Angel One Option Chains
-// Stocks + Indices + Commodities
 // ==========================================
 
 const express = require("express");
 const router = express.Router();
+
+// PATH FIXED HERE
 const { buildOptionChainFromAngel } = require("../optionchain.service");
 
 /**
  * GET /api/option-chain?symbol=NIFTY
  * GET /api/option-chain?symbol=BANKNIFTY&expiry=2026-02-05
- * GET /api/option-chain?symbol=RELIANCE
  */
 router.get("/", async (req, res) => {
   try {
@@ -20,7 +20,7 @@ router.get("/", async (req, res) => {
     if (!symbol) {
       return res.json({
         status: false,
-        message: "symbol parameter required (e.g., NIFTY, BANKNIFTY, RELIANCE)"
+        message: "symbol parameter required (e.g., NIFTY, BANKNIFTY)"
       });
     }
 
@@ -28,7 +28,6 @@ router.get("/", async (req, res) => {
 
     console.log(`📊 Building option chain for ${upperSymbol}`);
 
-    // Build option chain from Angel master
     const chain = await buildOptionChainFromAngel(upperSymbol, expiry);
 
     if (!chain || !chain.status) {
