@@ -10,11 +10,40 @@ let ws = null;
 let heartbeatInterval = null;
 let reconnectTimeout = null;
 
+// 🔒 GLOBAL MEMORY (58-FILE BASELINE COMPATIBLE)
+let globalClientCode = null;
+let globalFeedToken = null;
+let globalApiKey = null;
+
+// ==========================================
+// SET CLIENT CODE FROM AUTH SERVICE
+// ==========================================
+function setClientCode(clientCode) {
+  globalClientCode = clientCode;
+}
+
+// ==========================================
+// SET SESSION TOKENS (SAFE RECONNECT SUPPORT)
+// ==========================================
+function setSessionTokens(feedToken, apiKey) {
+  globalFeedToken = feedToken;
+  globalApiKey = apiKey;
+}
+
 // ==========================================
 // START WEBSOCKET CONNECTION
 // ==========================================
 function startAngelWebSocket(feedToken, clientCode, apiKey) {
   try {
+    // Store for reconnects
+    globalFeedToken = feedToken;
+    globalApiKey = apiKey;
+    globalClientCode = clientCode;
+
+    if (!globalClientCode) {
+      throw new Error("Missing clientCode for WebSocket header");
+    }
+
     if (ws && ws.readyState === WebSocket.OPEN) {
       console.log("⚠️ WebSocket already connected");
       return;
@@ -26,21 +55,26 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
 
     ws = new WebSocket(wsUrl, {
       headers: {
-        "Authorization": `Bearer ${feedToken}`,
-        "x-api-key": apiKey,
-        "x-client-code": clientCode,
-        "x-feed-token": feedToken
+        "Authorization": `Bearer ${globalFeedToken}`,
+        "x-api-key": globalApiKey,
+        "x-client-code": globalClientCode,
+        "x-feed-token": globalFeedToken
       }
     });
 
     ws.on("open", () => {
       console.log("🟢 Angel WebSocket CONNECTED");
+
+      if (!global.angelSession) {
+        global.angelSession = {};
+      }
+
       global.angelSession.wsConnected = true;
 
       // Start heartbeat
       startHeartbeat();
 
-      // Subscribe to symbols
+      // Subscribe to default symbols
       subscribeToSymbols();
     });
 
@@ -54,18 +88,28 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
 
     ws.on("error", (err) => {
       console.error("❌ WebSocket Error:", err.message);
-      global.angelSession.wsConnected = false;
+      if (global.angelSession) {
+        global.angelSession.wsConnected = false;
+      }
     });
 
     ws.on("close", () => {
       console.log("🔴 WebSocket DISCONNECTED");
-      global.angelSession.wsConnected = false;
+
+      if (global.angelSession) {
+        global.angelSession.wsConnected = false;
+      }
+
       stopHeartbeat();
 
-      // Reconnect after 5 seconds
+      // Reconnect after 5 seconds (SAFE RECONNECT)
       reconnectTimeout = setTimeout(() => {
         console.log("🔄 Reconnecting WebSocket...");
-        startAngelWebSocket(feedToken, clientCode, apiKey);
+        startAngelWebSocket(
+          globalFeedToken,
+          globalClientCode,
+          globalApiKey
+        );
       }, 5000);
     });
 
@@ -89,11 +133,11 @@ function handleWebSocketMessage(data) {
     // JSON message
     else {
       const message = JSON.parse(data.toString());
-      
+
       if (message.action === "subscribe" && message.result === "success") {
         console.log("✅ Subscription confirmed");
       }
-      
+
       if (message.ltp) {
         updateLTP(message.token || message.symboltoken, message.ltp);
       }
@@ -133,6 +177,14 @@ function decodeBinaryLTP(buffer) {
 function updateLTP(token, price) {
   try {
     if (!token || !price) return;
+
+    if (!global.latestLTP) {
+      global.latestLTP = {};
+    }
+
+    if (!global.symbolOpenPrice) {
+      global.symbolOpenPrice = {};
+    }
 
     // Store by token
     global.latestLTP[token] = {
@@ -220,7 +272,12 @@ function subscribeToToken(token, exchangeType = 1) {
   }
 }
 
+// ==========================================
+// EXPORTS
+// ==========================================
 module.exports = {
   startAngelWebSocket,
-  subscribeToToken
+  subscribeToToken,
+  setClientCode,
+  setSessionTokens
 };
