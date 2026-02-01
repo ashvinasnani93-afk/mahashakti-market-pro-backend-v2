@@ -64,7 +64,12 @@ async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
       const jwtToken = data.data.jwtToken;
       const refreshToken = data.data.refreshToken;
       const feedToken = data.data.feedToken;
-      const resolvedClientCode = data.data.clientcode;
+      
+     const resolvedClientCode = clientCode; // TRUST ENV, NOT API RESPONSE
+
+      if (!resolvedClientCode) {
+  throw new Error("CRITICAL: ClientCode missing from ENV / login input");
+}
 
       // ==============================
       // 🔗 WS BRIDGE (CRITICAL FIX)
