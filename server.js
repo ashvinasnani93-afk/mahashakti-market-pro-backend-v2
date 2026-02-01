@@ -147,11 +147,6 @@ async function performAngelLogin() {
       console.log("📡 JWT Token:", result.jwtToken.substring(0, 20) + "...");
       console.log("📡 Feed Token:", result.feedToken.substring(0, 20) + "...");
 
-     // Start WebSocket only if not already connected
-if (!global.angelSession.wsConnected) {
-  startAngelWebSocket(result.feedToken, result.clientCode, ANGEL_API_KEY);
-}
-
       return true;
     } else {
       console.error("❌ Angel Login Failed:", result.error);
