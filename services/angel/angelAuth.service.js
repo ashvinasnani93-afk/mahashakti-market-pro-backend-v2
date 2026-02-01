@@ -6,7 +6,11 @@
 
 const axios = require("axios");
 const { authenticator } = require("otplib");
-const { BASE_URL, ENDPOINTS, HEADERS, TIMEOUT } = require("../../config/angel.config");
+const path = require("path");
+
+const { BASE_URL, ENDPOINTS, HEADERS, TIMEOUT } = require(
+  path.join(process.cwd(), "config", "angel.config.js")
+);
 
 // ==========================================
 // LOGIN WITH PASSWORD + TOTP
