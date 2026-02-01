@@ -404,6 +404,28 @@ function getActiveCount() {
   return ACTIVE_TOKENS.size;
 }
 
+function subscribeBySymbol(symbol) {
+  if (!symbol) return false;
+  if (!ws || !wsConnected) return false;
+
+  // Find token by symbol from SYMBOL_MASTER
+  const entry = Object.values(SYMBOL_MASTER).find(
+    (m) => m.symbol && m.symbol.toUpperCase() === symbol.toUpperCase()
+  );
+
+  if (!entry?.token) {
+    console.log("⚠️ ENGINE: Symbol not found in master:", symbol);
+    return false;
+  }
+
+  return subscribeOne({
+    token: entry.token,
+    exchangeType: entry.exchangeType
+  });
+}
+
+global.subscribeSymbol = subscribeBySymbol;
+
 // ==========================================
 module.exports = {
   startAngelEngine,
@@ -412,5 +434,6 @@ module.exports = {
   setSymbolMaster,
   subscribeOne,
   unsubscribeOne,
-  getActiveCount
+  getActiveCount,
+  subscribeBySymbol
 };
