@@ -143,8 +143,10 @@ async function performAngelLogin() {
       console.log("📡 JWT Token:", result.jwtToken.substring(0, 20) + "...");
       console.log("📡 Feed Token:", result.feedToken.substring(0, 20) + "...");
 
-      // Start WebSocket
-      startAngelWebSocket(result.feedToken, result.clientCode, ANGEL_API_KEY);
+     // Start WebSocket only if not already connected
+if (!global.angelSession.wsConnected) {
+  startAngelWebSocket(result.feedToken, result.clientCode, ANGEL_API_KEY);
+}
 
       return true;
     } else {
@@ -207,14 +209,22 @@ app.listen(PORT, async () => {
   console.log(`🌐 URL: http://localhost:${PORT}`);
   console.log("=".repeat(50));
 
-  try {
-    // Initialize token service (option master)
+try {
+    // Step 1: Login to Angel One FIRST
+    const loginSuccess = await performAngelLogin();
+
+    if (!loginSuccess) {
+      console.log("⚠️ Angel login failed — server running in LIMITED MODE");
+      return;
+    }
+
+    // Step 2: Load Option Master AFTER successful login
     console.log("📥 Loading Option Master...");
     await initializeTokenService();
     console.log("✅ Option Master Loaded");
 
-    // Login to Angel One
-    await performAngelLogin();
+    // Step 3: System ready
+    console.log("🟢 SYSTEM READY: Live LTP + Option Chain + Signals");
 
   } catch (err) {
     console.error("❌ Startup Error:", err.message);
