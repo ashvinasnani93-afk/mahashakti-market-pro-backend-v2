@@ -7,7 +7,7 @@ const express = require("express");
 const router = express.Router();
 
 // PATH FIXED HERE
-const { buildOptionChainFromAngel } = require("../optionchain.service");
+const { buildOptionChainFromAngel } = require("./optionchain.service");
 
 /**
  * GET /api/option-chain?symbol=NIFTY
