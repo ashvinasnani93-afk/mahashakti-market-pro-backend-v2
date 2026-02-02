@@ -5,12 +5,25 @@
 // ==========================================
 
 const axios = require("axios");
-
 const https = require("https");
 
-// ================================
-// STOCK MASTER CACHE
-// ================================
+// ==========================================
+// BASE CONFIG
+// ==========================================
+const BASE_URL = "https://apiconnect.angelone.in";
+
+// ==========================================
+// STOCK MASTER CACHE (SAFE + REQUIRED FOR LTP)
+// ==========================================
+let STOCK_MASTER_LOADED = false;
+const STOCK_TOKEN_MAP = {
+  NSE: {},
+  BSE: {}
+};
+
+// ==========================================
+// LOAD STOCK MASTER FROM ANGEL
+// ==========================================
 async function loadStockMaster() {
   if (STOCK_MASTER_LOADED) return;
 
@@ -57,11 +70,6 @@ async function loadStockMaster() {
 }
 
 // ==========================================
-// BASE CONFIG
-// ==========================================
-const BASE_URL = "https://apiconnect.angelone.in";
-
-// ==========================================
 // GLOBAL SESSION BRIDGE
 // ==========================================
 let globalJwtToken = null;
@@ -104,7 +112,7 @@ function getHeaders(jwtToken = null) {
 }
 
 // ==========================================
-// LTP DATA
+// LTP DATA (NSE + BSE STOCK SAFE)
 // ==========================================
 async function getLtpData(exchange, tradingSymbol, symbolToken) {
   try {
@@ -113,7 +121,8 @@ async function getLtpData(exchange, tradingSymbol, symbolToken) {
     // ---------------------------------------
     if (!symbolToken && (exchange === "NSE" || exchange === "BSE")) {
       await loadStockMaster();
-      symbolToken = STOCK_TOKEN_MAP[tradingSymbol.toUpperCase()];
+      symbolToken =
+        STOCK_TOKEN_MAP[exchange]?.[tradingSymbol.toUpperCase()];
     }
 
     if (!symbolToken) {
@@ -288,5 +297,7 @@ module.exports = {
   getRMS,
   getOrderBook,
   getTradeBook,
-  placeOrder
+  placeOrder,
+  loadStockMaster,
+  STOCK_TOKEN_MAP
 };
