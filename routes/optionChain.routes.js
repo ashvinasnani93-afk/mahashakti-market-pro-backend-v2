@@ -17,7 +17,7 @@ const { buildOptionChainFromAngel } = require("../optionchain.service");
  * GET /api/option-chain?symbol=GOLD (Commodity)
  * GET /api/option-chain?symbol=CRUDEOIL (Commodity)
  */
-router.get(\"/\", async (req, res) => {
+router.get("/", async (req, res) => {
   try {
     const { symbol, expiry } = req.query;
 
