@@ -5,8 +5,8 @@
 // NO DUMMY - Pure Real Market Data
 // ==========================================
 
-const { getAllOptionSymbols } = require(\"./services/optionsMaster.service\");
-const { getLtpData } = require(\"./services/angel/angelApi.service\");
+const { getAllOptionSymbols } = require("./services/optionsMaster.service");
+const { getLtpData } = require("./services/angel/angelApi.service");
 
 /**
  * Build Option Chain from Angel One Master
@@ -16,25 +16,28 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
   try {
     console.log(`📊 Building chain for ${symbol}`);
 
+    // Safe global cache
+    global.latestLTP = global.latestLTP || {};
+
     // Get all option symbols from Angel master
     const allOptions = await getAllOptionSymbols();
 
     if (!allOptions || allOptions.length === 0) {
       return {
         status: false,
-        message: \"Option master not loaded\"
+        message: "Option master not loaded"
       };
     }
 
     // Filter options for this symbol
-    const symbolOptions = allOptions.filter(opt => 
+    const symbolOptions = allOptions.filter(opt =>
       opt.name && opt.name.toUpperCase() === symbol.toUpperCase()
     );
 
     if (symbolOptions.length === 0) {
       return {
         status: false,
-        message: `No options found for ${symbol}. Supported: NIFTY, BANKNIFTY, FINNIFTY, Stocks with options`
+        message: `No options found for ${symbol}. Supported: NIFTY, BANKNIFTY, FINNIFTY, Stocks, Commodities`
       };
     }
 
@@ -54,7 +57,7 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
     if (availableExpiries.length === 0) {
       return {
         status: false,
-        message: \"No valid expiries found\"
+        message: "No valid expiries found"
       };
     }
 
@@ -86,14 +89,14 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
         strikeMap[strike] = { strike, CE: null, PE: null };
       }
 
-      if (opt.type === \"CE\") {
+      if (opt.type === "CE") {
         strikeMap[strike].CE = {
           token: opt.token,
           symbol: opt.symbol,
           strike: strike,
           ltp: null
         };
-      } else if (opt.type === \"PE\") {
+      } else if (opt.type === "PE") {
         strikeMap[strike].PE = {
           token: opt.token,
           symbol: opt.symbol,
@@ -104,14 +107,16 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
     });
 
     // Get strikes array
-    const strikes = Object.keys(strikeMap).map(Number).sort((a, b) => a - b);
+    const strikes = Object.keys(strikeMap)
+      .map(Number)
+      .sort((a, b) => a - b);
 
-    // Get spot price (from cache or API)
+    // Get spot price
     let spotPrice = null;
+
     if (global.latestLTP[symbol]) {
       spotPrice = global.latestLTP[symbol].ltp;
     } else {
-      // Try to get from Angel API
       const ltpResult = await getLtpFromSymbol(symbol);
       if (ltpResult) {
         spotPrice = ltpResult;
@@ -121,8 +126,10 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
     // Calculate ATM
     let atmStrike = null;
     if (spotPrice && strikes.length > 0) {
-      atmStrike = strikes.reduce((prev, curr) => 
-        Math.abs(curr - spotPrice) < Math.abs(prev - spotPrice) ? curr : prev
+      atmStrike = strikes.reduce((prev, curr) =>
+        Math.abs(curr - spotPrice) < Math.abs(prev - spotPrice)
+          ? curr
+          : prev
       );
     }
 
@@ -160,10 +167,10 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
     };
 
   } catch (err) {
-    console.error(\"❌ buildOptionChainFromAngel error:\", err.message);
+    console.error("❌ buildOptionChainFromAngel error:", err.message);
     return {
       status: false,
-      message: \"Option chain build failed\",
+      message: "Option chain build failed",
       error: err.message
     };
   }
@@ -175,28 +182,27 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
  */
 function determineSymbolType(symbol) {
   const upperSymbol = symbol.toUpperCase();
-  
+
   // Index symbols
-  const indices = [\"NIFTY\", \"BANKNIFTY\", \"FINNIFTY\", \"MIDCPNIFTY\"];
+  const indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"];
   if (indices.includes(upperSymbol)) {
-    return \"INDEX\";
+    return "INDEX";
   }
-  
+
   // Commodity symbols (MCX)
   const commodities = [
-    \"GOLD\", \"GOLDM\", \"GOLDPETAL\",
-    \"SILVER\", \"SILVERM\", \"SILVERMICRO\",
-    \"CRUDE\", \"CRUDEOIL\", \"CRUDEOILM\",
-    \"NATURALGAS\", \"NATGAS\", \"NATURALG\",
-    \"COPPER\", \"ZINC\", \"LEAD\", \"NICKEL\", \"ALUMINIUM\"
+    "GOLD", "GOLDM", "GOLDPETAL",
+    "SILVER", "SILVERM", "SILVERMICRO",
+    "CRUDE", "CRUDEOIL", "CRUDEOILM",
+    "NATURALGAS", "NATGAS", "NATURALG",
+    "COPPER", "ZINC", "LEAD", "NICKEL", "ALUMINIUM"
   ];
-  
-  if (commodities.includes(upperSymbol) || upperSymbol.includes(\"MCX\")) {
-    return \"COMMODITY\";
+
+  if (commodities.includes(upperSymbol) || upperSymbol.includes("MCX")) {
+    return "COMMODITY";
   }
-  
-  // Default to STOCK
-  return \"STOCK\";
+
+  return "STOCK";
 }
 
 /**
@@ -217,13 +223,13 @@ function isSameDate(d1, d2) {
 async function getLtpFromSymbol(symbol) {
   try {
     const upperSymbol = symbol.toUpperCase();
-    
+
     // Index tokens
     const symbolMap = {
-      \"NIFTY\": { exchange: \"NSE\", token: \"99926000\" },
-      \"BANKNIFTY\": { exchange: \"NSE\", token: \"99926009\" },
-      \"FINNIFTY\": { exchange: \"NSE\", token: \"99926037\" },
-      \"MIDCPNIFTY\": { exchange: \"NSE\", token: \"99926074\" }
+      NIFTY: { exchange: "NSE", token: "99926000" },
+      BANKNIFTY: { exchange: "NSE", token: "99926009" },
+      FINNIFTY: { exchange: "NSE", token: "99926037" },
+      MIDCPNIFTY: { exchange: "NSE", token: "99926074" }
     };
 
     if (symbolMap[upperSymbol]) {
@@ -237,8 +243,8 @@ async function getLtpFromSymbol(symbol) {
         return result.data.ltp || result.data.close;
       }
     }
-    
-    // For stocks and commodities, try to get from cache first
+
+    // Fallback to cache (stocks / commodities)
     if (global.latestLTP[upperSymbol]) {
       return global.latestLTP[upperSymbol].ltp;
     }
@@ -246,7 +252,7 @@ async function getLtpFromSymbol(symbol) {
     return null;
 
   } catch (err) {
-    console.error(\"❌ getLtpFromSymbol error:\", err.message);
+    console.error("❌ getLtpFromSymbol error:", err.message);
     return null;
   }
 }
