@@ -200,6 +200,27 @@ function updateLTP(token, price) {
       ltp: Number(price),
       timestamp: Date.now()
     };
+
+// ================================
+// SYMBOL MIRROR FOR API ROUTES
+// ================================
+if (!global.tokenToSymbolMap) {
+  global.tokenToSymbolMap = {};
+}
+
+const symbol = global.tokenToSymbolMap[token];
+if (symbol) {
+  if (!global.latestLTP) {
+    global.latestLTP = {};
+  }
+
+  global.latestLTP[symbol] = {
+    ltp: Number(price),
+    timestamp: Date.now()
+  };
+
+  console.log(`📡 WS LTP → ${symbol} = ${price}`);
+}
     
     // Initialize open price
     if (!global.symbolOpenPrice[token]) {
