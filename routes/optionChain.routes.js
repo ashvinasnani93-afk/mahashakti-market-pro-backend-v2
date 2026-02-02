@@ -1,5 +1,4 @@
-
-Action: file_editor create /app/FIXED_FILES_V2/optionChain.routes.js --file-text "// ==========================================
+// ==========================================
 // OPTION CHAIN ROUTES - FIXED
 // Real Angel One Option Chains
 // SUPPORTS: INDEX | STOCKS | COMMODITIES
