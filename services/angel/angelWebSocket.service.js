@@ -225,6 +225,34 @@ function subscribeToSymbols() {
 }
 
 // ==========================================
+// SUBSCRIBE BY SYMBOL (NSE / BSE / MCX SAFE)
+// ==========================================
+function subscribeBySymbol(token, exchange = "NSE") {
+  try {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+
+    let exchangeType = 1; // NSE default
+    if (exchange === "BSE") exchangeType = 2;
+    if (exchange === "MCX") exchangeType = 5;
+
+    const payload = {
+      action: "subscribe",
+      mode: "LTP",
+      exchangeType: exchangeType,
+      tokens: [String(token)]
+    };
+
+    ws.send(JSON.stringify(payload));
+    console.log(`📡 Subscribed WS → ${exchange} | Token: ${token}`);
+    return true;
+
+  } catch (err) {
+    console.error("❌ SubscribeBySymbol Error:", err.message);
+    return false;
+  }
+}
+
+// ==========================================
 // HEARTBEAT (Keep Connection Alive)
 // ==========================================
 function startHeartbeat() {
@@ -277,6 +305,7 @@ function subscribeToToken(token, exchangeType = 1) {
 module.exports = {
   startAngelWebSocket,
   subscribeToToken,
+  subscribeBySymbol, // ✅ ADD THIS
   setClientCode,
   setSessionTokens
 };
