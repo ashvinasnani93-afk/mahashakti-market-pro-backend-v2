@@ -191,6 +191,16 @@ function updateLTP(token, price) {
       timestamp: Date.now()
     };
 
+// Mirror into global.latestLTP for API routes
+    if (!global.latestLTP) {
+      global.latestLTP = {};
+    }
+
+    global.latestLTP[token] = {
+      ltp: Number(price),
+      timestamp: Date.now()
+    };
+    
     // Initialize open price
     if (!global.symbolOpenPrice[token]) {
       global.symbolOpenPrice[token] = Number(price);
@@ -277,6 +287,32 @@ function stopHeartbeat() {
 }
 
 // ==========================================
+// MCX COMMODITY SUBSCRIBE SUPPORT
+// ==========================================
+function subscribeCommodityToken(token) {
+  try {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+      console.log("❌ WS not connected. Can't subscribe MCX token:", token);
+      return false;
+    }
+
+    const payload = {
+      action: "subscribe",
+      mode: "LTP",
+      exchangeType: 5, // 5 = MCX
+      tokens: [String(token)]
+    };
+
+    ws.send(JSON.stringify(payload));
+    console.log("🟡 MCX Token Subscribed:", token);
+    return true;
+  } catch (err) {
+    console.log("❌ MCX Subscribe Error:", err.message);
+    return false;
+  }
+}
+
+// ==========================================
 // SUBSCRIBE TO ADDITIONAL TOKEN
 // ==========================================
 function subscribeToToken(token, exchangeType = 1) {
@@ -305,7 +341,8 @@ function subscribeToToken(token, exchangeType = 1) {
 module.exports = {
   startAngelWebSocket,
   subscribeToToken,
-  subscribeBySymbol, // ✅ ADD THIS
+  subscribeBySymbol,
+  subscribeCommodityToken, // ✅ ADD
   setClientCode,
   setSessionTokens
 };
