@@ -6,13 +6,23 @@
 
 const express = require("express");
 const router = express.Router();
-const { getLtpData, loadStockMaster, STOCK_TOKEN_MAP } = require("../services/angel/angelApi.service");
-// ✅ Now imports everything needed
-/**
- * GET /api/ltp?symbol=NIFTY
- * GET /api/ltp?symbol=BANKNIFTY
- * GET /api/ltp?symbol=RELIANCE
- */
+
+const {
+  getLtpData,
+  loadStockMaster,
+  loadCommodityMaster, // ✅ MCX support
+  STOCK_TOKEN_MAP,
+  COMMODITY_TOKEN_MAP // ✅ MCX token map
+} = require("../services/angel/angelApi.service");
+
+// ==========================================
+// GET /api/ltp?symbol=
+// Supports:
+// INDEX → NIFTY, BANKNIFTY, FINNIFTY, MIDCPNIFTY
+// STOCK → NSE + BSE
+// COMMODITY → MCX (GOLD, SILVER, CRUDEOIL, NATURALGAS, etc)
+// ==========================================
+
 router.get("/", async (req, res) => {
   try {
     const { symbol } = req.query;
@@ -26,7 +36,14 @@ router.get("/", async (req, res) => {
 
     const upperSymbol = symbol.toUpperCase();
 
-    // Try from cache first
+    // ---------------------------------------
+    // Safe Global Cache Init
+    // ---------------------------------------
+    global.latestLTP = global.latestLTP || {};
+
+    // ---------------------------------------
+    // Try from WebSocket cache first
+    // ---------------------------------------
     if (global.latestLTP[upperSymbol]) {
       const cached = global.latestLTP[upperSymbol];
       return res.json({
@@ -38,77 +55,99 @@ router.get("/", async (req, res) => {
       });
     }
 
- // ---------------------------------------
-// Fallback: Call Angel API with Stock Master
-// Supports INDEX + ALL NSE/BSE STOCKS
-// ---------------------------------------
-
-// Common Index Tokens
-const indexTokenMap = {
-  "NIFTY": { exchange: "NSE", token: "99926000" },
-  "BANKNIFTY": { exchange: "NSE", token: "99926009" },
-  "FINNIFTY": { exchange: "NSE", token: "99926037" },
-  "MIDCPNIFTY": { exchange: "NSE", token: "99926074" }
-};
-
-let tokenToUse = null;
-let exchangeToUse = "NSE";
-
-// Check if it's a known index
-if (indexTokenMap[upperSymbol]) {
-  tokenToUse = indexTokenMap[upperSymbol].token;
-  exchangeToUse = indexTokenMap[upperSymbol].exchange;
-} else {
-  // Load stock master for regular stocks
-  await loadStockMaster();
-
-  // Try NSE first, then BSE
-  if (STOCK_TOKEN_MAP.NSE[upperSymbol]) {
-    tokenToUse = STOCK_TOKEN_MAP.NSE[upperSymbol];
-    exchangeToUse = "NSE";
-  } else if (STOCK_TOKEN_MAP.BSE[upperSymbol]) {
-    tokenToUse = STOCK_TOKEN_MAP.BSE[upperSymbol];
-    exchangeToUse = "BSE";
-  }
-}
-
-// Fetch LTP if token found
-if (tokenToUse) {
-  const result = await getLtpData(
-    exchangeToUse,
-    upperSymbol,
-    tokenToUse
-  );
-
-  if (result.success && result.data) {
-    // Cache for WebSocket/API speed
-    global.latestLTP = global.latestLTP || {};
-    global.latestLTP[upperSymbol] = {
-      ltp: result.data.ltp || result.data.close,
-      timestamp: Date.now()
+    // ---------------------------------------
+    // Common Index Tokens
+    // ---------------------------------------
+    const indexTokenMap = {
+      NIFTY: { exchange: "NSE", token: "99926000" },
+      BANKNIFTY: { exchange: "NSE", token: "99926009" },
+      FINNIFTY: { exchange: "NSE", token: "99926037" },
+      MIDCPNIFTY: { exchange: "NSE", token: "99926074" }
     };
 
-    return res.json({
-      status: true,
-      symbol: upperSymbol,
-      exchange: exchangeToUse,
-      ltp: result.data.ltp || result.data.close,
-      open: result.data.open,
-      high: result.data.high,
-      low: result.data.low,
-      close: result.data.close,
-      source: "ANGEL_API",
-      timestamp: Date.now()
-    });
-  }
-}
+    let tokenToUse = null;
+    let exchangeToUse = "NSE";
 
-// If still not found
-return res.json({
-  status: false,
-  message: "LTP not available for symbol",
-  symbol: upperSymbol
-});
+    // ---------------------------------------
+    // 1️⃣ INDEX CHECK
+    // ---------------------------------------
+    if (indexTokenMap[upperSymbol]) {
+      tokenToUse = indexTokenMap[upperSymbol].token;
+      exchangeToUse = indexTokenMap[upperSymbol].exchange;
+    }
+
+    // ---------------------------------------
+    // 2️⃣ COMMODITY CHECK (MCX)
+    // ---------------------------------------
+    if (!tokenToUse) {
+      await loadCommodityMaster();
+
+      if (COMMODITY_TOKEN_MAP && COMMODITY_TOKEN_MAP[upperSymbol]) {
+        tokenToUse = COMMODITY_TOKEN_MAP[upperSymbol];
+        exchangeToUse = "MCX";
+      }
+    }
+
+    // ---------------------------------------
+    // 3️⃣ STOCK CHECK (NSE → BSE fallback)
+    // ---------------------------------------
+    if (!tokenToUse) {
+      await loadStockMaster();
+
+      if (STOCK_TOKEN_MAP.NSE && STOCK_TOKEN_MAP.NSE[upperSymbol]) {
+        tokenToUse = STOCK_TOKEN_MAP.NSE[upperSymbol];
+        exchangeToUse = "NSE";
+      } else if (STOCK_TOKEN_MAP.BSE && STOCK_TOKEN_MAP.BSE[upperSymbol]) {
+        tokenToUse = STOCK_TOKEN_MAP.BSE[upperSymbol];
+        exchangeToUse = "BSE";
+      }
+    }
+
+    // ---------------------------------------
+    // Fetch LTP from Angel API
+    // ---------------------------------------
+    if (tokenToUse) {
+      const result = await getLtpData(
+        exchangeToUse,
+        upperSymbol,
+        tokenToUse
+      );
+
+      if (result.success && result.data) {
+        const ltpValue =
+          result.data.ltp ||
+          result.data.close ||
+          result.data.last_traded_price;
+
+        // Cache for speed
+        global.latestLTP[upperSymbol] = {
+          ltp: Number(ltpValue),
+          timestamp: Date.now()
+        };
+
+        return res.json({
+          status: true,
+          symbol: upperSymbol,
+          exchange: exchangeToUse,
+          ltp: Number(ltpValue),
+          open: result.data.open,
+          high: result.data.high,
+          low: result.data.low,
+          close: result.data.close,
+          source: "ANGEL_API",
+          timestamp: Date.now()
+        });
+      }
+    }
+
+    // ---------------------------------------
+    // Not Found
+    // ---------------------------------------
+    return res.json({
+      status: false,
+      message: "LTP not available for symbol",
+      symbol: upperSymbol
+    });
   } catch (err) {
     console.error("❌ LTP Route Error:", err.message);
     return res.status(500).json({
