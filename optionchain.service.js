@@ -1,5 +1,4 @@
-अब option chain files को fix करता हूँ। मैं एक comprehensive fix करता हूँ जो commodities option chain को भी support करे:
-Action: file_editor create /app/FIXED_FILES_V2/optionchain.service.js --file-text "// ==========================================
+// ==========================================
 // OPTION CHAIN SERVICE - REAL ANGEL DATA - FIXED
 // Builds option chain from Angel Master
 // SUPPORTS: INDEX | STOCKS | COMMODITIES
