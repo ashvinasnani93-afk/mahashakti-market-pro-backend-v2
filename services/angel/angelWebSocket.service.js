@@ -159,7 +159,7 @@ function decodeBinaryLTP(buffer) {
     const price = pricePaise / 100;  
   
     // Extract token - FIXED REGEX  
-    const tokenStr = buffer.toString(\"utf8\", 2, 27).replace(//g, \"\");  // ✅ CORRECT REGEX  
+  const tokenStr = buffer.toString("utf8", 2, 27).replace(/\0/g, "");
       
     return {  
       token: tokenStr,  
