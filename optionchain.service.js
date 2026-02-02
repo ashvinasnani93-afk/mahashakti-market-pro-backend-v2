@@ -254,5 +254,3 @@ async function getLtpFromSymbol(symbol) {
 module.exports = {
   buildOptionChainFromAngel
 };
-"
-Observation: Create successful: /app/FIXED_FILES_V2/optionchain.service.js
