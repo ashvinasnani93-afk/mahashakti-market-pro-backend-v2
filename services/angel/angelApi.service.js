@@ -6,6 +6,54 @@
 
 const axios = require("axios");
 
+const https = require("https");
+
+// ================================
+// STOCK MASTER CACHE
+// ================================
+let STOCK_TOKEN_MAP = {
+  NSE: {},
+  BSE: {}
+};
+let STOCK_MASTER_LOADED = false;
+
+// Load NSE Equity Master
+async function loadStockMaster() {
+  if (STOCK_MASTER_LOADED) return;
+
+  console.log("[STOCK] Loading Angel Stock Master...");
+
+  return new Promise((resolve, reject) => {
+    https.get(
+      "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          try {
+            const json = JSON.parse(data);
+
+            json.forEach((row) => {
+             if ((row.exch_seg === "NSE" || row.exch_seg === "BSE") && row.symbol && row.token) {
+             const exch = row.exch_seg.toUpperCase();
+             STOCK_TOKEN_MAP[exch][row.symbol.toUpperCase()] = row.token;
+             }
+            });
+
+            STOCK_MASTER_LOADED = true;
+            console.log(
+              `[STOCK] Stock Master Loaded: ${Object.keys(STOCK_TOKEN_MAP).length}`
+            );
+            resolve();
+          } catch (e) {
+            reject(e);
+          }
+        });
+      }
+    ).on("error", reject);
+  });
+}
+
 // ==========================================
 // BASE CONFIG
 // ==========================================
@@ -59,6 +107,18 @@ function getHeaders(jwtToken = null) {
 async function getLtpData(exchange, tradingSymbol, symbolToken) {
   try {
     const response = await axios.post(
+      // Auto-load token for NSE + BSE stocks
+  if (!symbolToken && (exchange === "NSE" || exchange === "BSE")) {
+    await loadStockMaster();
+    symbolToken = STOCK_TOKEN_MAP[tradingSymbol.toUpperCase()];
+  }
+
+  if (!symbolToken) {
+    return {
+      success: false,
+      message: "Symbol token not found in Stock Master"
+    };
+  }
       `${BASE_URL}/rest/secure/angelbroking/order/v1/getLtpData`,
       {
         exchange,
