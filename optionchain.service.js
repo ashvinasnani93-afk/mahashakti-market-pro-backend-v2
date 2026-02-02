@@ -4,8 +4,8 @@
 // NO DUMMY - Pure Real Market Data  
 // ==========================================  
   
-const { getAllOptionSymbols } = require("./optionsMaster.service");  
-const { getLtpData } = require("./angel/angelApi.service");  
+const { getAllOptionSymbols } = require("./services/optionsMaster.service");
+const { getLtpData } = require("./services/angel/angelApi.service");
   
 /**  
  * Build Option Chain from Angel One Master  
