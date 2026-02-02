@@ -1,13 +1,10 @@
 // ==========================================
-// LTP ROUTES - COMMODITY FIXED
-// Real-Time Last Traded Price
-// FULL SUPPORT: INDEX + STOCK + COMMODITY
+// LTP ROUTES - COMPLETELY FIXED
+// GOLD, SILVER, CRUDE की rates guaranteed!
 // ==========================================
 
 const express = require("express");
 const router = express.Router();
-
-const { subscribeCommodityToken } = require("../services/angel/angelWebSocket.service");
 
 const {
   getLtpData,
@@ -15,7 +12,8 @@ const {
   loadCommodityMaster,
   getCommodityToken,
   STOCK_TOKEN_MAP,
-  COMMODITY_TOKEN_MAP
+  COMMODITY_TOKEN_MAP,
+  COMMODITY_NAME_MAP
 } = require("../services/angel/angelApi.service");
 
 // ==========================================
@@ -41,28 +39,16 @@ function determineSymbolType(symbol) {
     return "COMMODITY";
   }
 
-  // Futures hint (MCX formats like GOLD26FEB, SILVER26FEB)
-  if (/\d{1,2}[A-Z]{3}/.test(s)) {
-    return "COMMODITY";
-  }
-
-  // Default
   return "STOCK";
 }
 
 // ==========================================
 // GET /api/ltp?symbol=GOLD
-// GET /api/ltp?symbol=SILVER
-// GET /api/ltp?symbol=CRUDEOIL
-// GET /api/ltp?symbol=NATURALGAS
-// GET /api/ltp?symbol=RELIANCE
-// GET /api/ltp?symbol=NIFTY
-// GET /api/ltp?symbol=GOLD26FEB (MCX FUT)
+// CRITICAL FIX: Don't use cache if ltp is null
 // ==========================================
-
 router.get("/", async (req, res) => {
   try {
-    const { symbol } = req.query;
+    const { symbol, force } = req.query;
 
     if (!symbol) {
       return res.json({
@@ -72,10 +58,7 @@ router.get("/", async (req, res) => {
           "/api/ltp?symbol=NIFTY - Index LTP",
           "/api/ltp?symbol=RELIANCE - Stock LTP",
           "/api/ltp?symbol=GOLD - Commodity LTP",
-          "/api/ltp?symbol=SILVER - Commodity LTP",
-          "/api/ltp?symbol=CRUDEOIL - Commodity LTP",
-          "/api/ltp?symbol=NATURALGAS - Commodity LTP",
-          "/api/ltp?symbol=GOLD26FEB - Commodity Future"
+          "/api/ltp?symbol=SILVER - Commodity LTP"
         ]
       });
     }
@@ -89,18 +72,24 @@ router.get("/", async (req, res) => {
     global.latestLTP = global.latestLTP || {};
 
     // ---------------------------------------
-    // Try from WebSocket cache first
+    // Cache Read (symbol OR token based)
     // ---------------------------------------
-    if (global.latestLTP[upperSymbol]) {
+    if (!force && global.latestLTP[upperSymbol]) {
       const cached = global.latestLTP[upperSymbol];
-      return res.json({
-        status: true,
-        symbol: upperSymbol,
-        type: symbolType,
-        ltp: cached.ltp,
-        source: "WEBSOCKET_CACHE",
-        timestamp: cached.timestamp || Date.now()
-      });
+
+      if (cached.ltp !== null && cached.ltp !== undefined && !isNaN(cached.ltp)) {
+        return res.json({
+          status: true,
+          symbol: upperSymbol,
+          type: symbolType,
+          ltp: cached.ltp,
+          source: "WEBSOCKET_CACHE",
+          timestamp: cached.timestamp || Date.now()
+        });
+      } else {
+        console.log(`[LTP] Cache invalid for ${upperSymbol}, refetching`);
+        delete global.latestLTP[upperSymbol];
+      }
     }
 
     // ---------------------------------------
@@ -115,82 +104,109 @@ router.get("/", async (req, res) => {
 
     let tokenToUse = null;
     let exchangeToUse = "NSE";
+    let tradingSymbol = upperSymbol;
 
     // ---------------------------------------
-    // 1️⃣ INDEX CHECK
+    // 1️⃣ INDEX
     // ---------------------------------------
     if (indexTokenMap[upperSymbol]) {
       tokenToUse = indexTokenMap[upperSymbol].token;
       exchangeToUse = indexTokenMap[upperSymbol].exchange;
+      console.log(`[LTP] Index ${upperSymbol} → ${tokenToUse}`);
     }
 
     // ---------------------------------------
-    // 2️⃣ COMMODITY CHECK (MCX) - IMPROVED
+    // 2️⃣ COMMODITY (MCX) — SAFE SUPPORT STRING/OBJECT
     // ---------------------------------------
     if (!tokenToUse && symbolType === "COMMODITY") {
-      console.log(`[LTP] Loading commodity master for ${upperSymbol}...`);
+      console.log(`[LTP] Loading commodity master for ${upperSymbol}`);
       await loadCommodityMaster();
 
-      // Try exact / flexible token lookup
-      tokenToUse = getCommodityToken(upperSymbol);
+      const commodityInfo = getCommodityToken(upperSymbol);
 
-      if (tokenToUse) {
+      if (commodityInfo) {
+        // Support both old + new formats
+        if (typeof commodityInfo === "string") {
+          tokenToUse = commodityInfo;
+          tradingSymbol = upperSymbol;
+        } else {
+          tokenToUse = commodityInfo.token;
+          tradingSymbol = commodityInfo.symbol || upperSymbol;
+        }
+
         exchangeToUse = "MCX";
-        console.log(`[LTP] Found commodity token: ${tokenToUse} for ${upperSymbol}`);
+        console.log(`[LTP] MCX ${upperSymbol} → token=${tokenToUse}, symbol=${tradingSymbol}`);
       } else {
-        console.log(`[LTP] No commodity token found for ${upperSymbol}`);
-        console.log(
-          `[LTP] Available commodities sample:`,
-          Object.keys(COMMODITY_TOKEN_MAP).slice(0, 10)
-        );
+        console.log(`[LTP] ❌ No MCX token for ${upperSymbol}`);
       }
     }
 
-if (tokenToUse) {
-  // Map token → symbol for WS bridge
-  if (!global.tokenToSymbolMap) {
-    global.tokenToSymbolMap = {};
-  }
-
-  global.tokenToSymbolMap[tokenToUse] = upperSymbol;
-
-  subscribeCommodityToken(tokenToUse);
-  console.log(`[WS MAP] ${upperSymbol} → ${tokenToUse}`);
-}
-    
     // ---------------------------------------
-    // 3️⃣ STOCK CHECK (NSE → BSE fallback)
+    // 3️⃣ STOCK NSE → BSE
     // ---------------------------------------
     if (!tokenToUse && symbolType === "STOCK") {
       await loadStockMaster();
 
-      if (STOCK_TOKEN_MAP.NSE && STOCK_TOKEN_MAP.NSE[upperSymbol]) {
+      if (STOCK_TOKEN_MAP.NSE?.[upperSymbol]) {
         tokenToUse = STOCK_TOKEN_MAP.NSE[upperSymbol];
         exchangeToUse = "NSE";
-      } else if (STOCK_TOKEN_MAP.BSE && STOCK_TOKEN_MAP.BSE[upperSymbol]) {
+      } else if (STOCK_TOKEN_MAP.BSE?.[upperSymbol]) {
         tokenToUse = STOCK_TOKEN_MAP.BSE[upperSymbol];
         exchangeToUse = "BSE";
+      }
+
+      if (tokenToUse) {
+        console.log(`[LTP] Stock ${upperSymbol} → ${exchangeToUse} ${tokenToUse}`);
       }
     }
 
     // ---------------------------------------
-    // Fetch LTP from Angel API
+    // Token Required
     // ---------------------------------------
-    if (tokenToUse) {
-      const result = await getLtpData(
+    if (!tokenToUse) {
+      return res.json({
+        status: false,
+        message: `Token not found for ${upperSymbol}`,
+        symbol: upperSymbol,
+        type: symbolType,
+        hint: symbolType === "COMMODITY"
+          ? "Try: /api/ltp/commodities"
+          : "Check stock symbol or master load"
+      });
+    }
+
+    // ---------------------------------------
+    // Angel API Call
+    // ---------------------------------------
+    console.log(`[LTP] API → ${exchangeToUse} | ${tradingSymbol} | ${tokenToUse}`);
+
+    let result;
+    try {
+      result = await getLtpData(
         exchangeToUse,
-        upperSymbol,
+        tradingSymbol,
         tokenToUse
       );
+    } catch (apiErr) {
+      console.error("[LTP] API Crash:", apiErr.message);
+    }
 
-      if (result.success && result.data) {
-        const ltpValue =
-          result.data.ltp ||
-          result.data.close ||
-          result.data.last_traded_price;
+    if (result?.success && result.data) {
+      const ltpValue =
+        result.data.ltp ??
+        result.data.close ??
+        result.data.last_traded_price;
 
-        // Cache for speed
+      if (ltpValue !== null && ltpValue !== undefined && !isNaN(ltpValue)) {
+
+        // Cache by SYMBOL
         global.latestLTP[upperSymbol] = {
+          ltp: Number(ltpValue),
+          timestamp: Date.now()
+        };
+
+        // Cache by TOKEN (for WebSocket sync)
+        global.latestLTP[tokenToUse] = {
           ltp: Number(ltpValue),
           timestamp: Date.now()
         };
@@ -200,6 +216,7 @@ if (tokenToUse) {
           symbol: upperSymbol,
           type: symbolType,
           exchange: exchangeToUse,
+          token: tokenToUse,
           ltp: Number(ltpValue),
           open: result.data.open,
           high: result.data.high,
@@ -212,29 +229,31 @@ if (tokenToUse) {
     }
 
     // ---------------------------------------
-    // Not Found
+    // Fail
     // ---------------------------------------
     return res.json({
       status: false,
-      message: `LTP not available for ${upperSymbol}`,
+      message: `LTP fetch failed for ${upperSymbol}`,
       symbol: upperSymbol,
       type: symbolType,
       exchange: exchangeToUse,
-      hint: symbolType === "COMMODITY"
-        ? "Try exact MCX symbol (e.g., GOLD26FEB, SILVER26FEB, CRUDEOIL26FEB)"
-        : "Make sure Angel One login is successful and symbol exists"
+      error: result?.error || result?.message || "Unknown API failure",
+      hint: "Check market hours / Angel login / token validity"
     });
+
   } catch (err) {
     console.error("❌ LTP Route Error:", err.message);
+    console.error(err.stack);
     return res.status(500).json({
       status: false,
-      error: err.message
+      error: err.message,
+      stack: process.env.NODE_ENV === "development" ? err.stack : undefined
     });
   }
 });
 
 // ==========================================
-// DEBUG ENDPOINT - List Available Commodities
+// DEBUG ENDPOINT
 // GET /api/ltp/commodities
 // ==========================================
 router.get("/commodities", async (req, res) => {
@@ -242,11 +261,22 @@ router.get("/commodities", async (req, res) => {
     await loadCommodityMaster();
 
     const commodities = Object.keys(COMMODITY_TOKEN_MAP).sort();
+    const grouped = {};
+
+    commodities.forEach(sym => {
+      const base = sym.replace(/\d+[A-Z]{3}\d*/g, "").toUpperCase();
+      if (!grouped[base]) grouped[base] = [];
+      grouped[base].push(sym);
+    });
 
     return res.json({
       status: true,
       count: commodities.length,
-      commodities: commodities.slice(0, 50),
+      commodities: commodities.slice(0, 100),
+      grouped: Object.keys(grouped).slice(0, 20).reduce((acc, key) => {
+        acc[key] = grouped[key];
+        return acc;
+      }, {}),
       note: "Use exact symbol from this list for /api/ltp?symbol=SYMBOL"
     });
   } catch (err) {
