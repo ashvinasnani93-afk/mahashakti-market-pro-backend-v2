@@ -106,19 +106,25 @@ function getHeaders(jwtToken = null) {
 // ==========================================
 async function getLtpData(exchange, tradingSymbol, symbolToken) {
   try {
-    const response = await axios.post(
-      // Auto-load token for NSE + BSE stocks
-  if (!symbolToken && (exchange === "NSE" || exchange === "BSE")) {
-    await loadStockMaster();
-    symbolToken = STOCK_TOKEN_MAP[tradingSymbol.toUpperCase()];
-  }
+    // ---------------------------------------
+    // AUTO-LOAD TOKEN FOR NSE + BSE STOCKS
+    // ---------------------------------------
+    if (!symbolToken && (exchange === "NSE" || exchange === "BSE")) {
+      await loadStockMaster();
+      symbolToken = STOCK_TOKEN_MAP[tradingSymbol.toUpperCase()];
+    }
 
-  if (!symbolToken) {
-    return {
-      success: false,
-      message: "Symbol token not found in Stock Master"
-    };
-  }
+    if (!symbolToken) {
+      return {
+        success: false,
+        message: "Symbol token not found in Stock Master"
+      };
+    }
+
+    // ---------------------------------------
+    // ANGEL LTP API CALL
+    // ---------------------------------------
+    const response = await axios.post(
       `${BASE_URL}/rest/secure/angelbroking/order/v1/getLtpData`,
       {
         exchange,
