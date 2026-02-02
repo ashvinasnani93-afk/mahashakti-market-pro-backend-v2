@@ -151,24 +151,23 @@ function handleWebSocketMessage(data) {
 // ==========================================
 // DECODE BINARY LTP (Angel Format)
 // ==========================================
-function decodeBinaryLTP(buffer) {
-  try {
-    // Angel sends 51 byte binary packets
-    // Bytes 43-46: LTP in paise (Int32LE)
-    const pricePaise = buffer.readInt32LE(43);
-    const price = pricePaise / 100;
-
-    // Extract token (simplified)
-    const tokenStr = buffer.toString("utf8", 2, 27).replace(/\0/g, "");
-
-    return {
-      token: tokenStr,
-      price: price
-    };
-
-  } catch (err) {
-    return null;
-  }
+function decodeBinaryLTP(buffer) {  
+  try {  
+    // Angel sends 51 byte binary packets  
+    // Bytes 43-46: LTP in paise (Int32LE)  
+    const pricePaise = buffer.readInt32LE(43);  
+    const price = pricePaise / 100;  
+  
+    // Extract token - FIXED REGEX  
+    const tokenStr = buffer.toString(\"utf8\", 2, 27).replace(//g, \"\");  // ✅ CORRECT REGEX  
+      
+    return {  
+      token: tokenStr,  
+      price: price  
+    };  
+  } catch (err) {  
+    return null;  
+  }  
 }
 
 // ==========================================
