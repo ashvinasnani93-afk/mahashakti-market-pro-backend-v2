@@ -146,9 +146,16 @@ router.get("/", async (req, res) => {
       }
     }
 
-// Trigger WS subscription for live price
 if (tokenToUse) {
+  // Map token → symbol for WS bridge
+  if (!global.tokenToSymbolMap) {
+    global.tokenToSymbolMap = {};
+  }
+
+  global.tokenToSymbolMap[tokenToUse] = upperSymbol;
+
   subscribeCommodityToken(tokenToUse);
+  console.log(`[WS MAP] ${upperSymbol} → ${tokenToUse}`);
 }
     
     // ---------------------------------------
