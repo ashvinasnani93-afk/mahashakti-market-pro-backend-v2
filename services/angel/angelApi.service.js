@@ -11,17 +11,10 @@ const https = require("https");
 // ================================
 // STOCK MASTER CACHE
 // ================================
-let STOCK_TOKEN_MAP = {
-  NSE: {},
-  BSE: {}
-};
-let STOCK_MASTER_LOADED = false;
-
-// Load NSE Equity Master
 async function loadStockMaster() {
   if (STOCK_MASTER_LOADED) return;
 
-  console.log("[STOCK] Loading Angel Stock Master...");
+  console.log("[STOCK] Loading Angel Stock Master (NSE + BSE)...");
 
   return new Promise((resolve, reject) => {
     https.get(
@@ -34,16 +27,25 @@ async function loadStockMaster() {
             const json = JSON.parse(data);
 
             json.forEach((row) => {
-             if ((row.exch_seg === "NSE" || row.exch_seg === "BSE") && row.symbol && row.token) {
-             const exch = row.exch_seg.toUpperCase();
-             STOCK_TOKEN_MAP[exch][row.symbol.toUpperCase()] = row.token;
-             }
+              if (!row.symbol || !row.token || !row.exch_seg) return;
+
+              const symbol = row.symbol.toUpperCase();
+
+              if (row.exch_seg === "NSE") {
+                STOCK_TOKEN_MAP.NSE[symbol] = row.token;
+              }
+
+              if (row.exch_seg === "BSE") {
+                STOCK_TOKEN_MAP.BSE[symbol] = row.token;
+              }
             });
 
             STOCK_MASTER_LOADED = true;
+
             console.log(
-              `[STOCK] Stock Master Loaded: ${Object.keys(STOCK_TOKEN_MAP).length}`
+              `[STOCK] Master Loaded | NSE: ${Object.keys(STOCK_TOKEN_MAP.NSE).length} | BSE: ${Object.keys(STOCK_TOKEN_MAP.BSE).length}`
             );
+
             resolve();
           } catch (e) {
             reject(e);
