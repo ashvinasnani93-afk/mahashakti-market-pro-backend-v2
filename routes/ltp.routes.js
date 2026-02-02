@@ -7,13 +7,22 @@
 const express = require("express");
 const router = express.Router();
 
+const angelApi = require("../services/angel/angelApi.service");
+
 const {
   getLtpData,
   loadStockMaster,
-  loadCommodityMaster, // ✅ MCX support
-  STOCK_TOKEN_MAP,
-  COMMODITY_TOKEN_MAP // ✅ MCX token map
-} = require("../services/angel/angelApi.service");
+  STOCK_TOKEN_MAP
+} = angelApi;
+
+// ------------------------------------------
+// SAFE COMMODITY HOOKS (won't crash if missing)
+// ------------------------------------------
+const loadCommodityMaster =
+  angelApi.loadCommodityMaster || (async () => {});
+
+const COMMODITY_TOKEN_MAP =
+  angelApi.COMMODITY_TOKEN_MAP || {};
 
 // ==========================================
 // GET /api/ltp?symbol=
@@ -104,7 +113,43 @@ router.get("/", async (req, res) => {
     }
 
     // ---------------------------------------
-    // Fetch LTP from Angel API
+    // 4️⃣ FINAL FALLBACK (Angel API Auto Token)
+    // ---------------------------------------
+    if (!tokenToUse) {
+      const fallbackResult = await getLtpData(
+        exchangeToUse,
+        upperSymbol,
+        null // let Angel API service auto-detect token
+      );
+
+      if (fallbackResult.success && fallbackResult.data) {
+        const ltpValue =
+          fallbackResult.data.ltp ||
+          fallbackResult.data.close ||
+          fallbackResult.data.last_traded_price;
+
+        global.latestLTP[upperSymbol] = {
+          ltp: Number(ltpValue),
+          timestamp: Date.now()
+        };
+
+        return res.json({
+          status: true,
+          symbol: upperSymbol,
+          exchange: exchangeToUse,
+          ltp: Number(ltpValue),
+          open: fallbackResult.data.open,
+          high: fallbackResult.data.high,
+          low: fallbackResult.data.low,
+          close: fallbackResult.data.close,
+          source: "ANGEL_API_FALLBACK",
+          timestamp: Date.now()
+        });
+      }
+    }
+
+    // ---------------------------------------
+    // Fetch LTP from Angel API (Normal Path)
     // ---------------------------------------
     if (tokenToUse) {
       const result = await getLtpData(
