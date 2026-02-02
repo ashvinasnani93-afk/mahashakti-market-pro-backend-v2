@@ -7,6 +7,8 @@
 const express = require("express");
 const router = express.Router();
 
+const { subscribeCommodityToken } = require("../services/angel/angelWebSocket.service");
+
 const {
   getLtpData,
   loadStockMaster,
@@ -144,6 +146,11 @@ router.get("/", async (req, res) => {
       }
     }
 
+// Trigger WS subscription for live price
+if (tokenToUse) {
+  subscribeCommodityToken(tokenToUse);
+}
+    
     // ---------------------------------------
     // 3️⃣ STOCK CHECK (NSE → BSE fallback)
     // ---------------------------------------
