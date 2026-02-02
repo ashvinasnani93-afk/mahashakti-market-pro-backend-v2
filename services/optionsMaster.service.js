@@ -205,5 +205,3 @@ module.exports = {
   loadOptionMaster,
   getAvailableUnderlyings
 };
-"
-Observation: Create successful: /app/FIXED_FILES_V2/optionsMaster.service.js
