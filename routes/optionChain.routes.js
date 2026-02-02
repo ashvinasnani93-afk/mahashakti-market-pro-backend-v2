@@ -24,13 +24,13 @@ router.get("/", async (req, res) => {
     if (!symbol) {
       return res.json({
         status: false,
-        message: \"symbol parameter required\",
+        message: "symbol parameter required",
         examples: [
-          \"NIFTY - Index option chain\",
-          \"BANKNIFTY - Index option chain\",
-          \"RELIANCE - Stock option chain\",
-          \"GOLD - Commodity option chain\",
-          \"CRUDEOIL - Commodity option chain\"
+          "NIFTY - Index option chain",
+          "BANKNIFTY - Index option chain",
+          "RELIANCE - Stock option chain",
+          "GOLD - Commodity option chain",
+          "CRUDEOIL - Commodity option chain"
         ]
       });
     }
@@ -44,9 +44,9 @@ router.get("/", async (req, res) => {
     if (!chain || !chain.status) {
       return res.json({
         status: false,
-        message: chain?.message || \"Failed to build option chain\",
+        message: chain?.message || "Failed to build option chain",
         symbol: upperSymbol,
-        hint: \"Make sure Angel One login is successful and symbol has options available\"
+        hint: "Make sure Angel One login is successful and symbol has options available"
       });
     }
 
@@ -61,19 +61,17 @@ router.get("/", async (req, res) => {
       totalStrikes: chain.totalStrikes,
       chain: chain.chain,
       timestamp: Date.now(),
-      note: \"Option chain is context-only. No execution or recommendation.\"
+      note: "Option chain is context-only. No execution or recommendation."
     });
 
   } catch (err) {
-    console.error(\"❌ Option Chain Route Error:\", err.message);
+    console.error("❌ Option Chain Route Error:", err.message);
     return res.status(500).json({
       status: false,
-      message: \"Option chain generation failed\",
+      message: "Option chain generation failed",
       error: err.message
     });
   }
 });
 
 module.exports = router;
-"
-Observation: Create successful: /app/FIXED_FILES_V2/optionChain.routes.js
