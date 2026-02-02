@@ -22,6 +22,12 @@ const STOCK_TOKEN_MAP = {
 };
 
 // ==========================================
+// COMMODITY MASTER CACHE (MCX)
+// ==========================================
+let COMMODITY_MASTER_LOADED = false;
+const COMMODITY_TOKEN_MAP = {};
+
+// ==========================================
 // LOAD STOCK MASTER FROM ANGEL
 // ==========================================
 async function loadStockMaster() {
@@ -57,6 +63,49 @@ async function loadStockMaster() {
 
             console.log(
               `[STOCK] Master Loaded | NSE: ${Object.keys(STOCK_TOKEN_MAP.NSE).length} | BSE: ${Object.keys(STOCK_TOKEN_MAP.BSE).length}`
+            );
+
+            resolve();
+          } catch (e) {
+            reject(e);
+          }
+        });
+      }
+    ).on("error", reject);
+  });
+}
+
+// ==========================================
+// LOAD COMMODITY MASTER FROM ANGEL (MCX)
+// ==========================================
+async function loadCommodityMaster() {
+  if (COMMODITY_MASTER_LOADED) return;
+
+  console.log("[MCX] Loading Angel Commodity Master...");
+
+  return new Promise((resolve, reject) => {
+    https.get(
+      "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json",
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          try {
+            const json = JSON.parse(data);
+
+            json.forEach((row) => {
+              if (!row.symbol || !row.token || !row.exch_seg) return;
+
+              if (row.exch_seg === "MCX") {
+                const symbol = row.symbol.toUpperCase();
+                COMMODITY_TOKEN_MAP[symbol] = row.token;
+              }
+            });
+
+            COMMODITY_MASTER_LOADED = true;
+
+            console.log(
+              `[MCX] Master Loaded | Symbols: ${Object.keys(COMMODITY_TOKEN_MAP).length}`
             );
 
             resolve();
@@ -124,6 +173,15 @@ async function getLtpData(exchange, tradingSymbol, symbolToken) {
       symbolToken =
         STOCK_TOKEN_MAP[exchange]?.[tradingSymbol.toUpperCase()];
     }
+
+    // ---------------------------------------
+// AUTO-LOAD TOKEN FOR MCX COMMODITIES
+// ---------------------------------------
+if (!symbolToken && exchange === "MCX") {
+  await loadCommodityMaster();
+  symbolToken =
+    COMMODITY_TOKEN_MAP[tradingSymbol.toUpperCase()];
+}
 
     if (!symbolToken) {
       return {
@@ -299,5 +357,7 @@ module.exports = {
   getTradeBook,
   placeOrder,
   loadStockMaster,
-  STOCK_TOKEN_MAP
+  loadCommodityMaster, // ✅ ADD
+  STOCK_TOKEN_MAP,
+  COMMODITY_TOKEN_MAP // ✅ ADD
 };
