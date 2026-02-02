@@ -7,7 +7,22 @@
 const express = require("express");
 const router = express.Router();
 
+// ------------------------------------------
+// Angel Services
+// ------------------------------------------
 const angelApi = require("../services/angel/angelApi.service");
+
+// ------------------------------------------
+// Angel Engine (WebSocket + API unified LTP)
+// FEATURE #3 → getLtp export support
+// ------------------------------------------
+let getLtpFromEngine = null;
+try {
+  const angelEngine = require("../src.angelEngine");
+  getLtpFromEngine = angelEngine.getLtp || null;
+} catch (e) {
+  getLtpFromEngine = null;
+}
 
 const {
   getLtpData,
@@ -17,12 +32,40 @@ const {
 
 // ------------------------------------------
 // SAFE COMMODITY HOOKS (won't crash if missing)
+// FEATURE #1 + #2
 // ------------------------------------------
 const loadCommodityMaster =
   angelApi.loadCommodityMaster || (async () => {});
 
 const COMMODITY_TOKEN_MAP =
   angelApi.COMMODITY_TOKEN_MAP || {};
+
+// ------------------------------------------
+// FEATURE #4 → Better Symbol Type Detection
+// ------------------------------------------
+function determineSymbolType(symbol) {
+  const s = symbol.toUpperCase();
+
+  // Indices
+  const indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"];
+  if (indices.includes(s)) return "INDEX";
+
+  // Commodities (MCX)
+  const commodities = [
+    "GOLD", "GOLDM", "GOLDPETAL",
+    "SILVER", "SILVERM", "SILVERMICRO",
+    "CRUDE", "CRUDEOIL", "CRUDEOILM",
+    "NATURALGAS", "NATGAS", "NATURALG",
+    "COPPER", "ZINC", "LEAD", "NICKEL", "ALUMINIUM"
+  ];
+
+  if (commodities.includes(s) || s.includes("MCX")) {
+    return "COMMODITY";
+  }
+
+  // Default
+  return "STOCK";
+}
 
 // ==========================================
 // GET /api/ltp?symbol=
@@ -44,6 +87,7 @@ router.get("/", async (req, res) => {
     }
 
     const upperSymbol = symbol.toUpperCase();
+    const symbolType = determineSymbolType(upperSymbol);
 
     // ---------------------------------------
     // Safe Global Cache Init
@@ -58,10 +102,37 @@ router.get("/", async (req, res) => {
       return res.json({
         status: true,
         symbol: upperSymbol,
+        type: symbolType,
         ltp: cached.ltp,
-        source: "WEBSOCKET",
+        source: "WEBSOCKET_CACHE",
         timestamp: cached.timestamp
       });
+    }
+
+    // ---------------------------------------
+    // FEATURE #3 → Try Angel Engine getLtp()
+    // ---------------------------------------
+    if (getLtpFromEngine) {
+      try {
+        const engineLtp = await getLtpFromEngine(upperSymbol);
+        if (engineLtp) {
+          global.latestLTP[upperSymbol] = {
+            ltp: Number(engineLtp),
+            timestamp: Date.now()
+          };
+
+          return res.json({
+            status: true,
+            symbol: upperSymbol,
+            type: symbolType,
+            ltp: Number(engineLtp),
+            source: "ANGEL_ENGINE",
+            timestamp: Date.now()
+          });
+        }
+      } catch (e) {
+        // Silent fallback to API
+      }
     }
 
     // ---------------------------------------
@@ -87,8 +158,9 @@ router.get("/", async (req, res) => {
 
     // ---------------------------------------
     // 2️⃣ COMMODITY CHECK (MCX)
+    // FEATURE #1 + #2 + #5
     // ---------------------------------------
-    if (!tokenToUse) {
+    if (!tokenToUse && symbolType === "COMMODITY") {
       await loadCommodityMaster();
 
       if (COMMODITY_TOKEN_MAP && COMMODITY_TOKEN_MAP[upperSymbol]) {
@@ -100,7 +172,7 @@ router.get("/", async (req, res) => {
     // ---------------------------------------
     // 3️⃣ STOCK CHECK (NSE → BSE fallback)
     // ---------------------------------------
-    if (!tokenToUse) {
+    if (!tokenToUse && symbolType === "STOCK") {
       await loadStockMaster();
 
       if (STOCK_TOKEN_MAP.NSE && STOCK_TOKEN_MAP.NSE[upperSymbol]) {
@@ -136,6 +208,7 @@ router.get("/", async (req, res) => {
         return res.json({
           status: true,
           symbol: upperSymbol,
+          type: symbolType,
           exchange: exchangeToUse,
           ltp: Number(ltpValue),
           open: fallbackResult.data.open,
@@ -173,6 +246,7 @@ router.get("/", async (req, res) => {
         return res.json({
           status: true,
           symbol: upperSymbol,
+          type: symbolType,
           exchange: exchangeToUse,
           ltp: Number(ltpValue),
           open: result.data.open,
@@ -191,7 +265,8 @@ router.get("/", async (req, res) => {
     return res.json({
       status: false,
       message: "LTP not available for symbol",
-      symbol: upperSymbol
+      symbol: upperSymbol,
+      type: symbolType
     });
   } catch (err) {
     console.error("❌ LTP Route Error:", err.message);
