@@ -78,13 +78,14 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
       subscribeToSymbols();
     });
 
-    ws.on("message", (data) => {
-      try {
-        handleWebSocketMessage(data);
-      } catch (err) {
-        console.error("❌ WS Message Error:", err.message);
-      }
-    });
+   ws.on("message", (data) => {
+  try {
+    console.log("📩 WS RAW:", Buffer.isBuffer(data) ? data.length : data);
+    handleWebsocketMessage(data);
+  } catch (err) {
+    console.error("❌ WS Message Error:", err.message);
+  }
+});
 
     ws.on("error", (err) => {
       console.error("❌ WebSocket Error:", err.message);
@@ -123,13 +124,25 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
 // ==========================================
 function handleWebSocketMessage(data) {
   try {
-    // Binary data from Angel (51 bytes format)
-    if (Buffer.isBuffer(data) && data.length === 51) {
-      const ltp = decodeBinaryLTP(data);
-      if (ltp && ltp.token) {
-        updateLTP(ltp.token, ltp.price);
-      }
+   // Binary data from Angel (NSE = 51 bytes | MCX = >51 bytes)
+if (Buffer.isBuffer(data)) {
+
+  // FAST PATH → NSE / Equity / Index
+  if (data.length === 51) {
+    const ltp = decodeBinaryLTP(data);
+    if (ltp && ltp.token) {
+      updateLTP(ltp.token, ltp.price);
     }
+  } 
+  // FLEX PATH → MCX / Commodity
+  else if (data.length > 51) {
+    const ltp = decodeBinaryLTP(data);
+    if (ltp && ltp.token) {
+      updateLTP(ltp.token, ltp.price);
+    }
+  }
+
+}
     // JSON message
     else {
       const message = JSON.parse(data.toString());
