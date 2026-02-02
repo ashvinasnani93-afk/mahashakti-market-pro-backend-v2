@@ -1,16 +1,18 @@
-// ==========================================
-// ANGEL LIVE DATA ENGINE — ENTERPRISE GRADE
+चलिए मैं सभी fixed files बना देता हूँ:
+Action: file_editor create /app/FIXED_FILES_V2/src.angelEngine.js --file-text "// ==========================================
+// ANGEL LIVE DATA ENGINE — ENTERPRISE GRADE - FIXED
 // MAHASHAKTI MARKET PRO
 // WS 2.0 | SEGMENTED SYMBOL MODEL
 // STOCKS | INDEX | COMMODITIES | OPTIONS
 // HEARTBEAT | RECONNECT | GROUPED SUBSCRIBE
+// FIXED: Added getLtp export function
 // ==========================================
 
-"use strict";
+\"use strict\";
 
-const WebSocket = require("ws");
-const { fetchOptionTokens } = require("./services/angel/angelTokens");
-const { getAllSymbols } = require("./symbol.service");
+const WebSocket = require(\"ws\");
+const { fetchOptionTokens } = require(\"./services/angel/angelTokens\");
+const { getAllSymbols } = require(\"./symbol.service\");
 
 // ==========================================
 // ENGINE STATE
@@ -44,19 +46,19 @@ let OPTION_SYMBOLS = [];
 function detectSegment(meta) {
   const ex = Number(meta.exchangeType);
 
-  if (ex === 1 || ex === 3) return "STOCK";   // NSE / BSE CM
-  if (ex === 5) return "COMMODITY";           // MCX
-  if (ex === 2 && meta.symbol?.includes("NIFTY")) return "INDEX";
-  if (ex === 2) return "OPTION";              // FO default
+  if (ex === 1 || ex === 3) return \"STOCK\";   // NSE / BSE CM
+  if (ex === 5) return \"COMMODITY\";           // MCX
+  if (ex === 2 && meta.symbol?.includes(\"NIFTY\")) return \"INDEX\";
+  if (ex === 2) return \"OPTION\";              // FO default
 
-  return "OPTION";
+  return \"OPTION\";
 }
 
 // ==========================================
 // SYMBOL MASTER LINK
 // ==========================================
 function setSymbolMaster(map) {
-  if (!map || typeof map !== "object") return;
+  if (!map || typeof map !== \"object\") return;
 
   SYMBOL_MASTER = map;
 
@@ -73,21 +75,21 @@ function setSymbolMaster(map) {
     const entry = {
       token: String(token),
       exchangeType: Number(meta.exchangeType),
-      symbol: meta.symbol || "",
+      symbol: meta.symbol || \"\",
       segment: meta.segment || detectSegment(meta)
     };
 
-    if (entry.segment === "STOCK") STOCK_SYMBOLS.push(entry);
-    else if (entry.segment === "INDEX") INDEX_SYMBOLS.push(entry);
-    else if (entry.segment === "COMMODITY") COMMODITY_SYMBOLS.push(entry);
+    if (entry.segment === \"STOCK\") STOCK_SYMBOLS.push(entry);
+    else if (entry.segment === \"INDEX\") INDEX_SYMBOLS.push(entry);
+    else if (entry.segment === \"COMMODITY\") COMMODITY_SYMBOLS.push(entry);
     else OPTION_SYMBOLS.push(entry);
   }
 
-  console.log("🧠 ENGINE: Symbol Master Linked");
-  console.log("  📈 STOCKS     :", STOCK_SYMBOLS.length);
-  console.log("  📊 INDEX      :", INDEX_SYMBOLS.length);
-  console.log("  🛢️ COMMODITY :", COMMODITY_SYMBOLS.length);
-  console.log("  🧩 OPTIONS    :", OPTION_SYMBOLS.length);
+  console.log(\"🧠 ENGINE: Symbol Master Linked\");
+  console.log(\"  📈 STOCKS     :\", STOCK_SYMBOLS.length);
+  console.log(\"  📊 INDEX      :\", INDEX_SYMBOLS.length);
+  console.log(\"  🛢️ COMMODITY :\", COMMODITY_SYMBOLS.length);
+  console.log(\"  🧩 OPTIONS    :\", OPTION_SYMBOLS.length);
 }
 
 // ==========================================
@@ -99,11 +101,28 @@ function updateLtp(token, exchangeType, ltp) {
   global.latestLTP[token] = {
     token: String(token),
     exchangeType,
-    symbol: meta.symbol || "",
+    symbol: meta.symbol || \"\",
     segment: meta.segment || detectSegment(meta),
     ltp,
     time: Date.now()
   };
+}
+
+// ==========================================
+// GET LTP - FIXED: EXPORT THIS FUNCTION
+// ==========================================
+function getLtp(token) {
+  if (!token) return null;
+  
+  // Try by token first
+  const byToken = global.latestLTP[String(token)];
+  if (byToken) return byToken;
+  
+  // Try by symbol name
+  const bySymbol = global.latestLTP[String(token).toUpperCase()];
+  if (bySymbol) return bySymbol;
+  
+  return null;
 }
 
 // ==========================================
@@ -133,7 +152,7 @@ function startHeartbeat() {
   heartbeatTimer = setInterval(() => {
     if (ws && wsConnected) {
       try {
-        ws.send(JSON.stringify({ action: "ping" }));
+        ws.send(JSON.stringify({ action: \"ping\" }));
       } catch {}
     }
   }, 30000);
@@ -151,10 +170,10 @@ function subscribeTokensBySegment() {
   if (!ws || !wsConnected) return;
 
   const ALL = [
-    { name: "STOCK", list: STOCK_SYMBOLS },
-    { name: "INDEX", list: INDEX_SYMBOLS },
-    { name: "COMMODITY", list: COMMODITY_SYMBOLS },
-    { name: "OPTION", list: OPTION_SYMBOLS }
+    { name: \"STOCK\", list: STOCK_SYMBOLS },
+    { name: \"INDEX\", list: INDEX_SYMBOLS },
+    { name: \"COMMODITY\", list: COMMODITY_SYMBOLS },
+    { name: \"OPTION\", list: OPTION_SYMBOLS }
   ];
 
   const CHUNK = 1000;
@@ -178,9 +197,9 @@ function subscribeTokensBySegment() {
         const batch = tokens.slice(i, i + CHUNK);
 
         const payload = {
-          action: "subscribe",
+          action: \"subscribe\",
           params: {
-            mode: "LTP",
+            mode: \"LTP\",
             tokenList: [
               {
                 exchangeType: Number(exchangeType),
@@ -194,9 +213,9 @@ function subscribeTokensBySegment() {
           ws.send(JSON.stringify(payload));
         } catch {
           console.log(
-            "⚠️ ENGINE: WS send failed",
+            \"⚠️ ENGINE: WS send failed\",
             group.name,
-            "EX:",
+            \"EX:\",
             exchangeType
           );
           return;
@@ -206,7 +225,7 @@ function subscribeTokensBySegment() {
       console.log(
         `📡 ENGINE: ${group.name} subscribed`,
         tokens.length,
-        "EX:",
+        \"EX:\",
         exchangeType
       );
     }
@@ -217,32 +236,32 @@ function subscribeTokensBySegment() {
 // WS CONNECT
 // ==========================================
 function connectWS(feedToken, clientCode) {
-  console.log("🔌 ENGINE: Connecting Angel WS...");
+  console.log(\"🔌 ENGINE: Connecting Angel WS...\");
 
   ws = new WebSocket(
-    "wss://smartapisocket.angelone.in/smart-stream",
+    \"wss://smartapisocket.angelone.in/smart-stream\",
     {
       headers: {
         Authorization: `Bearer ${process.env.ANGEL_ACCESS_TOKEN}`,
-        "x-api-key": process.env.ANGEL_API_KEY,
-        "x-client-code": clientCode,
-        "x-feed-token": feedToken
+        \"x-api-key\": process.env.ANGEL_API_KEY,
+        \"x-client-code\": clientCode,
+        \"x-feed-token\": feedToken
       }
     }
   );
 
-  ws.on("open", () => {
+  ws.on(\"open\", () => {
     wsConnected = true;
-    console.log("🟢 ENGINE: WS Connected");
+    console.log(\"🟢 ENGINE: WS Connected\");
   });
 
-  ws.on("message", (data) => {
+  ws.on(\"message\", (data) => {
     try {
       // AUTH CONFIRM
-      if (typeof data === "string") {
+      if (typeof data === \"string\") {
         const msg = JSON.parse(data);
-        if (msg?.status === true && msg?.type === "cn") {
-          console.log("🔓 ENGINE: WS AUTH SUCCESS");
+        if (msg?.status === true && msg?.type === \"cn\") {
+          console.log(\"🔓 ENGINE: WS AUTH SUCCESS\");
           systemReady = true;
           startHeartbeat();
           subscribeTokensBySegment();
@@ -258,13 +277,13 @@ function connectWS(feedToken, clientCode) {
     } catch {}
   });
 
-  ws.on("close", () => {
-    console.log("🔴 ENGINE: WS Closed — reconnecting...");
+  ws.on(\"close\", () => {
+    console.log(\"🔴 ENGINE: WS Closed — reconnecting...\");
     cleanupWS();
     reconnect(feedToken, clientCode);
   });
 
-  ws.on("error", () => {
+  ws.on(\"error\", () => {
     cleanupWS();
     reconnect(feedToken, clientCode);
   });
@@ -299,20 +318,20 @@ async function startAngelEngine() {
   if (engineRunning) return;
   engineRunning = true;
 
-  console.log("🚀 ENGINE: Booting Angel Live Engine...");
+  console.log(\"🚀 ENGINE: Booting Angel Live Engine...\");
 
   try {
     const bundle = await fetchOptionTokens();
     if (!bundle?.feedToken || !bundle?.clientCode) {
-      throw new Error("Invalid token bundle");
+      throw new Error(\"Invalid token bundle\");
     }
 
     const symbols = getAllSymbols();
     if (!Array.isArray(symbols) || !symbols.length) {
-      throw new Error("No symbols from Symbol Service");
+      throw new Error(\"No symbols from Symbol Service\");
     }
 
-    console.log("🧠 ENGINE: TOTAL SYMBOLS TO SUBSCRIBE:", symbols.length);
+    console.log(\"🧠 ENGINE: TOTAL SYMBOLS TO SUBSCRIBE:\", symbols.length);
 
     connectWS(
       bundle.feedToken,
@@ -320,7 +339,7 @@ async function startAngelEngine() {
     );
   } catch (e) {
     engineRunning = false;
-    console.log("❌ ENGINE: Boot failed:", e.message);
+    console.log(\"❌ ENGINE: Boot failed:\", e.message);
   }
 }
 
@@ -339,7 +358,7 @@ function isWsConnected() {
 // CARRY-2: SELECTIVE LIVE CONTROL
 // ==========================================
 
-// tokenKey = "exchangeType:token"
+// tokenKey = \"exchangeType:token\"
 const ACTIVE_TOKENS = new Set();
 
 function subscribeOne(symbolMeta) {
@@ -350,9 +369,9 @@ function subscribeOne(symbolMeta) {
   if (ACTIVE_TOKENS.has(key)) return true;
 
   const payload = {
-    action: "subscribe",
+    action: \"subscribe\",
     params: {
-      mode: "LTP",
+      mode: \"LTP\",
       tokenList: [
         {
           exchangeType: Number(symbolMeta.exchangeType),
@@ -379,9 +398,9 @@ function unsubscribeOne(symbolMeta) {
   if (!ACTIVE_TOKENS.has(key)) return true;
 
   const payload = {
-    action: "unsubscribe",
+    action: \"unsubscribe\",
     params: {
-      mode: "LTP",
+      mode: \"LTP\",
       tokenList: [
         {
           exchangeType: Number(symbolMeta.exchangeType),
@@ -414,7 +433,7 @@ function subscribeBySymbol(symbol) {
   );
 
   if (!entry?.token) {
-    console.log("⚠️ ENGINE: Symbol not found in master:", symbol);
+    console.log(\"⚠️ ENGINE: Symbol not found in master:\", symbol);
     return false;
   }
 
@@ -427,6 +446,8 @@ function subscribeBySymbol(symbol) {
 global.subscribeSymbol = subscribeBySymbol;
 
 // ==========================================
+// EXPORTS - FIXED: Added getLtp
+// ==========================================
 module.exports = {
   startAngelEngine,
   isSystemReady,
@@ -435,5 +456,8 @@ module.exports = {
   subscribeOne,
   unsubscribeOne,
   getActiveCount,
-  subscribeBySymbol
+  subscribeBySymbol,
+  getLtp  // ✅ FIXED: Export getLtp function
 };
+"
+Observation: Create successful: /app/FIXED_FILES_V2/src.angelEngine.js
