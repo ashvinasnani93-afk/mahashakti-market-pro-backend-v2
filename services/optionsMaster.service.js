@@ -4,7 +4,7 @@
 // NIFTY / BANKNIFTY / STOCK OPTIONS / COMMODITY OPTIONS
 // ==========================================
 
-const https = require(\"https\");
+const https = require("https");
 
 // ==========================================
 // GLOBAL CACHE
@@ -19,82 +19,92 @@ const RELOAD_INTERVAL = 30 * 60 * 1000; // 30 minutes
 // ==========================================
 async function loadOptionMaster() {
   const now = Date.now();
-  
+
   // Return cache if fresh
   if (optionMasterCache.length > 0 && (now - lastLoadTime) < RELOAD_INTERVAL) {
     return optionMasterCache;
   }
 
   return new Promise((resolve, reject) => {
-    const url = \"https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json\";
-    
-    console.log(\"📥 Loading Option Master from Angel...\");
-    
-    https.get(url, { timeout: 15000 }, (res) => {
-      if (res.statusCode !== 200) {
-        return reject(new Error(`HTTP ${res.statusCode}`));
-      }
+    const url =
+      "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json";
 
-      let data = \"\";
-      res.on(\"data\", (chunk) => (data += chunk));
-      res.on(\"end\", () => {
-        try {
-          const json = JSON.parse(data);
-          const options = [];
+    console.log("📥 Loading Option Master from Angel...");
 
-          json.forEach((item) => {
-            // FIXED: Support NFO (equity options) and MCX (commodity options)
-            const isNFO = item.exch_seg === \"NFO\" && 
-                         (item.instrumenttype === \"OPTIDX\" || item.instrumenttype === \"OPTSTK\");
-            
-            const isMCXOption = item.exch_seg === \"MCX\" && 
-                               item.instrumenttype && 
-                               item.instrumenttype.includes(\"OPT\");
-
-            if ((isNFO || isMCXOption) && item.symbol && item.token) {
-              // Parse option details from symbol
-              const symbol = item.symbol.toUpperCase();
-              let optionType = null;
-              
-              if (symbol.endsWith(\"CE\")) {
-                optionType = \"CE\";
-              } else if (symbol.endsWith(\"PE\")) {
-                optionType = \"PE\";
-              }
-
-              if (optionType) {
-                options.push({
-                  symbol: symbol,
-                  token: item.token,
-                  name: item.name,
-                  expiry: item.expiry,
-                  strike: item.strike,
-                  lotsize: item.lotsize,
-                  type: optionType,
-                  instrumentType: item.instrumenttype,
-                  exchange: item.exch_seg
-                });
-              }
-            }
-          });
-
-          optionMasterCache = options;
-          lastLoadTime = Date.now();
-          
-          // Count by exchange
-          const nfoCount = options.filter(o => o.exchange === \"NFO\").length;
-          const mcxCount = options.filter(o => o.exchange === \"MCX\").length;
-          
-          console.log(`✅ Option Master Loaded: ${options.length} symbols`);
-          console.log(`   NFO (Equity/Index): ${nfoCount}`);
-          console.log(`   MCX (Commodity): ${mcxCount}`);
-          
-          resolve(options);
-        } catch (err) {
-          reject(err);
+    https
+      .get(url, { timeout: 15000 }, (res) => {
+        if (res.statusCode !== 200) {
+          return reject(new Error(`HTTP ${res.statusCode}`));
         }
-      });
-    }).on(\"error\", reject);
+
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          try {
+            const json = JSON.parse(data);
+            const options = [];
+
+            json.forEach((item) => {
+              // FIXED: Support NFO (equity options) and MCX (commodity options)
+              const isNFO =
+                item.exch_seg === "NFO" &&
+                (item.instrumenttype === "OPTIDX" ||
+                  item.instrumenttype === "OPTSTK");
+
+              const isMCXOption =
+                item.exch_seg === "MCX" &&
+                item.instrumenttype &&
+                item.instrumenttype.includes("OPT");
+
+              if ((isNFO || isMCXOption) && item.symbol && item.token) {
+                // Parse option details from symbol
+                const symbol = item.symbol.toUpperCase();
+                let optionType = null;
+
+                if (symbol.endsWith("CE")) {
+                  optionType = "CE";
+                } else if (symbol.endsWith("PE")) {
+                  optionType = "PE";
+                }
+
+                if (optionType) {
+                  options.push({
+                    symbol: symbol,
+                    token: item.token,
+                    name: item.name,
+                    expiry: item.expiry,
+                    strike: item.strike,
+                    lotsize: item.lotsize,
+                    type: optionType,
+                    instrumentType: item.instrumenttype,
+                    exchange: item.exch_seg
+                  });
+                }
+              }
+            });
+
+            optionMasterCache = options;
+            lastLoadTime = Date.now();
+
+            // Count by exchange
+            const nfoCount = options.filter(
+              (o) => o.exchange === "NFO"
+            ).length;
+            const mcxCount = options.filter(
+              (o) => o.exchange === "MCX"
+            ).length;
+
+            console.log(`✅ Option Master Loaded: ${options.length} symbols`);
+            console.log(`   NFO (Equity/Index): ${nfoCount}`);
+            console.log(`   MCX (Commodity): ${mcxCount}`);
+
+            resolve(options);
+          } catch (err) {
+            reject(err);
+          }
+        });
+      })
+      .on("error", reject);
   });
 }
 
@@ -105,7 +115,7 @@ async function getAllOptionSymbols() {
   try {
     return await loadOptionMaster();
   } catch (err) {
-    console.error(\"❌ Failed to load option symbols:\", err.message);
+    console.error("❌ Failed to load option symbols:", err.message);
     return [];
   }
 }
@@ -115,8 +125,10 @@ async function getAllOptionSymbols() {
 // FIXED: Better filtering
 // ==========================================
 function getOptionsByUnderlying(underlying) {
-  return optionMasterCache.filter(opt => 
-    opt.name && opt.name.toUpperCase() === underlying.toUpperCase()
+  return optionMasterCache.filter(
+    (opt) =>
+      opt.name &&
+      opt.name.toUpperCase() === underlying.toUpperCase()
   );
 }
 
@@ -125,8 +137,10 @@ function getOptionsByUnderlying(underlying) {
 // NEW: Filter by exchange type
 // ==========================================
 function getOptionsByExchange(exchange) {
-  return optionMasterCache.filter(opt => 
-    opt.exchange && opt.exchange.toUpperCase() === exchange.toUpperCase()
+  return optionMasterCache.filter(
+    (opt) =>
+      opt.exchange &&
+      opt.exchange.toUpperCase() === exchange.toUpperCase()
   );
 }
 
@@ -135,10 +149,11 @@ function getOptionsByExchange(exchange) {
 // NEW: Specific function for commodity options
 // ==========================================
 function getCommodityOptions(commodity) {
-  return optionMasterCache.filter(opt => 
-    opt.exchange === \"MCX\" &&
-    opt.name && 
-    opt.name.toUpperCase().includes(commodity.toUpperCase())
+  return optionMasterCache.filter(
+    (opt) =>
+      opt.exchange === "MCX" &&
+      opt.name &&
+      opt.name.toUpperCase().includes(commodity.toUpperCase())
   );
 }
 
@@ -147,33 +162,33 @@ function getCommodityOptions(commodity) {
 // ==========================================
 function getOptionsContext(data = {}) {
   const { symbol, spotPrice, expiry, tradeType } = data;
-  
+
   if (!symbol || !spotPrice || !expiry || !tradeType) {
     return {
-      status: \"WAIT\",
-      reason: \"Insufficient options input data\",
+      status: "WAIT",
+      reason: "Insufficient options input data"
     };
   }
-  
+
   const expiryType =
-    expiry === \"WEEKLY\"
-      ? \"WEEKLY_EXPIRY\"
-      : expiry === \"MONTHLY\"
-      ? \"MONTHLY_EXPIRY\"
-      : \"UNKNOWN_EXPIRY\";
-  
+    expiry === "WEEKLY"
+      ? "WEEKLY_EXPIRY"
+      : expiry === "MONTHLY"
+      ? "MONTHLY_EXPIRY"
+      : "UNKNOWN_EXPIRY";
+
   const tradeContext =
-    tradeType === \"INTRADAY\"
-      ? \"INTRADAY_OPTIONS\"
-      : \"POSITIONAL_OPTIONS\";
-  
+    tradeType === "INTRADAY"
+      ? "INTRADAY_OPTIONS"
+      : "POSITIONAL_OPTIONS";
+
   return {
-    status: \"READY\",
+    status: "READY",
     symbol,
     spotPrice,
     expiryType,
     tradeContext,
-    note: \"Options master + safety context ready\",
+    note: "Options master + safety context ready"
   };
 }
 
@@ -183,13 +198,13 @@ function getOptionsContext(data = {}) {
 // ==========================================
 function getAvailableUnderlyings() {
   const underlyingSet = new Set();
-  
-  optionMasterCache.forEach(opt => {
+
+  optionMasterCache.forEach((opt) => {
     if (opt.name) {
       underlyingSet.add(opt.name.toUpperCase());
     }
   });
-  
+
   return Array.from(underlyingSet).sort();
 }
 
