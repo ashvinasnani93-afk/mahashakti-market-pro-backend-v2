@@ -1,7 +1,6 @@
 // ==========================================
-// LTP ROUTES - PERFECT MCX FIX
-// Based on Angel One's actual data format
-// GOLD, SILVER, CRUDE guaranteed working!
+// LTP ROUTES - COMPLETE WITH OHLC FOR MCX
+// GOLD, SILVER, CRUDE with Open, High, Low!
 // ==========================================
 
 const express = require("express");
@@ -43,7 +42,7 @@ function determineSymbolType(symbol) {
     "ALUMINIUM"
   ];
 
-  if (commodityPatterns.some((pattern) => s.includes(pattern))) {
+  if (commodityPatterns.some(pattern => s.includes(pattern))) {
     return "COMMODITY";
   }
 
@@ -51,8 +50,72 @@ function determineSymbolType(symbol) {
 }
 
 // ==========================================
+// EXTRACT OHLC DATA - IMPROVED FOR MCX
+// ==========================================
+function extractOHLC(data) {
+  if (!data) return {};
+
+  // Angel API can return different field names
+  // Try all possible fields
+  return {
+    ltp:
+      data.ltp ||
+      data.lasttradedprice ||
+      data.last_traded_price ||
+      null,
+
+    open:
+      data.open ||
+      data.openprice ||
+      data.open_price ||
+      null,
+
+    high:
+      data.high ||
+      data.highprice ||
+      data.high_price ||
+      null,
+
+    low:
+      data.low ||
+      data.lowprice ||
+      data.low_price ||
+      null,
+
+    close:
+      data.close ||
+      data.closeprice ||
+      data.close_price ||
+      data.ltp ||
+      null,
+
+    prevClose:
+      data.prevclose ||
+      data.previousclose ||
+      data.prev_close ||
+      null,
+
+    // Additional fields
+    volume:
+      data.volume ||
+      data.tradedvolume ||
+      null,
+
+    exchFeedTime:
+      data.exchFeedTime ||
+      data.exchange_feed_time ||
+      null,
+
+    exchTradeTime:
+      data.exchTradeTime ||
+      data.exchange_trade_time ||
+      null
+  };
+}
+
+// ==========================================
 // GET /api/ltp?symbol=GOLD
-// PERFECT FIX - No more null values!
+// COMPLETE WITH OHLC DATA
 // ==========================================
 router.get("/", async (req, res) => {
   try {
@@ -63,11 +126,10 @@ router.get("/", async (req, res) => {
         status: false,
         message: "symbol parameter required",
         examples: [
-          "/api/ltp?symbol=NIFTY - Index",
-          "/api/ltp?symbol=RELIANCE - Stock",
-          "/api/ltp?symbol=GOLD - Commodity MCX",
-          "/api/ltp?symbol=SILVER - Commodity MCX",
-          "/api/ltp?symbol=CRUDEOIL - Commodity MCX"
+          "/api/ltp?symbol=NIFTY - Index with OHLC",
+          "/api/ltp?symbol=RELIANCE - Stock with OHLC",
+          "/api/ltp?symbol=GOLD - Commodity with OHLC",
+          "/api/ltp?symbol=SILVER - Commodity with OHLC"
         ]
       });
     }
@@ -76,14 +138,12 @@ router.get("/", async (req, res) => {
     const symbolType = determineSymbolType(upperSymbol);
 
     console.log("\n[LTP] ====== NEW REQUEST ======");
-    console.log(
-      `[LTP] 🔍 Symbol: ${upperSymbol}, Type: ${symbolType}`
-    );
+    console.log(`[LTP] 🔍 Symbol: ${upperSymbol}, Type: ${symbolType}`);
 
     // Safe global cache init
     global.latestLTP = global.latestLTP || {};
 
-    // Check cache - but NEVER return if ltp is null/undefined/0
+    // Check cache - but NEVER return if ltp is null/undefined
     if (!force && global.latestLTP[upperSymbol]) {
       const cached = global.latestLTP[upperSymbol];
 
@@ -93,21 +153,17 @@ router.get("/", async (req, res) => {
         !isNaN(cached.ltp) &&
         cached.ltp > 0
       ) {
-        console.log(
-          `[LTP] ✅ Cache hit: ${upperSymbol} = ${cached.ltp}`
-        );
+        console.log(`[LTP] ✅ Cache hit: ${upperSymbol} = ${cached.ltp}`);
         return res.json({
           status: true,
           symbol: upperSymbol,
           type: symbolType,
-          ltp: cached.ltp,
+          ...cached,
           source: "CACHE",
           timestamp: cached.timestamp || Date.now()
         });
       } else {
-        console.log(
-          "[LTP] ⚠️ Cache invalid (null/0), deleting..."
-        );
+        console.log("[LTP] ⚠️ Cache invalid (null/0), deleting...");
         delete global.latestLTP[upperSymbol];
       }
     }
@@ -129,26 +185,20 @@ router.get("/", async (req, res) => {
     // ========================================
     if (indexTokenMap[upperSymbol]) {
       tokenToUse = indexTokenMap[upperSymbol].token;
-      exchangeToUse =
-        indexTokenMap[upperSymbol].exchange;
-      console.log(
-        `[LTP] 📊 Index detected: ${upperSymbol}`
-      );
+      exchangeToUse = indexTokenMap[upperSymbol].exchange;
+      console.log(`[LTP] 📊 Index detected: ${upperSymbol}`);
     }
 
     // ========================================
     // 2️⃣ COMMODITY CHECK (MCX)
     // ========================================
     if (!tokenToUse && symbolType === "COMMODITY") {
-      console.log(
-        `[LTP] 🛢️ Commodity detected: ${upperSymbol}`
-      );
+      console.log(`[LTP] 🛢️ Commodity detected: ${upperSymbol}`);
       console.log("[LTP] 📥 Loading MCX master...");
 
       await loadCommodityMaster();
 
-      const commodityInfo =
-        getCommodityToken(upperSymbol);
+      const commodityInfo = getCommodityToken(upperSymbol);
 
       if (commodityInfo) {
         tokenToUse = commodityInfo.token;
@@ -157,25 +207,18 @@ router.get("/", async (req, res) => {
 
         console.log("[LTP] ✅ MCX resolved:");
         console.log(`     Input: ${upperSymbol}`);
-        console.log(
-          `     Exact Symbol: ${exactSymbol}`
-        );
+        console.log(`     Exact Symbol: ${exactSymbol}`);
         console.log(`     Token: ${tokenToUse}`);
-        console.log(
-          `     Exchange: ${exchangeToUse}`
-        );
+        console.log(`     Exchange: ${exchangeToUse}`);
       } else {
-        console.log(
-          `[LTP] ❌ MCX symbol not found: ${upperSymbol}`
-        );
+        console.log(`[LTP] ❌ MCX symbol not found: ${upperSymbol}`);
 
         return res.json({
           status: false,
           message: `Commodity ${upperSymbol} not found in MCX master`,
           symbol: upperSymbol,
           type: symbolType,
-          hint:
-            "Try: /api/ltp/commodities to see available symbols"
+          hint: "Try: /api/ltp/commodities to see available symbols"
         });
       }
     }
@@ -184,31 +227,20 @@ router.get("/", async (req, res) => {
     // 3️⃣ STOCK CHECK (NSE → BSE)
     // ========================================
     if (!tokenToUse && symbolType === "STOCK") {
-      console.log(
-        `[LTP] 📈 Stock detected: ${upperSymbol}`
-      );
+      console.log(`[LTP] 📈 Stock detected: ${upperSymbol}`);
       await loadStockMaster();
 
-      if (
-        STOCK_TOKEN_MAP.NSE &&
-        STOCK_TOKEN_MAP.NSE[upperSymbol]
-      ) {
-        tokenToUse =
-          STOCK_TOKEN_MAP.NSE[upperSymbol];
+      if (STOCK_TOKEN_MAP.NSE && STOCK_TOKEN_MAP.NSE[upperSymbol]) {
+        tokenToUse = STOCK_TOKEN_MAP.NSE[upperSymbol];
         exchangeToUse = "NSE";
-        console.log(
-          `[LTP] ✅ NSE stock found: token=${tokenToUse}`
-        );
+        console.log(`[LTP] ✅ NSE stock found: token=${tokenToUse}`);
       } else if (
         STOCK_TOKEN_MAP.BSE &&
         STOCK_TOKEN_MAP.BSE[upperSymbol]
       ) {
-        tokenToUse =
-          STOCK_TOKEN_MAP.BSE[upperSymbol];
+        tokenToUse = STOCK_TOKEN_MAP.BSE[upperSymbol];
         exchangeToUse = "BSE";
-        console.log(
-          `[LTP] ✅ BSE stock found: token=${tokenToUse}`
-        );
+        console.log(`[LTP] ✅ BSE stock found: token=${tokenToUse}`);
       }
     }
 
@@ -216,16 +248,13 @@ router.get("/", async (req, res) => {
     // TOKEN MUST EXIST
     // ========================================
     if (!tokenToUse) {
-      console.log(
-        `[LTP] ❌ Token not found for: ${upperSymbol}`
-      );
+      console.log(`[LTP] ❌ Token not found for: ${upperSymbol}`);
       return res.json({
         status: false,
         message: `Token not found for ${upperSymbol}`,
         symbol: upperSymbol,
         type: symbolType,
-        hint:
-          "Check symbol spelling or try /api/ltp/commodities"
+        hint: "Check symbol spelling or try /api/ltp/commodities"
       });
     }
 
@@ -233,9 +262,7 @@ router.get("/", async (req, res) => {
     // FETCH FROM ANGEL API
     // ========================================
     console.log("[LTP] 🌐 Calling Angel API...");
-    console.log(
-      `     Exchange: ${exchangeToUse}`
-    );
+    console.log(`     Exchange: ${exchangeToUse}`);
     console.log(`     Symbol: ${exactSymbol}`);
     console.log(`     Token: ${tokenToUse}`);
 
@@ -246,47 +273,80 @@ router.get("/", async (req, res) => {
     );
 
     if (result.success && result.data) {
-      const ltpValue =
-        result.data.ltp ||
-        result.data.close ||
-        result.data.last_traded_price;
+      // Extract OHLC data using improved function
+      const ohlcData = extractOHLC(result.data);
 
-      console.log(
-        `[LTP] ✅ SUCCESS! LTP = ${ltpValue}`
-      );
+      console.log("[LTP] ✅ SUCCESS! Data received:");
+      console.log(`     LTP: ${ohlcData.ltp}`);
+      console.log(`     Open: ${ohlcData.open}`);
+      console.log(`     High: ${ohlcData.high}`);
+      console.log(`     Low: ${ohlcData.low}`);
+      console.log(`     Close: ${ohlcData.close}`);
+      console.log(`     PrevClose: ${ohlcData.prevClose}`);
 
-      if (
-        ltpValue !== null &&
-        ltpValue !== undefined &&
-        !isNaN(ltpValue) &&
-        ltpValue > 0
-      ) {
-        global.latestLTP[upperSymbol] = {
-          ltp: Number(ltpValue),
-          timestamp: Date.now()
-        };
-      }
-
-      return res.json({
+      const responseData = {
         status: true,
         symbol: upperSymbol,
         type: symbolType,
         exchange: exchangeToUse,
         exactSymbol: exactSymbol,
-        ltp: Number(ltpValue),
-        open: result.data.open,
-        high: result.data.high,
-        low: result.data.low,
-        close: result.data.close,
+        ltp: ohlcData.ltp !== null ? Number(ohlcData.ltp) : null,
+        open: ohlcData.open !== null ? Number(ohlcData.open) : null,
+        high: ohlcData.high !== null ? Number(ohlcData.high) : null,
+        low: ohlcData.low !== null ? Number(ohlcData.low) : null,
+        close: ohlcData.close !== null ? Number(ohlcData.close) : null,
+        prevClose:
+          ohlcData.prevClose !== null
+            ? Number(ohlcData.prevClose)
+            : null,
+        volume:
+          ohlcData.volume !== null
+            ? Number(ohlcData.volume)
+            : null,
         source: "ANGEL_API",
         timestamp: Date.now()
-      });
-    }
+      };
 
-    console.log(
-      "[LTP] ❌ API call failed:",
-      result.error || result.message
-    );
+      // Cache with all OHLC data
+      if (
+        ohlcData.ltp !== null &&
+        ohlcData.ltp !== undefined &&
+        !isNaN(ohlcData.ltp) &&
+        ohlcData.ltp > 0
+      ) {
+        global.latestLTP[upperSymbol] = {
+          ltp: Number(ohlcData.ltp),
+          open:
+            ohlcData.open !== null
+              ? Number(ohlcData.open)
+              : null,
+          high:
+            ohlcData.high !== null
+              ? Number(ohlcData.high)
+              : null,
+          low:
+            ohlcData.low !== null
+              ? Number(ohlcData.low)
+              : null,
+          close:
+            ohlcData.close !== null
+              ? Number(ohlcData.close)
+              : null,
+          prevClose:
+            ohlcData.prevClose !== null
+              ? Number(ohlcData.prevClose)
+              : null,
+          timestamp: Date.now()
+        };
+      }
+
+      return res.json(responseData);
+    } else {
+      console.log(
+        "[LTP] ❌ API call failed:",
+        result.error || result.message
+      );
+    }
 
     return res.json({
       status: false,
@@ -294,12 +354,10 @@ router.get("/", async (req, res) => {
       symbol: upperSymbol,
       type: symbolType,
       exchange: exchangeToUse,
-      error:
-        result.error ||
-        result.message ||
-        "Unknown error",
+      error: result.error || result.message || "Unknown error",
       hint: "Check Angel One login and market hours"
     });
+
   } catch (err) {
     console.error("[LTP] ❌ EXCEPTION:", err.message);
     console.error(err.stack);
@@ -318,19 +376,16 @@ router.get("/commodities", async (req, res) => {
   try {
     await loadCommodityMaster();
 
-    const allSymbols = Object.keys(
-      COMMODITY_TOKEN_MAP
-    ).sort();
+    const allSymbols = Object.keys(COMMODITY_TOKEN_MAP).sort();
 
     const grouped = {};
-    allSymbols.forEach((sym) => {
+    allSymbols.forEach(sym => {
       const base = sym
         .replace("COM", "")
         .replace(/\d+/g, "")
         .toUpperCase();
 
       if (!grouped[base]) grouped[base] = [];
-
       grouped[base].push({
         symbol: sym,
         token: COMMODITY_TOKEN_MAP[sym]
@@ -338,18 +393,15 @@ router.get("/commodities", async (req, res) => {
     });
 
     const friendlyMap = {};
-    Object.keys(COMMODITY_FRIENDLY_NAMES).forEach(
-      (friendly) => {
-        const exact =
-          COMMODITY_FRIENDLY_NAMES[friendly];
-        if (COMMODITY_TOKEN_MAP[exact]) {
-          friendlyMap[friendly] = {
-            exactSymbol: exact,
-            token: COMMODITY_TOKEN_MAP[exact]
-          };
-        }
+    Object.keys(COMMODITY_FRIENDLY_NAMES).forEach(friendly => {
+      const exact = COMMODITY_FRIENDLY_NAMES[friendly];
+      if (COMMODITY_TOKEN_MAP[exact]) {
+        friendlyMap[friendly] = {
+          exactSymbol: exact,
+          token: COMMODITY_TOKEN_MAP[exact]
+        };
       }
-    );
+    });
 
     return res.json({
       status: true,
@@ -362,8 +414,7 @@ router.get("/commodities", async (req, res) => {
           acc[key] = grouped[key].slice(0, 5);
           return acc;
         }, {}),
-      note:
-        "Use friendly names (GOLD, SILVER, CRUDE) or exact symbols"
+      note: "Use friendly names (GOLD, SILVER, CRUDE) or exact symbols"
     });
   } catch (err) {
     return res.json({
