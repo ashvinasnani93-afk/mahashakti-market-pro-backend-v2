@@ -323,6 +323,9 @@ function stopHeartbeat() {
 // ==========================================
 // MCX COMMODITY SUBSCRIBE SUPPORT
 // ==========================================
+// ===============================
+// MCX SUBSCRIBE (Angel Docs Correct)
+// ===============================
 function subscribeCommodityToken(token) {
   try {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
@@ -332,14 +335,18 @@ function subscribeCommodityToken(token) {
 
     const payload = {
       action: "subscribe",
-      mode: "LTP",
-      exchangeType: 5, // 5 = MCX
-      tokens: [String(token)]
+      params: {
+        mode: 1,
+        token_mode: "LTP",
+        exchangeType: "MCX",
+        tokens: [String(token)]
+      }
     };
 
     ws.send(JSON.stringify(payload));
-    console.log("🟡 MCX Token Subscribed:", token);
+    console.log("🟢 MCX LTP Subscribed (DOC MODE):", token);
     return true;
+
   } catch (err) {
     console.log("❌ MCX Subscribe Error:", err.message);
     return false;
