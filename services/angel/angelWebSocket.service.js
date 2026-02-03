@@ -1,7 +1,8 @@
 // ==========================================
 // ANGEL ONE WEBSOCKET SERVICE
 // Real-Time Market Data Feed
-// FIXED VERSION - Binary Decode Fix + MCX ADD LAYER
+// FIXED VERSION - Binary Decode Fix
+// NSE/BSE 51 bytes + MCX FLEX SUPPORT (ADD ONLY)
 // ==========================================
 
 const WebSocket = require("ws");
@@ -123,44 +124,31 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
 // ==========================================
 function handleWebSocketMessage(data) {
   try {
-    // ---------------------------------------
-    // FAST PATH → NSE / BSE (51 bytes)
-    // ---------------------------------------
-    if (Buffer.isBuffer(data) && data.length === 51) {
-      const ltp = decodeBinaryLTP(data);
-      if (ltp && ltp.token) {
-        updateLTP(ltp.token, ltp.price);
-      }
-    }
+    // ================================
+    // BINARY PATH (NSE/BSE + MCX)
+    // ================================
+    if (Buffer.isBuffer(data)) {
 
-    // ---------------------------------------
-    // FLEX PATH → MCX / COMMODITY (>51 bytes)
-    // ---------------------------------------
-    else if (Buffer.isBuffer(data) && data.length > 51) {
-      const tick = decodeMCXBinary(data);
-      if (tick && tick.token) {
-        updateLTP(tick.token, tick.ltp);
-
-        // Store OHLC for API usage
-        if (!global.symbolOHLC) {
-          global.symbolOHLC = {};
+      // FAST PATH → NSE / BSE (51 bytes)
+      if (data.length === 51) {
+        const ltp = decodeBinaryLTP(data);
+        if (ltp && ltp.token) {
+          updateLTP(ltp.token, ltp.price);
         }
+      }
 
-        global.symbolOHLC[tick.token] = {
-          open: tick.open,
-          high: tick.high,
-          low: tick.low,
-          close: tick.close,
-          timestamp: Date.now()
-        };
-
-        console.log(`🟡 MCX TICK → ${tick.token} | LTP: ${tick.ltp}`);
+      // FLEX PATH → MCX (90–140 bytes approx)
+      else if (data.length > 60) {
+        const ltp = decodeBinaryLTP_MCX(data);
+        if (ltp && ltp.token) {
+          updateLTP(ltp.token, ltp.price);
+        }
       }
     }
 
-    // ---------------------------------------
-    // JSON message
-    // ---------------------------------------
+    // ================================
+    // JSON PATH (Fallback / MCX)
+    // ================================
     else {
       const message = JSON.parse(data.toString());
 
@@ -179,7 +167,7 @@ function handleWebSocketMessage(data) {
 }
 
 // ==========================================
-// DECODE BINARY LTP (Angel Format) - NSE/BSE
+// DECODE BINARY LTP (NSE / BSE 51 BYTES)
 // ==========================================
 function decodeBinaryLTP(buffer) {
   try {
@@ -205,41 +193,34 @@ function decodeBinaryLTP(buffer) {
 }
 
 // ==========================================
-// DECODE MCX BINARY TICK (Angel WS 2.0)
-// LTP + OHLC SUPPORT (ADD ONLY)
+// DECODE BINARY LTP (MCX FLEX FORMAT)
 // ==========================================
-function decodeMCXBinary(buffer) {
+function decodeBinaryLTP_MCX(buffer) {
   try {
-    if (!Buffer.isBuffer(buffer) || buffer.length <= 51) return null;
+    // MCX packets are NOT fixed length
+    // Angel docs: token usually starts near byte 2
+    // price is near the end (last 4 bytes Int32LE)
 
-    // Token extraction
+    const pricePaise = buffer.readInt32LE(buffer.length - 4);
+    const price = pricePaise / 100;
+
     const tokenStr = buffer
-      .toString("utf8", 2, 27)
+      .toString("utf8", 2, 30)
       .replace(/\0/g, "")
       .trim();
 
-    // Price fields (MCX offsets based on Angel WS2 format)
-    const ltpPaise   = buffer.readInt32LE(43);
-    const openPaise  = buffer.readInt32LE(47);
-    const highPaise  = buffer.readInt32LE(51);
-    const lowPaise   = buffer.readInt32LE(55);
-    const closePaise = buffer.readInt32LE(59);
-
     return {
       token: tokenStr,
-      ltp: ltpPaise / 100,
-      open: openPaise / 100,
-      high: highPaise / 100,
-      low: lowPaise / 100,
-      close: closePaise / 100
+      price: price
     };
+
   } catch (err) {
     return null;
   }
 }
 
 // ==========================================
-// UPDATE LTP IN GLOBAL CACHE
+// UPDATE LTP IN GLOBAL CACHE (OHLC SAFE)
 // ==========================================
 function updateLTP(token, price) {
   try {
@@ -260,30 +241,9 @@ function updateLTP(token, price) {
       timestamp: Date.now()
     };
 
-    // Initialize open price
+    // Initialize open price (DO NOT TOUCH OHLC LOGIC)
     if (!global.symbolOpenPrice[token]) {
       global.symbolOpenPrice[token] = Number(price);
-    }
-
-    // ---------------------------------------
-    // MIRROR TO SYMBOL MAP (API SUPPORT)
-    // ---------------------------------------
-    if (global.tokenToSymbolMap && global.tokenToSymbolMap[token]) {
-      const sym = global.tokenToSymbolMap[token];
-
-      if (!global.latestLTP) {
-        global.latestLTP = {};
-      }
-
-      global.latestLTP[sym] = {
-        ltp: Number(price),
-        timestamp: Date.now()
-      };
-
-      // Mirror OHLC if exists
-      if (global.symbolOHLC && global.symbolOHLC[token]) {
-        global.symbolOHLC[sym] = global.symbolOHLC[token];
-      }
     }
 
   } catch (err) {
@@ -292,7 +252,7 @@ function updateLTP(token, price) {
 }
 
 // ==========================================
-// SUBSCRIBE TO SYMBOLS
+// SUBSCRIBE TO SYMBOLS (NSE DEFAULT)
 // ==========================================
 function subscribeToSymbols() {
   try {
@@ -303,7 +263,7 @@ function subscribeToSymbols() {
       action: "subscribe",
       mode: "LTP",
       exchangeType: 1, // NSE
-      tokens: ["99926000", "99926009", "99926037"] // NIFTY, BANKNIFTY, FINNIFTY
+      tokens: ["99926000", "99926009", "99926037"]
     };
 
     ws.send(JSON.stringify(subscribePayload));
@@ -328,7 +288,7 @@ function startHeartbeat() {
         console.error("❌ Heartbeat Error:", err.message);
       }
     }
-  }, 25000); // Every 25 seconds
+  }, 25000);
 }
 
 function stopHeartbeat() {
@@ -339,7 +299,7 @@ function stopHeartbeat() {
 }
 
 // ==========================================
-// SUBSCRIBE TO ADDITIONAL TOKEN
+// SUBSCRIBE TO ADDITIONAL TOKEN (NSE/BSE/MCX)
 // ==========================================
 function subscribeToToken(token, exchangeType = 1) {
   try {
@@ -348,11 +308,13 @@ function subscribeToToken(token, exchangeType = 1) {
     const payload = {
       action: "subscribe",
       mode: "LTP",
-      exchangeType: exchangeType,
+      exchangeType: exchangeType, // 1=NSE, 2=BSE, 5=MCX
       tokens: [String(token)]
     };
 
     ws.send(JSON.stringify(payload));
+
+    console.log(`📡 Subscribed WS → exchangeType=${exchangeType} token=${token}`);
     return true;
 
   } catch (err) {
