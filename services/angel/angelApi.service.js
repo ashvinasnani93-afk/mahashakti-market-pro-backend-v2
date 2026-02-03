@@ -1,7 +1,7 @@
 // ==========================================
-// ANGEL ONE API SERVICE - PERFECT MCX FIX
+// ANGEL ONE API SERVICE - WITH COMPLETE OHLC
 // Angel One की actual master file के according
-// Tested with real MCX data
+// Tested with real MCX data + OHLC fields
 // ==========================================
 
 const axios = require("axios");
@@ -16,17 +16,19 @@ const BASE_URL = "https://apiconnect.angelone.in";
 // STOCK MASTER CACHE (NSE + BSE)
 // ==========================================
 let STOCK_MASTER_LOADED = false;
+
 const STOCK_TOKEN_MAP = {
   NSE: {},
   BSE: {}
 };
 
 // ==========================================
-// COMMODITY MASTER CACHE (MCX) - PERFECT FIX
+// COMMODITY MASTER CACHE (MCX)
 // ==========================================
 let COMMODITY_MASTER_LOADED = false;
-const COMMODITY_TOKEN_MAP = {}; // Exact symbol (with COM) → token
-const COMMODITY_NAME_TO_SYMBOL = {}; // Friendly name → exact symbol
+
+const COMMODITY_TOKEN_MAP = {};
+const COMMODITY_NAME_TO_SYMBOL = {};
 
 // Common MCX commodity mappings
 const COMMODITY_FRIENDLY_NAMES = {
@@ -62,7 +64,11 @@ async function loadStockMaster() {
         { timeout: 20000 },
         (res) => {
           let data = "";
-          res.on("data", (chunk) => (data += chunk));
+
+          res.on("data", (chunk) => {
+            data += chunk;
+          });
+
           res.on("end", () => {
             try {
               const json = JSON.parse(data);
@@ -121,7 +127,11 @@ async function loadCommodityMaster() {
         { timeout: 20000 },
         (res) => {
           let data = "";
-          res.on("data", (chunk) => (data += chunk));
+
+          res.on("data", (chunk) => {
+            data += chunk;
+          });
+
           res.on("end", () => {
             try {
               const json = JSON.parse(data);
@@ -135,10 +145,8 @@ async function loadCommodityMaster() {
                     ? row.name.toUpperCase()
                     : "";
 
-                  // Store by exact symbol
                   COMMODITY_TOKEN_MAP[symbol] = row.token;
 
-                  // Store name mapping
                   if (name) {
                     COMMODITY_NAME_TO_SYMBOL[name] = symbol;
                   }
@@ -148,12 +156,13 @@ async function loadCommodityMaster() {
               COMMODITY_MASTER_LOADED = true;
 
               console.log(
-                `[MCX] ✅ Master Loaded | Total Symbols: ${Object.keys(
-                  COMMODITY_TOKEN_MAP
-                ).length}`
+                `[MCX] ✅ Master Loaded | Total Symbols: ${
+                  Object.keys(COMMODITY_TOKEN_MAP).length
+                }`
               );
 
               console.log("[MCX] 📊 Key Commodities Available:");
+
               const importantNames = [
                 "GOLD",
                 "SILVER",
@@ -180,6 +189,7 @@ async function loadCommodityMaster() {
                   ).find((k) =>
                     k.includes(friendlyName)
                   );
+
                   if (found) {
                     const sym =
                       COMMODITY_NAME_TO_SYMBOL[found];
@@ -213,9 +223,10 @@ function getCommodityToken(inputSymbol) {
 
   console.log(`[MCX] 🔍 Looking for: ${upperInput}`);
 
-  // STEP 1: Friendly mapping
+  // STEP 1: Friendly name mapping
   const friendlyMapping =
     COMMODITY_FRIENDLY_NAMES[upperInput];
+
   if (
     friendlyMapping &&
     COMMODITY_TOKEN_MAP[friendlyMapping]
@@ -223,17 +234,19 @@ function getCommodityToken(inputSymbol) {
     console.log(
       `[MCX] ✅ Friendly mapping: ${upperInput} → ${friendlyMapping} (token: ${COMMODITY_TOKEN_MAP[friendlyMapping]})`
     );
+
     return {
       symbol: friendlyMapping,
       token: COMMODITY_TOKEN_MAP[friendlyMapping]
     };
   }
 
-  // STEP 2: Exact symbol
+  // STEP 2: Exact symbol match
   if (COMMODITY_TOKEN_MAP[upperInput]) {
     console.log(
       `[MCX] ✅ Exact match: ${upperInput} (token: ${COMMODITY_TOKEN_MAP[upperInput]})`
     );
+
     return {
       symbol: upperInput,
       token: COMMODITY_TOKEN_MAP[upperInput]
@@ -244,22 +257,26 @@ function getCommodityToken(inputSymbol) {
   if (COMMODITY_NAME_TO_SYMBOL[upperInput]) {
     const exactSymbol =
       COMMODITY_NAME_TO_SYMBOL[upperInput];
+
     console.log(
       `[MCX] ✅ Name lookup: ${upperInput} → ${exactSymbol} (token: ${COMMODITY_TOKEN_MAP[exactSymbol]})`
     );
+
     return {
       symbol: exactSymbol,
       token: COMMODITY_TOKEN_MAP[exactSymbol]
     };
   }
 
-  // STEP 4: Add COM suffix
+  // STEP 4: Auto-add COM suffix
   if (!upperInput.endsWith("COM")) {
     const withCom = upperInput + "COM";
+
     if (COMMODITY_TOKEN_MAP[withCom]) {
       console.log(
         `[MCX] ✅ Added COM suffix: ${upperInput} → ${withCom} (token: ${COMMODITY_TOKEN_MAP[withCom]})`
       );
+
       return {
         symbol: withCom,
         token: COMMODITY_TOKEN_MAP[withCom]
@@ -280,6 +297,7 @@ function getCommodityToken(inputSymbol) {
     console.log(
       `[MCX] ⚠️ Partial match: ${upperInput} → ${partialMatch} (token: ${COMMODITY_TOKEN_MAP[partialMatch]})`
     );
+
     return {
       symbol: partialMatch,
       token: COMMODITY_TOKEN_MAP[partialMatch]
@@ -298,7 +316,7 @@ function getCommodityToken(inputSymbol) {
 }
 
 // ==========================================
-// GLOBAL SESSION BRIDGE
+// GLOBAL SESSION
 // ==========================================
 let globalJwtToken = null;
 let globalApiKey = null;
@@ -336,15 +354,19 @@ function getHeaders(jwtToken = null) {
 }
 
 // ==========================================
-// LTP DATA
+// LTP DATA - WITH COMPLETE RESPONSE LOGGING
 // ==========================================
-async function getLtpData(exchange, tradingSymbol, symbolToken) {
+async function getLtpData(
+  exchange,
+  tradingSymbol,
+  symbolToken
+) {
   try {
     console.log(
       `[API] 📞 getLtpData: exchange=${exchange}, symbol=${tradingSymbol}, token=${symbolToken}`
     );
 
-    // NSE/BSE
+    // Auto-load token for NSE/BSE
     if (
       !symbolToken &&
       (exchange === "NSE" || exchange === "BSE")
@@ -354,6 +376,7 @@ async function getLtpData(exchange, tradingSymbol, symbolToken) {
         STOCK_TOKEN_MAP[exchange]?.[
           tradingSymbol.toUpperCase()
         ];
+
       if (symbolToken) {
         console.log(
           `[API] ✅ Stock token found: ${symbolToken}`
@@ -361,14 +384,16 @@ async function getLtpData(exchange, tradingSymbol, symbolToken) {
       }
     }
 
-    // MCX
+    // Auto-load token for MCX
     if (!symbolToken && exchange === "MCX") {
       await loadCommodityMaster();
       const commodityInfo =
         getCommodityToken(tradingSymbol);
+
       if (commodityInfo) {
         symbolToken = commodityInfo.token;
         tradingSymbol = commodityInfo.symbol;
+
         console.log(
           `[API] ✅ MCX resolved: symbol=${tradingSymbol}, token=${symbolToken}`
         );
@@ -379,6 +404,7 @@ async function getLtpData(exchange, tradingSymbol, symbolToken) {
       console.log(
         `[API] ❌ Token not found for: ${tradingSymbol} in ${exchange}`
       );
+
       return {
         success: false,
         message: `Symbol token not found for ${tradingSymbol} in ${exchange}`
@@ -411,33 +437,35 @@ async function getLtpData(exchange, tradingSymbol, symbolToken) {
     );
 
     if (response.data && response.data.status === true) {
-      const ltpValue =
-        response.data.data?.ltp ||
-        response.data.data?.close;
-
-      console.log("[API] ✅ LTP received:", ltpValue);
+      console.log(
+        "[API] 📊 Complete Response Data:",
+        JSON.stringify(response.data.data, null, 2)
+      );
 
       return {
         success: true,
         data: response.data.data
       };
-    } else {
-      console.log(
-        "[API] ❌ API returned false status:",
-        response.data?.message
-      );
-      throw new Error(
-        response.data.message || "LTP fetch failed"
-      );
     }
+
+    console.log(
+      "[API] ❌ API returned false status:",
+      response.data?.message
+    );
+
+    throw new Error(
+      response.data?.message || "LTP fetch failed"
+    );
   } catch (err) {
     console.error("[API] ❌ Error:", err.message);
+
     if (err.response?.data) {
       console.error(
         "[API] ❌ Response data:",
         JSON.stringify(err.response.data)
       );
     }
+
     return {
       success: false,
       error:
@@ -455,9 +483,11 @@ async function getRMS() {
       `${BASE_URL}/rest/secure/angelbroking/user/v1/getRMS`,
       { headers: getHeaders() }
     );
+
     if (response.data && response.data.status === true) {
       return { success: true, data: response.data.data };
     }
+
     throw new Error("RMS fetch failed");
   } catch (err) {
     console.error("❌ RMS Error:", err.message);
@@ -471,9 +501,11 @@ async function getOrderBook() {
       `${BASE_URL}/rest/secure/angelbroking/order/v1/getOrderBook`,
       { headers: getHeaders() }
     );
+
     if (response.data && response.data.status === true) {
       return { success: true, orders: response.data.data };
     }
+
     throw new Error("Order book fetch failed");
   } catch (err) {
     console.error("❌ Order Book Error:", err.message);
@@ -487,9 +519,11 @@ async function getTradeBook() {
       `${BASE_URL}/rest/secure/angelbroking/order/v1/getTradeBook`,
       { headers: getHeaders() }
     );
+
     if (response.data && response.data.status === true) {
       return { success: true, trades: response.data.data };
     }
+
     throw new Error("Trade book fetch failed");
   } catch (err) {
     console.error("❌ Trade Book Error:", err.message);
@@ -504,30 +538,33 @@ async function placeOrder(orderParams) {
       orderParams,
       { headers: getHeaders() }
     );
+
     if (response.data && response.data.status === true) {
       console.log(
         "✅ Order Placed:",
         response.data.data.orderid
       );
+
       return {
         success: true,
         orderId: response.data.data.orderid
       };
     }
+
     throw new Error(
-      response.data.message || "Order placement failed"
+      response.data?.message || "Order placement failed"
     );
   } catch (err) {
     console.error(
       "❌ Place Order Error:",
       err.response?.data || err.message
     );
+
     return {
       success: false,
       error:
         err.response?.data?.message || err.message,
-      errorCode:
-        err.response?.data?.errorcode
+      errorCode: err.response?.data?.errorcode
     };
   }
 }
