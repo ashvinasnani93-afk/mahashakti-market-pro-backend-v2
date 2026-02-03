@@ -1,7 +1,7 @@
 // ==========================================
 // ANGEL ONE WEBSOCKET SERVICE
 // Real-Time Market Data Feed
-// Following Official Angel One WebSocket API
+// FIXED VERSION - Binary Decode Fix
 // ==========================================
 
 const WebSocket = require("ws");
@@ -9,15 +9,6 @@ const WebSocket = require("ws");
 let ws = null;
 let heartbeatInterval = null;
 let reconnectTimeout = null;
-
-// ===============================
-// WS SAFETY GUARDS (ANTI 429)
-// ===============================
-global.wsConnected = false;
-global.subscribedTokens = new Set();
-global.lastReconnectTime = 0;
-
-const RECONNECT_COOLDOWN = 20000; // 20 sec
 
 // 🔒 GLOBAL MEMORY (58-FILE BASELINE COMPATIBLE)
 let globalClientCode = null;
@@ -74,9 +65,6 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
     ws.on("open", () => {
       console.log("🟢 Angel WebSocket CONNECTED");
 
-      global.wsConnected = true;
-  global.subscribedTokens.clear(); // Fresh session → allow resubscribe
-
       if (!global.angelSession) {
         global.angelSession = {};
       }
@@ -90,14 +78,13 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
       subscribeToSymbols();
     });
 
-   ws.on("message", (data) => {
-  try {
-    console.log("📩 WS RAW:", Buffer.isBuffer(data) ? data.length : data);
-    handleWebsocketMessage(data);
-  } catch (err) {
-    console.error("❌ WS Message Error:", err.message);
-  }
-});
+    ws.on("message", (data) => {
+      try {
+        handleWebSocketMessage(data);
+      } catch (err) {
+        console.error("❌ WS Message Error:", err.message);
+      }
+    });
 
     ws.on("error", (err) => {
       console.error("❌ WebSocket Error:", err.message);
@@ -109,33 +96,21 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
     ws.on("close", () => {
       console.log("🔴 WebSocket DISCONNECTED");
 
-     global.wsConnected = false;
-  reconnectWS(); 
-
       if (global.angelSession) {
         global.angelSession.wsConnected = false;
       }
 
       stopHeartbeat();
 
-     // SAFE RECONNECT WITH COOLDOWN (ANTI 429)
-function reconnectWS() {
-  const now = Date.now();
-
-  if (now - global.lastReconnectTime < RECONNECT_COOLDOWN) {
-    console.log("⏳ WS reconnect skipped (cooldown active)");
-    return;
-  }
-
-  global.lastReconnectTime = now;
-
-  console.log("🔁 Reconnecting WebSocket...");
-  startAngelWebSocket(
-    globalFeedToken,
-    globalClientCode,
-    globalApiKey
-  );
-}
+      // Reconnect after 5 seconds (SAFE RECONNECT)
+      reconnectTimeout = setTimeout(() => {
+        console.log("🔄 Reconnecting WebSocket...");
+        startAngelWebSocket(
+          globalFeedToken,
+          globalClientCode,
+          globalApiKey
+        );
+      }, 5000);
     });
 
   } catch (err) {
@@ -148,25 +123,13 @@ function reconnectWS() {
 // ==========================================
 function handleWebSocketMessage(data) {
   try {
-   // Binary data from Angel (NSE = 51 bytes | MCX = >51 bytes)
-if (Buffer.isBuffer(data)) {
-
-  // FAST PATH → NSE / Equity / Index
-  if (data.length === 51) {
-    const ltp = decodeBinaryLTP(data);
-    if (ltp && ltp.token) {
-      updateLTP(ltp.token, ltp.price);
+    // Binary data from Angel (51 bytes format)
+    if (Buffer.isBuffer(data) && data.length === 51) {
+      const ltp = decodeBinaryLTP(data);
+      if (ltp && ltp.token) {
+        updateLTP(ltp.token, ltp.price);
+      }
     }
-  } 
-  // FLEX PATH → MCX / Commodity
-  else if (data.length > 51) {
-    const ltp = decodeBinaryLTP(data);
-    if (ltp && ltp.token) {
-      updateLTP(ltp.token, ltp.price);
-    }
-  }
-
-}
     // JSON message
     else {
       const message = JSON.parse(data.toString());
@@ -186,25 +149,29 @@ if (Buffer.isBuffer(data)) {
 }
 
 // ==========================================
-// DECODE BINARY LTP (Angel Format)
+// DECODE BINARY LTP (Angel Format) - FIXED
 // ==========================================
-function decodeBinaryLTP(buffer) {  
-  try {  
-    // Angel sends 51 byte binary packets  
-    // Bytes 43-46: LTP in paise (Int32LE)  
-    const pricePaise = buffer.readInt32LE(43);  
-    const price = pricePaise / 100;  
-  
-    // Extract token - FIXED REGEX  
-  const tokenStr = buffer.toString("utf8", 2, 27).replace(/\0/g, "");
-      
-    return {  
-      token: tokenStr,  
-      price: price  
-    };  
-  } catch (err) {  
-    return null;  
-  }  
+function decodeBinaryLTP(buffer) {
+  try {
+    // Angel sends 51 byte binary packets
+    // Bytes 43-46: LTP in paise (Int32LE)
+    const pricePaise = buffer.readInt32LE(43);
+    const price = pricePaise / 100;
+
+    // Extract token (clean null bytes properly)
+    const tokenStr = buffer
+      .toString("utf8", 2, 27)
+      .replace(/\0/g, "")
+      .trim();
+
+    return {
+      token: tokenStr,
+      price: price
+    };
+
+  } catch (err) {
+    return null;
+  }
 }
 
 // ==========================================
@@ -212,7 +179,8 @@ function decodeBinaryLTP(buffer) {
 // ==========================================
 function updateLTP(token, price) {
   try {
-    if (!token || !price) return;
+    // FIX: allow price = 0
+    if (!token || price === undefined || price === null) return;
 
     if (!global.latestLTP) {
       global.latestLTP = {};
@@ -228,37 +196,6 @@ function updateLTP(token, price) {
       timestamp: Date.now()
     };
 
-// Mirror into global.latestLTP for API routes
-    if (!global.latestLTP) {
-      global.latestLTP = {};
-    }
-
-    global.latestLTP[token] = {
-      ltp: Number(price),
-      timestamp: Date.now()
-    };
-
-// ================================
-// SYMBOL MIRROR FOR API ROUTES
-// ================================
-if (!global.tokenToSymbolMap) {
-  global.tokenToSymbolMap = {};
-}
-
-const symbol = global.tokenToSymbolMap[token];
-if (symbol) {
-  if (!global.latestLTP) {
-    global.latestLTP = {};
-  }
-
-  global.latestLTP[symbol] = {
-    ltp: Number(price),
-    timestamp: Date.now()
-  };
-
-  console.log(`📡 WS LTP → ${symbol} = ${price}`);
-}
-    
     // Initialize open price
     if (!global.symbolOpenPrice[token]) {
       global.symbolOpenPrice[token] = Number(price);
@@ -273,12 +210,6 @@ if (symbol) {
 // SUBSCRIBE TO SYMBOLS
 // ==========================================
 function subscribeToSymbols() {
-if (global.subscribedTokens.has("INDEX_BATCH")) {
-  console.log("⚠️ Index batch already subscribed");
-  return;
-}
-global.subscribedTokens.add("INDEX_BATCH");
-  
   try {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
@@ -295,34 +226,6 @@ global.subscribedTokens.add("INDEX_BATCH");
 
   } catch (err) {
     console.error("❌ Subscribe Error:", err.message);
-  }
-}
-
-// ==========================================
-// SUBSCRIBE BY SYMBOL (NSE / BSE / MCX SAFE)
-// ==========================================
-function subscribeBySymbol(token, exchange = "NSE") {
-  try {
-    if (!ws || ws.readyState !== WebSocket.OPEN) return false;
-
-    let exchangeType = 1; // NSE default
-    if (exchange === "BSE") exchangeType = 2;
-    if (exchange === "MCX") exchangeType = 5;
-
-    const payload = {
-      action: "subscribe",
-      mode: "LTP",
-      exchangeType: exchangeType,
-      tokens: [String(token)]
-    };
-
-    ws.send(JSON.stringify(payload));
-    console.log(`📡 Subscribed WS → ${exchange} | Token: ${token}`);
-    return true;
-
-  } catch (err) {
-    console.error("❌ SubscribeBySymbol Error:", err.message);
-    return false;
   }
 }
 
@@ -350,43 +253,6 @@ function stopHeartbeat() {
   }
 }
 
-// ==========================================
-// MCX COMMODITY SUBSCRIBE SUPPORT
-// ==========================================
-function subscribeCommodityToken(token) {
-  try {
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      console.log("❌ WS not connected. Can't subscribe MCX token:", token);
-      return false;
-    }
-
-    // 🔒 Prevent duplicate subscribe
-    if (global.subscribedTokens.has(token)) {
-      console.log("⚠️ MCX token already subscribed:", token);
-      return true;
-    }
-
-    const payload = {
-      action: "subscribe",
-      params: {
-        mode: 1,
-        token_mode: "LTP",
-        exchangeType: "MCX",
-        tokens: [String(token)]
-      }
-    };
-
-    ws.send(JSON.stringify(payload));
-    global.subscribedTokens.add(token);
-
-    console.log("🟢 MCX LTP Subscribed (SAFE MODE):", token);
-    return true;
-
-  } catch (err) {
-    console.log("❌ MCX Subscribe Error:", err.message);
-    return false;
-  }
-}
 // ==========================================
 // SUBSCRIBE TO ADDITIONAL TOKEN
 // ==========================================
@@ -416,8 +282,6 @@ function subscribeToToken(token, exchangeType = 1) {
 module.exports = {
   startAngelWebSocket,
   subscribeToToken,
-  subscribeBySymbol,
-  subscribeCommodityToken, // ✅ ADD
   setClientCode,
   setSessionTokens
 };
