@@ -10,6 +10,15 @@ let ws = null;
 let heartbeatInterval = null;
 let reconnectTimeout = null;
 
+// ===============================
+// WS SAFETY GUARDS (ANTI 429)
+// ===============================
+global.wsConnected = false;
+global.subscribedTokens = new Set();
+global.lastReconnectTime = 0;
+
+const RECONNECT_COOLDOWN = 20000; // 20 sec
+
 // 🔒 GLOBAL MEMORY (58-FILE BASELINE COMPATIBLE)
 let globalClientCode = null;
 let globalFeedToken = null;
@@ -65,6 +74,9 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
     ws.on("open", () => {
       console.log("🟢 Angel WebSocket CONNECTED");
 
+      global.wsConnected = true;
+  global.subscribedTokens.clear(); // Fresh session → allow resubscribe
+
       if (!global.angelSession) {
         global.angelSession = {};
       }
@@ -97,21 +109,33 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
     ws.on("close", () => {
       console.log("🔴 WebSocket DISCONNECTED");
 
+     global.wsConnected = false;
+  reconnectWS(); 
+
       if (global.angelSession) {
         global.angelSession.wsConnected = false;
       }
 
       stopHeartbeat();
 
-      // Reconnect after 5 seconds (SAFE RECONNECT)
-      reconnectTimeout = setTimeout(() => {
-        console.log("🔄 Reconnecting WebSocket...");
-        startAngelWebSocket(
-          globalFeedToken,
-          globalClientCode,
-          globalApiKey
-        );
-      }, 5000);
+     // SAFE RECONNECT WITH COOLDOWN (ANTI 429)
+function reconnectWS() {
+  const now = Date.now();
+
+  if (now - global.lastReconnectTime < RECONNECT_COOLDOWN) {
+    console.log("⏳ WS reconnect skipped (cooldown active)");
+    return;
+  }
+
+  global.lastReconnectTime = now;
+
+  console.log("🔁 Reconnecting WebSocket...");
+  startAngelWebSocket(
+    globalFeedToken,
+    globalClientCode,
+    globalApiKey
+  );
+}
     });
 
   } catch (err) {
@@ -249,6 +273,12 @@ if (symbol) {
 // SUBSCRIBE TO SYMBOLS
 // ==========================================
 function subscribeToSymbols() {
+if (global.subscribedTokens.has("INDEX_BATCH")) {
+  console.log("⚠️ Index batch already subscribed");
+  return;
+}
+global.subscribedTokens.add("INDEX_BATCH");
+  
   try {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
@@ -323,14 +353,17 @@ function stopHeartbeat() {
 // ==========================================
 // MCX COMMODITY SUBSCRIBE SUPPORT
 // ==========================================
-// ===============================
-// MCX SUBSCRIBE (Angel Docs Correct)
-// ===============================
 function subscribeCommodityToken(token) {
   try {
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       console.log("❌ WS not connected. Can't subscribe MCX token:", token);
       return false;
+    }
+
+    // 🔒 Prevent duplicate subscribe
+    if (global.subscribedTokens.has(token)) {
+      console.log("⚠️ MCX token already subscribed:", token);
+      return true;
     }
 
     const payload = {
@@ -344,7 +377,9 @@ function subscribeCommodityToken(token) {
     };
 
     ws.send(JSON.stringify(payload));
-    console.log("🟢 MCX LTP Subscribed (DOC MODE):", token);
+    global.subscribedTokens.add(token);
+
+    console.log("🟢 MCX LTP Subscribed (SAFE MODE):", token);
     return true;
 
   } catch (err) {
@@ -352,7 +387,6 @@ function subscribeCommodityToken(token) {
     return false;
   }
 }
-
 // ==========================================
 // SUBSCRIBE TO ADDITIONAL TOKEN
 // ==========================================
