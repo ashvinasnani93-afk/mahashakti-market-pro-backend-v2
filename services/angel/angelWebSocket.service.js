@@ -16,6 +16,13 @@ let globalFeedToken = null;
 let globalApiKey = null;
 
 // ==========================================
+// ADD: GLOBAL OHLC CACHE (MCX + NSE + BSE)
+// ==========================================
+if (!global.latestOHLC) {
+  global.latestOHLC = {};
+}
+
+// ==========================================
 // SET CLIENT CODE FROM AUTH SERVICE
 // ==========================================
 function setClientCode(clientCode) {
@@ -130,6 +137,15 @@ if (ltp && ltp.token) {
 updateLTP(ltp.token, ltp.price);
 }
 }
+// ==========================================
+// ADD: FULL / SNAPQUOTE PACKETS (OHLC SUPPORT)
+// ==========================================
+else if (Buffer.isBuffer(data) && data.length >= 90) {
+const ohlc = decodeBinaryFULL(data);
+if (ohlc && ohlc.token) {
+updateOHLC(ohlc);
+}
+}
 // JSON message
 else {
 const message = JSON.parse(data.toString());
@@ -175,6 +191,38 @@ return null;
 }
 
 // ==========================================
+// ADD: DECODE FULL / SNAPQUOTE (OHLC + VOLUME)
+// ==========================================
+function decodeBinaryFULL(buffer) {
+try {
+const tokenStr = buffer
+  .toString("utf8", 2, 27)
+  .replace(/\0/g, "")
+  .trim();
+
+// Empirical Angel FULL frame offsets
+const ltp = buffer.readInt32LE(43) / 100;
+const open = buffer.readInt32LE(47) / 100;
+const high = buffer.readInt32LE(51) / 100;
+const low = buffer.readInt32LE(55) / 100;
+const close = buffer.readInt32LE(59) / 100;
+const volume = buffer.readInt32LE(63);
+
+return {
+  token: tokenStr,
+  ltp,
+  open,
+  high,
+  low,
+  close,
+  volume
+};
+} catch (err) {
+return null;
+}
+}
+
+// ==========================================
 // UPDATE LTP IN GLOBAL CACHE
 // ==========================================
 function updateLTP(token, price) {
@@ -203,6 +251,38 @@ if (!global.symbolOpenPrice[token]) {
 
 } catch (err) {
 console.error("❌ Update LTP Error:", err.message);
+}
+}
+
+// ==========================================
+// ADD: UPDATE OHLC IN GLOBAL CACHE
+// ==========================================
+function updateOHLC(data) {
+try {
+if (!data || !data.token) return;
+
+global.latestOHLC[data.token] = {
+  ltp: Number(data.ltp),
+  open: Number(data.open),
+  high: Number(data.high),
+  low: Number(data.low),
+  close: Number(data.close),
+  volume: Number(data.volume),
+  timestamp: Date.now()
+};
+
+// Mirror LTP also
+if (!global.latestLTP) {
+  global.latestLTP = {};
+}
+
+global.latestLTP[data.token] = {
+  ltp: Number(data.ltp),
+  timestamp: Date.now()
+};
+
+} catch (err) {
+console.error("❌ Update OHLC Error:", err.message);
 }
 }
 
@@ -254,7 +334,7 @@ heartbeatInterval = null;
 }
 
 // ==========================================
-// SUBSCRIBE TO ADDITIONAL TOKEN
+// SUBSCRIBE TO ADDITIONAL TOKEN (LTP MODE)
 // ==========================================
 function subscribeToToken(token, exchangeType = 1) {
 try {
@@ -277,11 +357,36 @@ return false;
 }
 
 // ==========================================
+// ADD: SUBSCRIBE FULL MODE (OHLC SUPPORT)
+// ==========================================
+function subscribeFullToken(token, exchangeType = 5) {
+try {
+if (!ws || ws.readyState !== WebSocket.OPEN) return false;
+
+const payload = {
+  action: "subscribe",
+  mode: "FULL",
+  exchangeType: exchangeType, // 5 = MCX, 1 = NSE
+  tokens: [String(token)]
+};
+
+ws.send(JSON.stringify(payload));
+console.log("📊 FULL MODE Subscribed:", token);
+return true;
+
+} catch (err) {
+console.error("❌ FULL Subscribe Error:", err.message);
+return false;
+}
+}
+
+// ==========================================
 // EXPORTS
 // ==========================================
 module.exports = {
 startAngelWebSocket,
 subscribeToToken,
+subscribeFullToken,
 setClientCode,
 setSessionTokens
 };
