@@ -110,15 +110,24 @@ function buildOptionChain({ symbol, expiryDate, master, spotPrice }) {
     let ceLtp = null;  
     let peLtp = null;  
   
-    if (row.CE) {  
-      const ceData = getLtp(row.CE.token);  
-      ceLtp = ceData ? ceData.ltp : null;  
-    }  
+   if (row.CE) {
+
+  // 🔥 AUTO SUBSCRIBE TO CE TOKEN
+  const { subscribeToToken } = require("./services/angel/angelWebSocket.service");
+  subscribeToToken(row.CE.token, 2); // 2 = NFO
+
+  const ceData = getLtp(row.CE.token);
+  ceLtp = ceData ? ceData.ltp : null;
+}
   
-    if (row.PE) {  
-      const peData = getLtp(row.PE.token);  
-      peLtp = peData ? peData.ltp : null;  
-    }  
+   if (row.PE) {
+
+  const { subscribeToToken } = require("./services/angel/angelWebSocket.service");
+  subscribeToToken(row.PE.token, 2); // 2 = NFO
+
+  const peData = getLtp(row.PE.token);
+  peLtp = peData ? peData.ltp : null;
+}
   
     const ceBuyerBias = ceLtp && peLtp ? ceLtp > peLtp : false;  
     const peBuyerBias = ceLtp && peLtp ? peLtp > ceLtp : false;  
