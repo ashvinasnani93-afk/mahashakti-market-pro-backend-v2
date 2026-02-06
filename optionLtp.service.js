@@ -2,20 +2,32 @@
 // OPTION LTP SERVICE (NFO WebSocket)
 // ==========================================
 
-let optionLTP = {};
+if (!global.latestLTP) {
+  global.latestLTP = {};
+}
 
 // ===============================
 // UPDATE LTP FROM WS
 // ===============================
 function updateOptionLTP(token, ltp) {
-  optionLTP[token] = ltp;
+  if (!global.latestLTP) {
+    global.latestLTP = {};
+  }
+
+  global.latestLTP[token] = {
+    ltp: Number(ltp),
+    timestamp: Date.now()
+  };
 }
 
 // ===============================
 // GET LTP
 // ===============================
 function getOptionLTP(token) {
-  return optionLTP[token] || null;
+  if (!global.latestLTP) return null;
+
+  const data = global.latestLTP[token];
+  return data ? data.ltp : null;
 }
 
 // ===============================
