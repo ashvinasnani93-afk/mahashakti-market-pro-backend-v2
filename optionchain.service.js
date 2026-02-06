@@ -4,7 +4,9 @@
 // SUPPORTS: INDEX | STOCKS | COMMODITIES
 // NO DUMMY - Pure Real Market Data
 // ==========================================
-
+const {
+  subscribeToToken
+} = require("./services/angel/angelWebSocket.service");
 const { getAllOptionSymbols } = require("./services/optionsMaster.service");
 const { getLtpData } = require("./services/angel/angelApi.service");
 
@@ -138,18 +140,32 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
       const row = strikeMap[strike];
 
       if (row.CE && row.CE.token) {
-        const cached = global.latestLTP[row.CE.token];
-        if (cached) {
-          row.CE.ltp = cached.ltp;
-        }
-      }
 
-      if (row.PE && row.PE.token) {
-        const cached = global.latestLTP[row.PE.token];
-        if (cached) {
-          row.PE.ltp = cached.ltp;
-        }
-      }
+  // 🔥 Subscribe if not already cached
+  if (!global.latestLTP[row.CE.token]) {
+    subscribeToToken(row.CE.token, 2); // 2 = NFO
+  }
+
+  const cached = global.latestLTP[row.CE.token];
+  if (cached) {
+    row.CE.ltp = cached.ltp;
+  }
+}
+
+     // ===============================
+// SUBSCRIBE + READ LTP (PE)
+// ===============================
+if (row.PE && row.PE.token) {
+
+  if (!global.latestLTP[row.PE.token]) {
+    subscribeToToken(row.PE.token, 2);
+  }
+
+  const cached = global.latestLTP[row.PE.token];
+  if (cached) {
+    row.PE.ltp = cached.ltp;
+  }
+}
     });
 
     // Determine type
