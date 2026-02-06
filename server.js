@@ -3,6 +3,8 @@
 // REAL ANGEL ONE API INTEGRATION
 // Complete Option Chains + Signals
 // ==========================================
+// Load environment variables FIRST
+require('dotenv').config();
 
 const express = require("express");
 const cors = require("cors");
