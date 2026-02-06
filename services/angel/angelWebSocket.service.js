@@ -133,7 +133,7 @@ function handleWebSocketMessage(data) {
     // ===============================
     // 51 BYTE LTP PACKETS
     // ===============================
-    if (Buffer.isBuffer(data) && data.length === 51) {
+   if (Buffer.isBuffer(data) && data.length >= 51 && data.length < 140)
       const ltp = decodeBinaryLTP(data);
       if (ltp && ltp.token) {
         updateLTP(ltp.token, ltp.price);
@@ -293,16 +293,21 @@ function subscribeToSymbols() {
   try {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    const subscribePayload = {
+    const payload = {
       action: "subscribe",
-     mode: 1,
-      exchangeType: 1,
-      tokens: ["99926000", "99926009", "99926037"]
+      params: {
+        mode: 1,
+        tokenList: [
+          {
+            exchangeType: 1,
+            tokens: ["99926000", "99926009", "99926037"]
+          }
+        ]
+      }
     };
 
-    ws.send(JSON.stringify(subscribePayload));
+    ws.send(JSON.stringify(payload));
     console.log("📡 Subscribed to Index symbols");
-
   } catch (err) {
     console.error("❌ Subscribe Error:", err.message);
   }
@@ -339,12 +344,18 @@ function subscribeToToken(token, exchangeType = 1) {
   try {
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
 
-    const payload = {
-      action: "subscribe",
-     mode: 1,
-      exchangeType: exchangeType,
-      tokens: [String(token)]
-    };
+  const payload = {
+  action: "subscribe",
+  params: {
+    mode: 1,
+    tokenList: [
+      {
+        exchangeType: exchangeType,
+        tokens: [String(token)]
+      }
+    ]
+  }
+};
 
     ws.send(JSON.stringify(payload));
 
@@ -369,12 +380,18 @@ function subscribeFullToken(token, exchangeType = 5) {
   try {
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
 
-    const payload = {
-      action: "subscribe",
+   const payload = {
+  action: "subscribe",
+  params: {
     mode: 4,
-      exchangeType: exchangeType,
-      tokens: [String(token)]
-    };
+    tokenList: [
+      {
+        exchangeType: exchangeType,
+        tokens: [String(token)]
+      }
+    ]
+  }
+};
 
     ws.send(JSON.stringify(payload));
     console.log("📊 FULL MODE Subscribed:", token);
