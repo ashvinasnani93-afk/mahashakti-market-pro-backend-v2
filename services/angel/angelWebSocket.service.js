@@ -130,20 +130,16 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
 // ==========================================
 function handleWebSocketMessage(data) {
   try {
-    // ===============================
+
     // 51 BYTE LTP PACKETS
-    // ===============================
-   if (Buffer.isBuffer(data) && data.length >= 51 && data.length < 140)
+    if (Buffer.isBuffer(data) && data.length >= 51 && data.length < 140) {
       const ltp = decodeBinaryLTP(data);
       if (ltp && ltp.token) {
         updateLTP(ltp.token, ltp.price);
       }
     }
 
-    // ==========================================
-    // FULL / SNAPQUOTE PACKETS (OHLC SUPPORT)
-    // MCX FULL frames usually >= 140 bytes
-    // ==========================================
+    // FULL / SNAPQUOTE PACKETS
     else if (Buffer.isBuffer(data) && data.length >= 140) {
       const ohlc = decodeBinaryFULL(data);
       if (ohlc && ohlc.token) {
@@ -151,14 +147,12 @@ function handleWebSocketMessage(data) {
       }
     }
 
-    // ===============================
     // JSON MESSAGE
-    // ===============================
     else {
       const message = JSON.parse(data.toString());
 
       if (message.action === "subscribe" && message.result === "success") {
-        console.log("✅ Subscription confirmed");
+        console.log("Subscription confirmed");
       }
 
       if (message.ltp) {
@@ -167,7 +161,7 @@ function handleWebSocketMessage(data) {
     }
 
   } catch (err) {
-    // Silent error for binary decode failures
+    // Silent
   }
 }
 
