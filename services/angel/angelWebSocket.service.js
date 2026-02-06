@@ -295,7 +295,7 @@ function subscribeToSymbols() {
 
     const subscribePayload = {
       action: "subscribe",
-      mode: "LTP",
+     mode: 1,
       exchangeType: 1,
       tokens: ["99926000", "99926009", "99926037"]
     };
@@ -341,7 +341,7 @@ function subscribeToToken(token, exchangeType = 1) {
 
     const payload = {
       action: "subscribe",
-      mode: "LTP",
+     mode: 1,
       exchangeType: exchangeType,
       tokens: [String(token)]
     };
@@ -371,7 +371,7 @@ function subscribeFullToken(token, exchangeType = 5) {
 
     const payload = {
       action: "subscribe",
-      mode: "FULL",
+    mode: 4,
       exchangeType: exchangeType,
       tokens: [String(token)]
     };
