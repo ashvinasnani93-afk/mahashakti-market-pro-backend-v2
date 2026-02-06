@@ -135,38 +135,35 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
       );
     }
 
-    // Get LTP for each option (from cache)
-    Object.keys(strikeMap).forEach(strike => {
-      const row = strikeMap[strike];
+  // ==========================================
+// REAL-TIME LTP SYNC (Tick Based)
+// ==========================================
 
-      if (row.CE && row.CE.token) {
-
-  // 🔥 Subscribe if not already cached
-  if (!global.latestLTP[row.CE.token]) {
-    subscribeToToken(row.CE.token, 2); // 2 = NFO
-  }
-
-  const cached = global.latestLTP[row.CE.token];
-  if (cached) {
-    row.CE.ltp = cached.ltp;
-  }
+if (!global.subscribedTokens) {
+  global.subscribedTokens = new Set();
 }
 
-     // ===============================
-// SUBSCRIBE + READ LTP (PE)
-// ===============================
-if (row.PE && row.PE.token) {
+Object.keys(strikeMap).forEach(strike => {
+  const row = strikeMap[strike];
 
-  if (!global.latestLTP[row.PE.token]) {
-    subscribeToToken(row.PE.token, 2);
-  }
+  ["CE", "PE"].forEach(type => {
+    if (!row[type] || !row[type].token) return;
 
-  const cached = global.latestLTP[row.PE.token];
-  if (cached) {
-    row.PE.ltp = cached.ltp;
-  }
-}
-    });
+    const token = row[type].token;
+
+    // Subscribe only once per token
+    if (!global.subscribedTokens.has(token)) {
+      subscribeToToken(token, 2); // NFO
+      global.subscribedTokens.add(token);
+    }
+
+    // Always read latest tick price
+    const cached = global.latestLTP[token];
+    if (cached && cached.ltp !== undefined) {
+      row[type].ltp = cached.ltp;
+    }
+  });
+});
 
     // Determine type
     const type = determineSymbolType(symbol);
