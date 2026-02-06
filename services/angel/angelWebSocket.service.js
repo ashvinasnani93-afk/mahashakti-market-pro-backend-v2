@@ -338,8 +338,8 @@ function subscribeToToken(token, exchangeType = 1) {
   try {
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
 
-  const payload = {
-  action: "subscribe",
+ const payload = {
+  action: 1,
   params: {
     mode: 1,
     tokenList: [
@@ -350,7 +350,6 @@ function subscribeToToken(token, exchangeType = 1) {
     ]
   }
 };
-
     ws.send(JSON.stringify(payload));
 
     // AUTO-UPGRADE MCX TO FULL MODE
@@ -375,9 +374,9 @@ function subscribeFullToken(token, exchangeType = 5) {
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
 
    const payload = {
-  action: "subscribe",
+  action: 1,
   params: {
-    mode: 4,
+    mode: 3,
     tokenList: [
       {
         exchangeType: exchangeType,
