@@ -1,49 +1,35 @@
 // ==========================================
-// OPTION CHAIN SERVICE - REAL ANGEL DATA - FIXED
-// Builds option chain from Angel Master
-// SUPPORTS: INDEX | STOCKS | COMMODITIES
-// NO DUMMY - Pure Real Market Data
+// OPTION CHAIN SERVICE - PRODUCTION OPTIMIZED
+// REAL ANGEL DATA - INSTANT LTP + WS STREAM
+// SUPPORTS: INDEX | STOCK | COMMODITY
 // ==========================================
-const {
-  subscribeToToken
-} = require("./services/angel/angelWebSocket.service");
+
+const { subscribeToToken } = require("./services/angel/angelWebSocket.service");
 const { getAllOptionSymbols } = require("./services/optionsMaster.service");
 const { getLtpData } = require("./services/angel/angelApi.service");
 
-/**
- * Build Option Chain from Angel One Master
- * Supports: NIFTY, BANKNIFTY, FINNIFTY, Stocks, Commodities
- */
+const ATM_RANGE = 5; // ATM ± 5 strikes = 11 total strikes
+
 async function buildOptionChainFromAngel(symbol, expiryDate = null) {
   try {
     console.log(`📊 Building chain for ${symbol}`);
 
-    // Safe global cache
     global.latestLTP = global.latestLTP || {};
 
-    // Get all option symbols from Angel master
     const allOptions = await getAllOptionSymbols();
-
     if (!allOptions || allOptions.length === 0) {
-      return {
-        status: false,
-        message: "Option master not loaded"
-      };
+      return { status: false, message: "Option master not loaded" };
     }
 
-    // Filter options for this symbol
-    const symbolOptions = allOptions.filter(opt =>
-      opt.name && opt.name.toUpperCase() === symbol.toUpperCase()
+    const symbolOptions = allOptions.filter(
+      opt => opt.name && opt.name.toUpperCase() === symbol.toUpperCase()
     );
 
-    if (symbolOptions.length === 0) {
-      return {
-        status: false,
-        message: `No options found for ${symbol}. Supported: NIFTY, BANKNIFTY, FINNIFTY, Stocks, Commodities`
-      };
+    if (!symbolOptions.length) {
+      return { status: false, message: `No options found for ${symbol}` };
     }
 
-    // Get available expiries
+    // --------- EXPIRY ----------
     const expirySet = new Set();
     symbolOptions.forEach(opt => {
       if (opt.expiry) {
@@ -55,33 +41,20 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
     });
 
     const availableExpiries = Array.from(expirySet).sort();
-
-    if (availableExpiries.length === 0) {
-      return {
-        status: false,
-        message: "No valid expiries found"
-      };
-    }
-
-    // Select expiry
     const selectedExpiry = expiryDate || availableExpiries[0];
-    const expiryDateObj = new Date(selectedExpiry);
+    const expiryObj = new Date(selectedExpiry);
 
-    // Filter by expiry
     const expiryOptions = symbolOptions.filter(opt => {
       if (!opt.expiry) return false;
-      const optExpiry = new Date(opt.expiry);
-      return isSameDate(optExpiry, expiryDateObj);
+      const d = new Date(opt.expiry);
+      return isSameDate(d, expiryObj);
     });
 
-    if (expiryOptions.length === 0) {
-      return {
-        status: false,
-        message: `No options for expiry ${selectedExpiry}`
-      };
+    if (!expiryOptions.length) {
+      return { status: false, message: `No options for expiry ${selectedExpiry}` };
     }
 
-    // Group by strike
+    // --------- STRIKE MAP ----------
     const strikeMap = {};
     expiryOptions.forEach(opt => {
       const strike = Number(opt.strike);
@@ -91,43 +64,34 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
         strikeMap[strike] = { strike, CE: null, PE: null };
       }
 
+      const row = strikeMap[strike];
+
       if (opt.type === "CE") {
-        strikeMap[strike].CE = {
+        row.CE = {
           token: opt.token,
           symbol: opt.symbol,
-          strike: strike,
+          strike,
           ltp: null
         };
-      } else if (opt.type === "PE") {
-        strikeMap[strike].PE = {
+      }
+
+      if (opt.type === "PE") {
+        row.PE = {
           token: opt.token,
           symbol: opt.symbol,
-          strike: strike,
+          strike,
           ltp: null
         };
       }
     });
 
-    // Get strikes array
-    const strikes = Object.keys(strikeMap)
-      .map(Number)
-      .sort((a, b) => a - b);
+    const strikes = Object.keys(strikeMap).map(Number).sort((a, b) => a - b);
 
-    // Get spot price
-    let spotPrice = null;
+    // --------- SPOT ----------
+    const spotPrice = await getLtpFromSymbol(symbol);
 
-    if (global.latestLTP[symbol]) {
-      spotPrice = global.latestLTP[symbol].ltp;
-    } else {
-      const ltpResult = await getLtpFromSymbol(symbol);
-      if (ltpResult) {
-        spotPrice = ltpResult;
-      }
-    }
-
-    // Calculate ATM
     let atmStrike = null;
-    if (spotPrice && strikes.length > 0) {
+    if (spotPrice && strikes.length) {
       atmStrike = strikes.reduce((prev, curr) =>
         Math.abs(curr - spotPrice) < Math.abs(prev - spotPrice)
           ? curr
@@ -135,51 +99,55 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
       );
     }
 
-    // Get LTP for each option (from cache)
-    Object.keys(strikeMap).forEach(strike => {
+    // --------- ATM RANGE FILTER ----------
+    let filteredStrikes = strikes;
+
+    if (atmStrike) {
+      const atmIndex = strikes.indexOf(atmStrike);
+      const start = Math.max(0, atmIndex - ATM_RANGE);
+      const end = Math.min(strikes.length - 1, atmIndex + ATM_RANGE);
+      filteredStrikes = strikes.slice(start, end + 1);
+    }
+
+    // --------- BATCH LTP FETCH ----------
+    const tokensToFetch = [];
+
+    filteredStrikes.forEach(strike => {
       const row = strikeMap[strike];
-
-      if (row.CE && row.CE.token) {
-
-  // 🔥 Subscribe if not already cached
-  if (!global.latestLTP[row.CE.token]) {
-    subscribeToToken(row.CE.token, 2); // 2 = NFO
-  }
-
-  const cached = global.latestLTP[row.CE.token];
-  if (cached) {
-    row.CE.ltp = cached.ltp;
-  }
-}
-
-     // ===============================
-// SUBSCRIBE + READ LTP (PE)
-// ===============================
-if (row.PE && row.PE.token) {
-
-  if (!global.latestLTP[row.PE.token]) {
-    subscribeToToken(row.PE.token, 2);
-  }
-
-  const cached = global.latestLTP[row.PE.token];
-  if (cached) {
-    row.PE.ltp = cached.ltp;
-  }
-}
+      if (row.CE?.token) tokensToFetch.push({ token: row.CE.token, exchange: "NFO" });
+      if (row.PE?.token) tokensToFetch.push({ token: row.PE.token, exchange: "NFO" });
     });
 
-    // Determine type
-    const type = determineSymbolType(symbol);
+    await fetchBatchLTP(tokensToFetch);
+
+    // --------- FILL LTP + SUBSCRIBE ----------
+    filteredStrikes.forEach(strike => {
+      const row = strikeMap[strike];
+
+      if (row.CE?.token) {
+        const cached = global.latestLTP[row.CE.token];
+        if (cached) row.CE.ltp = cached.ltp;
+        subscribeToToken(row.CE.token, 2);
+      }
+
+      if (row.PE?.token) {
+        const cached = global.latestLTP[row.PE.token];
+        if (cached) row.PE.ltp = cached.ltp;
+        subscribeToToken(row.PE.token, 2);
+      }
+    });
 
     return {
       status: true,
-      type,
+      type: determineSymbolType(symbol),
       expiry: selectedExpiry,
       availableExpiries,
       spot: spotPrice,
       atmStrike,
-      totalStrikes: strikes.length,
-      chain: strikeMap
+      totalStrikes: filteredStrikes.length,
+      chain: Object.fromEntries(
+        filteredStrikes.map(strike => [strike, strikeMap[strike]])
+      )
     };
 
   } catch (err) {
@@ -192,38 +160,64 @@ if (row.PE && row.PE.token) {
   }
 }
 
-/**
- * Determine symbol type
- * FIXED: Added COMMODITY support
- */
-function determineSymbolType(symbol) {
-  const upperSymbol = symbol.toUpperCase();
+// ==========================================
+// BATCH LTP FETCH (SAFE - MAX 50 LIMIT)
+// ==========================================
+async function fetchBatchLTP(tokens) {
+  if (!tokens.length) return;
 
-  // Index symbols
-  const indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"];
-  if (indices.includes(upperSymbol)) {
-    return "INDEX";
+  const BATCH_SIZE = 25;
+
+  for (let i = 0; i < tokens.length; i += BATCH_SIZE) {
+    const batch = tokens.slice(i, i + BATCH_SIZE);
+
+    await Promise.all(
+      batch.map(async item => {
+        try {
+          const result = await getLtpData(
+            item.exchange,
+            item.token,
+            item.token
+          );
+
+          if (result.success && result.data) {
+            global.latestLTP[item.token] = {
+              ltp: result.data.ltp || result.data.close,
+              timestamp: Date.now()
+            };
+          }
+        } catch (e) {
+          console.log("LTP fetch error:", e.message);
+        }
+      })
+    );
   }
+}
 
-  // Commodity symbols (MCX)
+// ==========================================
+// SYMBOL TYPE
+// ==========================================
+function determineSymbolType(symbol) {
+  const upper = symbol.toUpperCase();
+
+  const indices = ["NIFTY", "BANKNIFTY", "FINNIFTY", "MIDCPNIFTY"];
+  if (indices.includes(upper)) return "INDEX";
+
   const commodities = [
-    "GOLD", "GOLDM", "GOLDPETAL",
-    "SILVER", "SILVERM", "SILVERMICRO",
-    "CRUDE", "CRUDEOIL", "CRUDEOILM",
-    "NATURALGAS", "NATGAS", "NATURALG",
-    "COPPER", "ZINC", "LEAD", "NICKEL", "ALUMINIUM"
+    "GOLD", "SILVER", "CRUDE", "CRUDEOIL",
+    "NATURALGAS", "COPPER", "ZINC", "LEAD",
+    "NICKEL", "ALUMINIUM"
   ];
 
-  if (commodities.includes(upperSymbol) || upperSymbol.includes("MCX")) {
+  if (commodities.includes(upper) || upper.includes("MCX"))
     return "COMMODITY";
-  }
 
   return "STOCK";
 }
 
-/**
- * Check if two dates are same
- */
+// ==========================================
+// DATE MATCH
+// ==========================================
 function isSameDate(d1, d2) {
   return (
     d1.getFullYear() === d2.getFullYear() &&
@@ -232,27 +226,25 @@ function isSameDate(d1, d2) {
   );
 }
 
-/**
- * Get LTP for symbol from Angel API
- * FIXED: Added commodity support
- */
+// ==========================================
+// GET SPOT
+// ==========================================
 async function getLtpFromSymbol(symbol) {
   try {
-    const upperSymbol = symbol.toUpperCase();
-
-    // Index tokens
-    const symbolMap = {
+    const map = {
       NIFTY: { exchange: "NSE", token: "99926000" },
       BANKNIFTY: { exchange: "NSE", token: "99926009" },
       FINNIFTY: { exchange: "NSE", token: "99926037" },
       MIDCPNIFTY: { exchange: "NSE", token: "99926074" }
     };
 
-    if (symbolMap[upperSymbol]) {
+    const upper = symbol.toUpperCase();
+
+    if (map[upper]) {
       const result = await getLtpData(
-        symbolMap[upperSymbol].exchange,
-        upperSymbol,
-        symbolMap[upperSymbol].token
+        map[upper].exchange,
+        upper,
+        map[upper].token
       );
 
       if (result.success && result.data) {
@@ -260,15 +252,9 @@ async function getLtpFromSymbol(symbol) {
       }
     }
 
-    // Fallback to cache (stocks / commodities)
-    if (global.latestLTP[upperSymbol]) {
-      return global.latestLTP[upperSymbol].ltp;
-    }
+    return global.latestLTP[upper]?.ltp || null;
 
-    return null;
-
-  } catch (err) {
-    console.error("❌ getLtpFromSymbol error:", err.message);
+  } catch {
     return null;
   }
 }
