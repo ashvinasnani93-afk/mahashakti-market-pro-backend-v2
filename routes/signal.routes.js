@@ -1,7 +1,7 @@
 // ==========================================
 // SIGNAL ROUTES
 // MAHASHAKTI MARKET PRO
-// Exposes /signal endpoint
+// Exposes /api/signal endpoint
 // ==========================================
 
 const express = require("express");
@@ -9,32 +9,60 @@ const router = express.Router();
 
 const { buildEngineData } = require("../services/marketFeed.service");
 const { finalDecision } = require("../signalDecision.service");
+const { getLtpData } = require("../services/angel/angelApi.service");
 
 // ===============================
-// POST /signal
+// POST /api/signal
 // ===============================
-router.post("/", (req, res) => {
+router.post("/", async (req, res) => {
   try {
-    const raw = req.body || {};
+    const { symbol } = req.body;
 
-    // STEP 1: Normalize market feed
-    const engineData = buildEngineData(raw);
+    // Validate input
+    if (!symbol) {
+      return res.status(400).json({
+        status: false,
+        signal: "WAIT",
+        reason: "Symbol is required",
+      });
+    }
+
+    // STEP 1: Fetch LIVE market data from Angel
+    const marketData = await getLtpData(symbol);
+
+    if (!marketData) {
+      return res.json({
+        status: false,
+        signal: "WAIT",
+        reason: "Unable to fetch market data",
+      });
+    }
+
+    // STEP 2: Build Engine Data
+    const engineData = buildEngineData({
+      symbol: symbol,
+      ltp: marketData.ltp,
+      open: marketData.open,
+      high: marketData.high,
+      low: marketData.low,
+      volume: marketData.volume,
+    });
 
     if (!engineData) {
       return res.json({
         status: false,
         signal: "WAIT",
-        reason: "Invalid input data",
+        reason: "Engine data creation failed",
       });
     }
 
-    // STEP 2: Run decision engine
+    // STEP 3: Run Decision Engine
     const result = finalDecision(engineData);
 
-    // STEP 3: Send response
+    // STEP 4: Send Response
     return res.json({
       status: true,
-      symbol: engineData.symbol,
+      symbol: symbol,
       signal: result.signal,
       confidence: result.confidence,
       reason: result.reason,
@@ -42,6 +70,7 @@ router.post("/", (req, res) => {
       notes: result.notes,
       timestamp: result.timestamp,
     });
+
   } catch (err) {
     console.error("❌ Signal Route Error:", err.message);
 
