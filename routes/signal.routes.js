@@ -13,7 +13,7 @@ const { finalDecision } = require("../signalDecision.service");
 // ===============================
 // POST /signal
 // ===============================
-router.post("/signal", (req, res) => {
+router.post("/", (req, res) => {
   try {
     const raw = req.body || {};
 
