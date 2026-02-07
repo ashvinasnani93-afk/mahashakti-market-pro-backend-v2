@@ -8,8 +8,6 @@ require('dotenv').config();
 
 const express = require("express");
 const cors = require("cors");
-const http = require("http");
-const { Server } = require("socket.io");
 
 // Angel One Services
 const { loginWithPassword, generateToken } = require("./services/angel/angelAuth.service");
@@ -29,13 +27,6 @@ const ltpRoutes = require("./routes/ltp.routes");
 // APP INITIALIZATION
 // ==========================================
 const app = express();
-const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-  },
-});
 app.use(cors());
 app.use(express.json());
 
@@ -211,19 +202,7 @@ setInterval(autoRefreshToken, 5 * 60 * 60 * 1000);
 // ==========================================
 const PORT = process.env.PORT || 3000;
 
-io.on("connection", (socket) => {
-  console.log("🟢 Client Connected:", socket.id);
-
-  socket.on("disconnect", () => {
-    console.log("🔴 Client Disconnected:", socket.id);
-  });
-
-  socket.on("subscribe_symbol", ({ symbol }) => {
-    console.log("📡 Subscribed:", symbol);
-  });
-});
-
-server.listen(PORT, async () => {
+app.listen(PORT, async () => {
   console.log("=".repeat(50));
   console.log("🚀 MAHASHAKTI MARKET PRO - SERVER STARTED");
   console.log("=".repeat(50));
