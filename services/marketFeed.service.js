@@ -4,6 +4,8 @@
 // Role: Collect live market data and normalize for signal engine
 // ==========================================
 
+const { calculateAllIndicators } = require("./indicators.service");
+
 // This service prepares REAL market data
 // and sends clean input to signalDecision.service.js
 
@@ -23,6 +25,32 @@ function buildEngineData(raw = {}) {
     return [];
   };
 
+  // =========================
+  // EXTRACT HISTORY ARRAYS
+  // =========================
+  const closes = normalizeArray(raw.closes);
+  const highs = normalizeArray(raw.highs);
+  const lows = normalizeArray(raw.lows);
+  const volumes = normalizeArray(raw.volumes);
+
+  let indicatorData = {};
+
+  // ==========================================
+  // AUTO CALCULATE INDICATORS IF NOT PROVIDED
+  // ==========================================
+  if (closes.length >= 50) {
+    const indicatorResult = calculateAllIndicators({
+      closes,
+      highs,
+      lows,
+      volumes,
+    });
+
+    if (indicatorResult.success) {
+      indicatorData = indicatorResult.indicators;
+    }
+  }
+
   return {
     // =====================
     // BASIC IDENTITY
@@ -41,11 +69,21 @@ function buildEngineData(raw = {}) {
     prevClose: normalize(raw.prevClose),
 
     // =====================
-    // INDICATORS
+    // INDICATORS (AUTO FILLED)
     // =====================
-    ema20: normalize(raw.ema20),
-    ema50: normalize(raw.ema50),
-    rsi: normalize(raw.rsi),
+    ema20: indicatorData.ema20 || normalize(raw.ema20),
+    ema50: indicatorData.ema50 || normalize(raw.ema50),
+    rsi: indicatorData.rsi || normalize(raw.rsi),
+    atr: indicatorData.atr || null,
+    trend: indicatorData.trend || null,
+    trendStrength: indicatorData.trendStrength || null,
+    volatility: indicatorData.volatility || null,
+    htfAligned: indicatorData.htfAligned || false,
+    volumeConfirmed: indicatorData.volumeConfirmed || false,
+    breakout: indicatorData.breakout || false,
+    breakoutType: indicatorData.breakoutType || null,
+    noTradeZone: indicatorData.noTradeZone || false,
+    confidence: indicatorData.confidence || "LOW",
 
     // =====================
     // VOLUME
@@ -62,10 +100,10 @@ function buildEngineData(raw = {}) {
     // =====================
     // ARRAYS (HISTORY)
     // =====================
-    closes: normalizeArray(raw.closes),
-    highs: normalizeArray(raw.highs),
-    lows: normalizeArray(raw.lows),
-    volumes: normalizeArray(raw.volumes),
+    closes,
+    highs,
+    lows,
+    volumes,
 
     // =====================
     // CONTEXT FLAGS
@@ -75,7 +113,7 @@ function buildEngineData(raw = {}) {
     tradeCountToday: Number(raw.tradeCountToday || 0),
 
     // =====================
-    // VOLATILITY
+    // VOLATILITY CONTEXT
     // =====================
     vix: normalize(raw.vix),
 
