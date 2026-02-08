@@ -1,9 +1,9 @@
 // ==========================================
-// OPTION CHAIN SERVICE - REAL ANGEL DATA - FIXED
+// OPTION CHAIN SERVICE - WITH STOCK LTP FIX
 // Builds option chain from Angel Master
-// SUPPORTS: INDEX | STOCKS | COMMODITIES
-// NO DUMMY - Pure Real Market Data
+// FIXED: Stock spot price now resolves correctly
 // ==========================================
+
 const {
   subscribeToToken
 } = require("./services/angel/angelWebSocket.service");
@@ -113,16 +113,17 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
       .map(Number)
       .sort((a, b) => a - b);
 
-    // Get spot price
+    // ==========================================
+    // FIXED: Get spot price with -EQ suffix handling
+    // ==========================================
     let spotPrice = null;
 
     if (global.latestLTP[symbol]) {
       spotPrice = global.latestLTP[symbol].ltp;
+      console.log(`📊 [SPOT] From cache: ${symbol} = ${spotPrice}`);
     } else {
-      const ltpResult = await getLtpFromSymbol(symbol);
-      if (ltpResult) {
-        spotPrice = ltpResult;
-      }
+      spotPrice = await getLtpFromSymbol(symbol);
+      console.log(`📊 [SPOT] From API: ${symbol} = ${spotPrice}`);
     }
 
     // Calculate ATM
@@ -135,35 +136,34 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
       );
     }
 
-  // ==========================================
-// REAL-TIME LTP SYNC (Tick Based)
-// ==========================================
-
-if (!global.subscribedTokens) {
-  global.subscribedTokens = new Set();
-}
-
-Object.keys(strikeMap).forEach(strike => {
-  const row = strikeMap[strike];
-
-  ["CE", "PE"].forEach(type => {
-    if (!row[type] || !row[type].token) return;
-
-    const token = row[type].token;
-
-    // Subscribe only once per token
-    if (!global.subscribedTokens.has(token)) {
-      subscribeToToken(token, 2); // NFO
-      global.subscribedTokens.add(token);
+    // ==========================================
+    // REAL-TIME LTP SYNC (Tick Based)
+    // ==========================================
+    if (!global.subscribedTokens) {
+      global.subscribedTokens = new Set();
     }
 
-    // Always read latest tick price
-    const cached = global.latestLTP[token];
-    if (cached && cached.ltp !== undefined) {
-      row[type].ltp = cached.ltp;
-    }
-  });
-});
+    Object.keys(strikeMap).forEach(strike => {
+      const row = strikeMap[strike];
+
+      ["CE", "PE"].forEach(type => {
+        if (!row[type] || !row[type].token) return;
+
+        const token = row[type].token;
+
+        // Subscribe only once per token
+        if (!global.subscribedTokens.has(token)) {
+          subscribeToToken(token, 2); // NFO
+          global.subscribedTokens.add(token);
+        }
+
+        // Always read latest tick price
+        const cached = global.latestLTP[token];
+        if (cached && cached.ltp !== undefined) {
+          row[type].ltp = cached.ltp;
+        }
+      });
+    });
 
     // Determine type
     const type = determineSymbolType(symbol);
@@ -191,7 +191,6 @@ Object.keys(strikeMap).forEach(strike => {
 
 /**
  * Determine symbol type
- * FIXED: Added COMMODITY support
  */
 function determineSymbolType(symbol) {
   const upperSymbol = symbol.toUpperCase();
@@ -231,48 +230,78 @@ function isSameDate(d1, d2) {
 
 /**
  * Get LTP for symbol from Angel API
- * FIXED: Added commodity support
+ * FIXED: Added -EQ suffix handling for stocks
  */
 async function getLtpFromSymbol(symbol) {
   try {
     const upperSymbol = symbol.toUpperCase();
 
-    // Index tokens
-    const symbolMap = {
+    // ==========================================
+    // INDEX TOKENS (Hardcoded - Always work)
+    // ==========================================
+    const indexMap = {
       NIFTY: { exchange: "NSE", token: "99926000" },
       BANKNIFTY: { exchange: "NSE", token: "99926009" },
       FINNIFTY: { exchange: "NSE", token: "99926037" },
       MIDCPNIFTY: { exchange: "NSE", token: "99926074" }
     };
 
-    if (symbolMap[upperSymbol]) {
+    if (indexMap[upperSymbol]) {
+      console.log(`📊 [LTP] Index detected: ${upperSymbol}`);
       const result = await getLtpData(
-        symbolMap[upperSymbol].exchange,
+        indexMap[upperSymbol].exchange,
         upperSymbol,
-        symbolMap[upperSymbol].token
+        indexMap[upperSymbol].token
       );
 
       if (result.success && result.data) {
-        return result.data.ltp || result.data.close;
+        const ltp = result.data.ltp || result.data.close;
+        console.log(`📊 [LTP] Index ${upperSymbol} = ${ltp}`);
+        return ltp;
       }
     }
 
-    // STOCK & COMMODITY LTP FETCH (Direct API Fallback)
-try {
-  const ltpResult = await getLtpData("NSE", upperSymbol);
+    // ==========================================
+    // STOCK LTP FETCH - WITH -EQ SUFFIX FIX
+    // The getLtpData now handles -EQ internally
+    // ==========================================
+    console.log(`📊 [LTP] Stock/Other detected: ${upperSymbol}`);
+    
+    // getLtpData will automatically try:
+    // 1. Direct match (RELIANCE)
+    // 2. With -EQ suffix (RELIANCE-EQ)
+    // 3. BSE fallback
+    const ltpResult = await getLtpData("NSE", upperSymbol);
 
-  if (ltpResult && ltpResult.success && ltpResult.data) {
-    return ltpResult.data.ltp || ltpResult.data.close;
-  }
-} catch (e) {
-  console.log("Stock LTP direct fetch failed:", e.message);
-}
+    if (ltpResult && ltpResult.success && ltpResult.data) {
+      const ltp = ltpResult.data.ltp || ltpResult.data.close;
+      console.log(`📊 [LTP] Stock ${upperSymbol} = ${ltp}`);
+      return ltp;
+    }
 
-// Fallback to cache
-if (global.latestLTP[upperSymbol]) {
-  return global.latestLTP[upperSymbol].ltp;
-}
+    // ==========================================
+    // COMMODITY FALLBACK
+    // ==========================================
+    if (determineSymbolType(upperSymbol) === "COMMODITY") {
+      console.log(`📊 [LTP] Trying MCX for: ${upperSymbol}`);
+      const mcxResult = await getLtpData("MCX", upperSymbol);
+      
+      if (mcxResult && mcxResult.success && mcxResult.data) {
+        const ltp = mcxResult.data.ltp || mcxResult.data.close;
+        console.log(`📊 [LTP] MCX ${upperSymbol} = ${ltp}`);
+        return ltp;
+      }
+    }
 
+    // ==========================================
+    // CACHE FALLBACK
+    // ==========================================
+    if (global.latestLTP[upperSymbol]) {
+      console.log(`📊 [LTP] From cache: ${upperSymbol}`);
+      return global.latestLTP[upperSymbol].ltp;
+    }
+
+    console.log(`📊 [LTP] ❌ Failed to get LTP for: ${upperSymbol}`);
     return null;
 
   } catch (err) {
