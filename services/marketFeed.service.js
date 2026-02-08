@@ -71,20 +71,20 @@ function buildEngineData(raw = {}) {
     // =====================
     // INDICATORS (AUTO FILLED)
     // =====================
-    ema20: indicatorData.ema20 || normalize(raw.ema20),
-    ema50: indicatorData.ema50 || normalize(raw.ema50),
-    rsi: indicatorData.rsi || normalize(raw.rsi),
-    atr: indicatorData.atr || null,
-    trend: indicatorData.trend || null,
-    trendStrength: indicatorData.trendStrength || null,
-    volatility: indicatorData.volatility || null,
-    htfAligned: indicatorData.htfAligned || false,
-    volumeConfirmed: indicatorData.volumeConfirmed || false,
-    breakout: indicatorData.breakout || false,
-    breakoutType: indicatorData.breakoutType || null,
-    noTradeZone: indicatorData.noTradeZone || false,
-    confidence: indicatorData.confidence || "LOW",
-
+   ema20: indicatorData.ema20 ?? normalize(raw.ema20),
+ema50: indicatorData.ema50 ?? normalize(raw.ema50),
+rsi: indicatorData.rsi ?? normalize(raw.rsi),
+atr: indicatorData.atr ?? null,
+trend: indicatorData.trend ?? null,
+trendStrength: indicatorData.trendStrength ?? null,
+volatility: indicatorData.volatility ?? null,
+htfAligned: indicatorData.htfAligned ?? false,
+volumeConfirmed: indicatorData.volumeConfirmed ?? false,
+breakout: indicatorData.breakout ?? false,
+breakoutType: indicatorData.breakoutType ?? null,
+noTradeZone: indicatorData.noTradeZone ?? false,
+confidence: indicatorData.confidence ?? "LOW",
+    
     // =====================
     // VOLUME
     // =====================
