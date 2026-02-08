@@ -142,7 +142,7 @@ function classifyVolatility(atr, currentPrice) {
 // ==========================================
 function detectTrend(closes, ema20, ema50) {
   if (!closes || closes.length === 0 || !ema20 || !ema50) {
-    return { trend: \"UNKNOWN\", strength: \"WEAK\" };
+    return { trend: "UNKNOWN", strength: "WEAK" };
   }
   
   const currentPrice = closes[closes.length - 1];
@@ -152,18 +152,18 @@ function detectTrend(closes, ema20, ema50) {
   
   // UPTREND: Price > EMA20 > EMA50
   if (currentPrice > ema20 && ema20 > ema50) {
-    const strength = emaDiff > 0.01 ? \"STRONG\" : \"MODERATE\";
-    return { trend: \"UPTREND\", strength };
+    const strength = emaDiff > 0.01 ? "STRONG" : "MODERATE";
+    return { trend: "UPTREND", strength };
   }
   
   // DOWNTREND: Price < EMA20 < EMA50
   if (currentPrice < ema20 && ema20 < ema50) {
-    const strength = emaDiff > 0.01 ? \"STRONG\" : \"MODERATE\";
-    return { trend: \"DOWNTREND\", strength };
+    const strength = emaDiff > 0.01 ? "STRONG" : "MODERATE";
+    return { trend: "DOWNTREND", strength };
   }
   
   // SIDEWAYS
-  return { trend: \"SIDEWAYS\", strength: \"WEAK\" };
+  return { trend: "SIDEWAYS", strength: "WEAK" };
 }
 
 // ==========================================
@@ -171,17 +171,17 @@ function detectTrend(closes, ema20, ema50) {
 // Higher Time Frame alignment
 // ==========================================
 function checkHTFAlignment(trend, ema20, ema50, rsi) {
-  if (trend === \"UNKNOWN\" || trend === \"SIDEWAYS\") {
+  if (trend === "UNKNOWN" || trend === "SIDEWAYS") {
     return false;
   }
   
   // UPTREND alignment: EMA20 > EMA50 and RSI > 50
-  if (trend === \"UPTREND\" && ema20 > ema50 && rsi > 50) {
+  if (trend === "UPTREND" && ema20 > ema50 && rsi > 50) {
     return true;
   }
   
   // DOWNTREND alignment: EMA20 < EMA50 and RSI < 50
-  if (trend === \"DOWNTREND\" && ema20 < ema50 && rsi < 50) {
+  if (trend === "DOWNTREND" && ema20 < ema50 && rsi < 50) {
     return true;
   }
   
@@ -196,7 +196,7 @@ function detectNoTradeZone(data) {
   const { closes, highs, lows, volumes, ema20, ema50, atr } = data;
   
   if (!closes || closes.length < 20) {
-    return { noTradeZone: false, reason: \"Insufficient data\" };
+    return { noTradeZone: false, reason: "Insufficient data" };
   }
   
   const reasons = [];
@@ -206,7 +206,7 @@ function detectNoTradeZone(data) {
   if (ema20 && ema50) {
     const emaDiff = Math.abs(ema20 - ema50) / ema50;
     if (emaDiff < 0.003) {
-      reasons.push(\"EMA_COMPRESSION\");
+      reasons.push("EMA_COMPRESSION");
     }
   }
   
@@ -222,7 +222,7 @@ function detectNoTradeZone(data) {
     
     // If range is less than 0.8%, consider it range bound
     if (rangePercent < 0.8) {
-      reasons.push(\"RANGE_BOUND\");
+      reasons.push("RANGE_BOUND");
     }
   }
   
@@ -237,7 +237,7 @@ function detectNoTradeZone(data) {
     
     // If recent volume is 30% less than previous
     if (recentAvg < prevAvg * 0.7) {
-      reasons.push(\"LOW_VOLUME_TRAP\");
+      reasons.push("LOW_VOLUME_TRAP");
     }
   }
   
@@ -248,7 +248,7 @@ function detectNoTradeZone(data) {
     const atrPercent = (atr / currentPrice) * 100;
     
     if (atrPercent < 0.4) {
-      reasons.push(\"ATR_CONTRACTION\");
+      reasons.push("ATR_CONTRACTION");
     }
   }
   
@@ -258,7 +258,7 @@ function detectNoTradeZone(data) {
   return {
     noTradeZone: isNoTradeZone,
     reasons: reasons,
-    reason: reasons.length > 0 ? reasons.join(\", \") : \"Market conditions favorable\"
+    reason: reasons.length > 0 ? reasons.join(\", \") : "Market conditions favorable"
   };
 }
 
@@ -272,9 +272,9 @@ function calculateConfidence(data) {
   let score = 0;
   
   // Trend strength
-  if (trendStrength === \"STRONG\") {
+  if (trendStrength === "STRONG") {
     score += 3;
-  } else if (trendStrength === \"MODERATE\") {
+  } else if (trendStrength === "MODERATE") {
     score += 2;
   }
   
@@ -294,19 +294,19 @@ function calculateConfidence(data) {
   }
   
   // RSI in favorable zone
-  if (trend === \"UPTREND\" && rsi >= 50 && rsi <= 70) {
+  if (trend === "UPTREND" && rsi >= 50 && rsi <= 70) {
     score += 1;
-  } else if (trend === \"DOWNTREND\" && rsi <= 50 && rsi >= 30) {
+  } else if (trend === "DOWNTREND" && rsi <= 50 && rsi >= 30) {
     score += 1;
   }
   
   // Confidence level
   if (score >= 8) {
-    return \"HIGH\";
+    return "HIGH";
   } else if (score >= 5) {
-    return \"MEDIUM\";
+    return "MEDIUM";
   } else {
-    return \"LOW\";
+    return "LOW";
   }
 }
 
@@ -355,12 +355,12 @@ function detectBreakout(closes, highs, lows) {
   
   // Bullish breakout
   if (currentPrice > rangeHigh) {
-    return { breakout: true, type: \"BULLISH\" };
+    return { breakout: true, type: "BULLISH" };
   }
   
   // Bearish breakdown
   if (currentPrice < rangeLow) {
-    return { breakout: true, type: \"BEARISH\" };
+    return { breakout: true, type: "BEARISH" };
   }
   
   return { breakout: false, type: null };
@@ -375,7 +375,7 @@ function calculateAllIndicators(ohlcv) {
   if (!closes || closes.length < 50) {
     return {
       success: false,
-      error: \"Insufficient candle data\",
+      error: "Insufficient candle data",
       indicators: null
     };
   }
