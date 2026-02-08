@@ -258,7 +258,7 @@ function detectNoTradeZone(data) {
   return {
     noTradeZone: isNoTradeZone,
     reasons: reasons,
-    reason: reasons.length > 0 ? reasons.join(\", \") : "Market conditions favorable"
+    reason: reasons.length > 0 ? reasons.join(", ") : "Market conditions favorable"
   };
 }
 
