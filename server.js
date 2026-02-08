@@ -22,6 +22,7 @@ const { setAllSymbols } = require("./symbol.service");
 const optionChainRoutes = require("./routes/optionChain.routes");
 const signalRoutes = require("./routes/signal.routes");
 const ltpRoutes = require("./routes/ltp.routes");
+const signalIntelRoutes = require("./routes/signal.intel.routes");
 
 // ==========================================
 // APP INITIALIZATION
@@ -92,6 +93,7 @@ app.get("/api/status", (req, res) => {
 // ==========================================
 app.use("/api/option-chain", optionChainRoutes);
 app.use("/api/signal", signalRoutes);
+app.use("/api/signal/intel", signalIntelRoutes);
 app.use("/api/ltp", ltpRoutes);
 
 // ==========================================
