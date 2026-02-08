@@ -542,4 +542,4 @@ module.exports = {
   COMMODITY_NAME_TO_SYMBOL,
   COMMODITY_FRIENDLY_NAMES
 };
-"
+
