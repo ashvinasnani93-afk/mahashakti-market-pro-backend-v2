@@ -257,10 +257,21 @@ async function getLtpFromSymbol(symbol) {
       }
     }
 
-    // Fallback to cache (stocks / commodities)
-    if (global.latestLTP[upperSymbol]) {
-      return global.latestLTP[upperSymbol].ltp;
-    }
+    // STOCK & COMMODITY LTP FETCH (Direct API Fallback)
+try {
+  const ltpResult = await getLtpData("NSE", upperSymbol);
+
+  if (ltpResult && ltpResult.success && ltpResult.data) {
+    return ltpResult.data.ltp || ltpResult.data.close;
+  }
+} catch (e) {
+  console.log("Stock LTP direct fetch failed:", e.message);
+}
+
+// Fallback to cache
+if (global.latestLTP[upperSymbol]) {
+  return global.latestLTP[upperSymbol].ltp;
+}
 
     return null;
 
