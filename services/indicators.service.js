@@ -121,7 +121,7 @@ function calculateATR(highs, lows, closes, period = 14) {
 // ==========================================
 function classifyVolatility(atr, currentPrice) {
   if (!atr || !currentPrice || currentPrice === 0) {
-    return \"NORMAL\";
+   return "NORMAL";
   }
   
   // ATR as percentage of price
@@ -129,11 +129,11 @@ function classifyVolatility(atr, currentPrice) {
   
   // Classification thresholds
   if (atrPercent >= 2.0) {
-    return \"EXTREME\";
+    return "EXTREME ";
   } else if (atrPercent >= 1.2) {
-    return \"HIGH\";
+    return "HIGH ";
   } else {
-    return \"NORMAL\";
+    return  "NORMAL ";
   }
 }
 
