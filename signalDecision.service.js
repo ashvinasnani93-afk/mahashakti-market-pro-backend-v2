@@ -321,7 +321,11 @@ function finalDecision(data = {}) {
     // =====================================
     // STEP 3: MINIMUM DATA CHECK
     // =====================================
-    if (!normalizedData.close || !normalizedData.ema20 || !normalizedData.ema50) {
+    if (
+  normalizedData.close == null ||
+  normalizedData.ema20 == null ||
+  normalizedData.ema50 == null
+) {
       return {
         signal: "WAIT",
         reason: "Insufficient price or EMA data",
