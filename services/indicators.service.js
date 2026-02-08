@@ -463,4 +463,4 @@ module.exports = {
   detectBreakout,
   calculateAllIndicators
 };
-"
+
