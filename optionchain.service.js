@@ -1,14 +1,14 @@
 // ==========================================
-// OPTION CHAIN SERVICE - WITH STOCK LTP FIX
-// Builds option chain from Angel Master
-// FIXED: Stock spot price now resolves correctly
+// OPTION CHAIN SERVICE - FULL FIX
+// FIXED: Stock LTP (-EQ suffix)
+// FIXED: Commodity LTP (MCX exchange)
 // ==========================================
 
 const {
   subscribeToToken
 } = require("./services/angel/angelWebSocket.service");
 const { getAllOptionSymbols } = require("./services/optionsMaster.service");
-const { getLtpData } = require("./services/angel/angelApi.service");
+const { getLtpData, getCommodityToken, loadCommodityMaster } = require("./services/angel/angelApi.service");
 
 /**
  * Build Option Chain from Angel One Master
@@ -114,15 +114,17 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
       .sort((a, b) => a - b);
 
     // ==========================================
-    // FIXED: Get spot price with -EQ suffix handling
+    // FIXED: Get spot price with proper type detection
     // ==========================================
+    const symbolType = determineSymbolType(symbol);
     let spotPrice = null;
 
+    // Check cache first
     if (global.latestLTP[symbol]) {
       spotPrice = global.latestLTP[symbol].ltp;
       console.log(`📊 [SPOT] From cache: ${symbol} = ${spotPrice}`);
     } else {
-      spotPrice = await getLtpFromSymbol(symbol);
+      spotPrice = await getLtpFromSymbol(symbol, symbolType);
       console.log(`📊 [SPOT] From API: ${symbol} = ${spotPrice}`);
     }
 
@@ -143,6 +145,9 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
       global.subscribedTokens = new Set();
     }
 
+    // Determine exchange mode for subscription
+    const subscribeMode = symbolType === "COMMODITY" ? 5 : 2; // 5 = MCX, 2 = NFO
+
     Object.keys(strikeMap).forEach(strike => {
       const row = strikeMap[strike];
 
@@ -153,7 +158,7 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
 
         // Subscribe only once per token
         if (!global.subscribedTokens.has(token)) {
-          subscribeToToken(token, 2); // NFO
+          subscribeToToken(token, subscribeMode);
           global.subscribedTokens.add(token);
         }
 
@@ -165,12 +170,9 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
       });
     });
 
-    // Determine type
-    const type = determineSymbolType(symbol);
-
     return {
       status: true,
-      type,
+      type: symbolType,
       expiry: selectedExpiry,
       availableExpiries,
       spot: spotPrice,
@@ -203,11 +205,12 @@ function determineSymbolType(symbol) {
 
   // Commodity symbols (MCX)
   const commodities = [
-    "GOLD", "GOLDM", "GOLDPETAL",
-    "SILVER", "SILVERM", "SILVERMICRO",
+    "GOLD", "GOLDM", "GOLDPETAL", "GOLDGUINEA",
+    "SILVER", "SILVERM", "SILVERMICRO", "SILVERMIC",
     "CRUDE", "CRUDEOIL", "CRUDEOILM",
     "NATURALGAS", "NATGAS", "NATURALG",
-    "COPPER", "ZINC", "LEAD", "NICKEL", "ALUMINIUM"
+    "COPPER", "ZINC", "LEAD", "NICKEL", "ALUMINIUM",
+    "COTTON", "MENTHAOIL"
   ];
 
   if (commodities.includes(upperSymbol) || upperSymbol.includes("MCX")) {
@@ -230,65 +233,90 @@ function isSameDate(d1, d2) {
 
 /**
  * Get LTP for symbol from Angel API
- * FIXED: Added -EQ suffix handling for stocks
+ * FIXED: Handles INDEX, STOCK (-EQ), and COMMODITY (MCX)
  */
-async function getLtpFromSymbol(symbol) {
+async function getLtpFromSymbol(symbol, symbolType = null) {
   try {
     const upperSymbol = symbol.toUpperCase();
+    const type = symbolType || determineSymbolType(upperSymbol);
+
+    console.log(`📊 [LTP] Fetching for: ${upperSymbol} (type: ${type})`);
 
     // ==========================================
     // INDEX TOKENS (Hardcoded - Always work)
     // ==========================================
-    const indexMap = {
-      NIFTY: { exchange: "NSE", token: "99926000" },
-      BANKNIFTY: { exchange: "NSE", token: "99926009" },
-      FINNIFTY: { exchange: "NSE", token: "99926037" },
-      MIDCPNIFTY: { exchange: "NSE", token: "99926074" }
-    };
+    if (type === "INDEX") {
+      const indexMap = {
+        NIFTY: { exchange: "NSE", token: "99926000" },
+        BANKNIFTY: { exchange: "NSE", token: "99926009" },
+        FINNIFTY: { exchange: "NSE", token: "99926037" },
+        MIDCPNIFTY: { exchange: "NSE", token: "99926074" }
+      };
 
-    if (indexMap[upperSymbol]) {
-      console.log(`📊 [LTP] Index detected: ${upperSymbol}`);
-      const result = await getLtpData(
-        indexMap[upperSymbol].exchange,
-        upperSymbol,
-        indexMap[upperSymbol].token
-      );
+      if (indexMap[upperSymbol]) {
+        console.log(`📊 [LTP] Index detected: ${upperSymbol}`);
+        const result = await getLtpData(
+          indexMap[upperSymbol].exchange,
+          upperSymbol,
+          indexMap[upperSymbol].token
+        );
 
-      if (result.success && result.data) {
-        const ltp = result.data.ltp || result.data.close;
-        console.log(`📊 [LTP] Index ${upperSymbol} = ${ltp}`);
+        if (result.success && result.data) {
+          const ltp = result.data.ltp || result.data.close;
+          console.log(`📊 [LTP] Index ${upperSymbol} = ${ltp}`);
+          return ltp;
+        }
+      }
+    }
+
+    // ==========================================
+    // COMMODITY LTP FETCH (MCX)
+    // FIXED: Now properly loads commodity master
+    // ==========================================
+    if (type === "COMMODITY") {
+      console.log(`📊 [LTP] Commodity detected: ${upperSymbol}`);
+      
+      // Ensure commodity master is loaded
+      await loadCommodityMaster();
+      
+      // Get resolved commodity symbol and token
+      const commodityInfo = getCommodityToken(upperSymbol);
+      
+      if (commodityInfo && commodityInfo.token) {
+        console.log(`📊 [LTP] MCX resolved: ${upperSymbol} → ${commodityInfo.symbol} (token: ${commodityInfo.token})`);
+        
+        const mcxResult = await getLtpData("MCX", commodityInfo.symbol, commodityInfo.token);
+        
+        if (mcxResult && mcxResult.success && mcxResult.data) {
+          const ltp = mcxResult.data.ltp || mcxResult.data.close;
+          console.log(`📊 [LTP] MCX ${upperSymbol} = ${ltp}`);
+          return ltp;
+        }
+      } else {
+        console.log(`📊 [LTP] ⚠️ Commodity token not found for: ${upperSymbol}`);
+      }
+      
+      // Fallback: Try direct MCX call
+      const directResult = await getLtpData("MCX", upperSymbol);
+      if (directResult && directResult.success && directResult.data) {
+        const ltp = directResult.data.ltp || directResult.data.close;
+        console.log(`📊 [LTP] MCX direct ${upperSymbol} = ${ltp}`);
         return ltp;
       }
     }
 
     // ==========================================
-    // STOCK LTP FETCH - WITH -EQ SUFFIX FIX
-    // The getLtpData now handles -EQ internally
+    // STOCK LTP FETCH (NSE with -EQ fallback)
     // ==========================================
-    console.log(`📊 [LTP] Stock/Other detected: ${upperSymbol}`);
-    
-    // getLtpData will automatically try:
-    // 1. Direct match (RELIANCE)
-    // 2. With -EQ suffix (RELIANCE-EQ)
-    // 3. BSE fallback
-    const ltpResult = await getLtpData("NSE", upperSymbol);
-
-    if (ltpResult && ltpResult.success && ltpResult.data) {
-      const ltp = ltpResult.data.ltp || ltpResult.data.close;
-      console.log(`📊 [LTP] Stock ${upperSymbol} = ${ltp}`);
-      return ltp;
-    }
-
-    // ==========================================
-    // COMMODITY FALLBACK
-    // ==========================================
-    if (determineSymbolType(upperSymbol) === "COMMODITY") {
-      console.log(`📊 [LTP] Trying MCX for: ${upperSymbol}`);
-      const mcxResult = await getLtpData("MCX", upperSymbol);
+    if (type === "STOCK") {
+      console.log(`📊 [LTP] Stock detected: ${upperSymbol}`);
       
-      if (mcxResult && mcxResult.success && mcxResult.data) {
-        const ltp = mcxResult.data.ltp || mcxResult.data.close;
-        console.log(`📊 [LTP] MCX ${upperSymbol} = ${ltp}`);
+      // getLtpData now handles -EQ suffix internally
+      const ltpResult = await getLtpData("NSE", upperSymbol);
+
+      if (ltpResult && ltpResult.success && ltpResult.data) {
+        const ltp = ltpResult.data.ltp || ltpResult.data.close;
+        console.log(`📊 [LTP] Stock ${upperSymbol} = ${ltp}`);
         return ltp;
       }
     }
