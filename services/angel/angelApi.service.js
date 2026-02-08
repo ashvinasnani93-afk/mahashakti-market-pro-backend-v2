@@ -1,7 +1,7 @@
-// ==========================================
-// ANGEL ONE API SERVICE - WITH COMPLETE OHLC
+ // ==========================================
+// ANGEL ONE API SERVICE - WITH STOCK -EQ SUFFIX FIX
 // Angel One की actual master file के according
-// Tested with real MCX data + OHLC fields
+// FIXED: Stock symbols now resolve with -EQ suffix
 // ==========================================
 
 const axios = require("axios");
@@ -141,9 +141,7 @@ async function loadCommodityMaster() {
 
                 if (row.exch_seg === "MCX") {
                   const symbol = row.symbol.toUpperCase();
-                  const name = row.name
-                    ? row.name.toUpperCase()
-                    : "";
+                  const name = row.name ? row.name.toUpperCase() : "";
 
                   COMMODITY_TOKEN_MAP[symbol] = row.token;
 
@@ -160,45 +158,6 @@ async function loadCommodityMaster() {
                   Object.keys(COMMODITY_TOKEN_MAP).length
                 }`
               );
-
-              console.log("[MCX] 📊 Key Commodities Available:");
-
-              const importantNames = [
-                "GOLD",
-                "SILVER",
-                "CRUDEOIL",
-                "NATURALGAS",
-                "COPPER",
-                "ZINC"
-              ];
-
-              importantNames.forEach((friendlyName) => {
-                const exactSymbol =
-                  COMMODITY_FRIENDLY_NAMES[friendlyName];
-
-                if (
-                  exactSymbol &&
-                  COMMODITY_TOKEN_MAP[exactSymbol]
-                ) {
-                  console.log(
-                    `  ✅ ${friendlyName}: ${exactSymbol} (token: ${COMMODITY_TOKEN_MAP[exactSymbol]})`
-                  );
-                } else {
-                  const found = Object.keys(
-                    COMMODITY_NAME_TO_SYMBOL
-                  ).find((k) =>
-                    k.includes(friendlyName)
-                  );
-
-                  if (found) {
-                    const sym =
-                      COMMODITY_NAME_TO_SYMBOL[found];
-                    console.log(
-                      `  ✅ ${friendlyName}: ${found} → ${sym} (token: ${COMMODITY_TOKEN_MAP[sym]})`
-                    );
-                  }
-                }
-              });
 
               resolve();
             } catch (e) {
@@ -224,13 +183,9 @@ function getCommodityToken(inputSymbol) {
   console.log(`[MCX] 🔍 Looking for: ${upperInput}`);
 
   // STEP 1: Friendly name mapping
-  const friendlyMapping =
-    COMMODITY_FRIENDLY_NAMES[upperInput];
+  const friendlyMapping = COMMODITY_FRIENDLY_NAMES[upperInput];
 
-  if (
-    friendlyMapping &&
-    COMMODITY_TOKEN_MAP[friendlyMapping]
-  ) {
+  if (friendlyMapping && COMMODITY_TOKEN_MAP[friendlyMapping]) {
     console.log(
       `[MCX] ✅ Friendly mapping: ${upperInput} → ${friendlyMapping} (token: ${COMMODITY_TOKEN_MAP[friendlyMapping]})`
     );
@@ -255,8 +210,7 @@ function getCommodityToken(inputSymbol) {
 
   // STEP 3: Name-based lookup
   if (COMMODITY_NAME_TO_SYMBOL[upperInput]) {
-    const exactSymbol =
-      COMMODITY_NAME_TO_SYMBOL[upperInput];
+    const exactSymbol = COMMODITY_NAME_TO_SYMBOL[upperInput];
 
     console.log(
       `[MCX] ✅ Name lookup: ${upperInput} → ${exactSymbol} (token: ${COMMODITY_TOKEN_MAP[exactSymbol]})`
@@ -285,9 +239,7 @@ function getCommodityToken(inputSymbol) {
   }
 
   // STEP 5: Partial match
-  const partialMatch = Object.keys(
-    COMMODITY_TOKEN_MAP
-  ).find(
+  const partialMatch = Object.keys(COMMODITY_TOKEN_MAP).find(
     (sym) =>
       sym.includes(upperInput) ||
       upperInput.includes(sym.replace("COM", ""))
@@ -305,12 +257,6 @@ function getCommodityToken(inputSymbol) {
   }
 
   console.log(`[MCX] ❌ Not found: ${upperInput}`);
-  console.log(
-    "[MCX] 💡 Available samples:",
-    Object.keys(COMMODITY_TOKEN_MAP)
-      .slice(0, 10)
-      .join(", ")
-  );
 
   return null;
 }
@@ -354,41 +300,68 @@ function getHeaders(jwtToken = null) {
 }
 
 // ==========================================
-// LTP DATA - WITH COMPLETE RESPONSE LOGGING
+// LTP DATA - WITH STOCK -EQ SUFFIX FIX
+// FIXED: Now handles RELIANCE → RELIANCE-EQ
 // ==========================================
-async function getLtpData(
-  exchange,
-  tradingSymbol,
-  symbolToken
-) {
+async function getLtpData(exchange, tradingSymbol, symbolToken) {
   try {
     console.log(
       `[API] 📞 getLtpData: exchange=${exchange}, symbol=${tradingSymbol}, token=${symbolToken}`
     );
 
     // Auto-load token for NSE/BSE
-    if (
-      !symbolToken &&
-      (exchange === "NSE" || exchange === "BSE")
-    ) {
+    if (!symbolToken && (exchange === "NSE" || exchange === "BSE")) {
       await loadStockMaster();
-      symbolToken =
-        STOCK_TOKEN_MAP[exchange]?.[
-          tradingSymbol.toUpperCase()
-        ];
+
+      const upperSymbol = tradingSymbol.toUpperCase();
+
+      // TRY 1: Direct match (for indices like NIFTY, BANKNIFTY)
+      symbolToken = STOCK_TOKEN_MAP[exchange]?.[upperSymbol];
 
       if (symbolToken) {
-        console.log(
-          `[API] ✅ Stock token found: ${symbolToken}`
-        );
+        console.log(`[API] ✅ Direct match found: ${upperSymbol} → ${symbolToken}`);
+      }
+
+      // TRY 2: With -EQ suffix (for stocks like RELIANCE → RELIANCE-EQ)
+      if (!symbolToken && !upperSymbol.endsWith("-EQ")) {
+        const eqSymbol = upperSymbol + "-EQ";
+        symbolToken = STOCK_TOKEN_MAP[exchange]?.[eqSymbol];
+
+        if (symbolToken) {
+          tradingSymbol = eqSymbol;
+          console.log(`[API] ✅ Stock resolved with -EQ suffix: ${eqSymbol} → ${symbolToken}`);
+        }
+      }
+
+      // TRY 3: Input already has -EQ, try without it
+      if (!symbolToken && upperSymbol.endsWith("-EQ")) {
+        const baseSymbol = upperSymbol.replace("-EQ", "");
+        symbolToken = STOCK_TOKEN_MAP[exchange]?.[baseSymbol];
+
+        if (symbolToken) {
+          tradingSymbol = baseSymbol;
+          console.log(`[API] ✅ Resolved without -EQ: ${baseSymbol} → ${symbolToken}`);
+        }
+      }
+
+      // TRY 4: Check BSE if NSE failed
+      if (!symbolToken && exchange === "NSE") {
+        symbolToken = STOCK_TOKEN_MAP.BSE?.[upperSymbol];
+        if (!symbolToken) {
+          symbolToken = STOCK_TOKEN_MAP.BSE?.[upperSymbol + "-EQ"];
+          if (symbolToken) {
+            tradingSymbol = upperSymbol + "-EQ";
+            exchange = "BSE";
+            console.log(`[API] ✅ Found in BSE: ${tradingSymbol} → ${symbolToken}`);
+          }
+        }
       }
     }
 
     // Auto-load token for MCX
     if (!symbolToken && exchange === "MCX") {
       await loadCommodityMaster();
-      const commodityInfo =
-        getCommodityToken(tradingSymbol);
+      const commodityInfo = getCommodityToken(tradingSymbol);
 
       if (commodityInfo) {
         symbolToken = commodityInfo.token;
@@ -417,10 +390,7 @@ async function getLtpData(
       symboltoken: symbolToken
     };
 
-    console.log(
-      "[API] 🌐 Calling Angel API:",
-      JSON.stringify(payload)
-    );
+    console.log("[API] 🌐 Calling Angel API:", JSON.stringify(payload));
 
     const response = await axios.post(
       `${BASE_URL}/rest/secure/angelbroking/order/v1/getLtpData`,
@@ -431,10 +401,7 @@ async function getLtpData(
       }
     );
 
-    console.log(
-      "[API] 📥 Response status:",
-      response.data?.status
-    );
+    console.log("[API] 📥 Response status:", response.data?.status);
 
     if (response.data && response.data.status === true) {
       console.log(
@@ -453,9 +420,7 @@ async function getLtpData(
       response.data?.message
     );
 
-    throw new Error(
-      response.data?.message || "LTP fetch failed"
-    );
+    throw new Error(response.data?.message || "LTP fetch failed");
   } catch (err) {
     console.error("[API] ❌ Error:", err.message);
 
@@ -468,8 +433,7 @@ async function getLtpData(
 
     return {
       success: false,
-      error:
-        err.response?.data?.message || err.message
+      error: err.response?.data?.message || err.message
     };
   }
 }
@@ -540,10 +504,7 @@ async function placeOrder(orderParams) {
     );
 
     if (response.data && response.data.status === true) {
-      console.log(
-        "✅ Order Placed:",
-        response.data.data.orderid
-      );
+      console.log("✅ Order Placed:", response.data.data.orderid);
 
       return {
         success: true,
@@ -551,19 +512,13 @@ async function placeOrder(orderParams) {
       };
     }
 
-    throw new Error(
-      response.data?.message || "Order placement failed"
-    );
+    throw new Error(response.data?.message || "Order placement failed");
   } catch (err) {
-    console.error(
-      "❌ Place Order Error:",
-      err.response?.data || err.message
-    );
+    console.error("❌ Place Order Error:", err.response?.data || err.message);
 
     return {
       success: false,
-      error:
-        err.response?.data?.message || err.message,
+      error: err.response?.data?.message || err.message,
       errorCode: err.response?.data?.errorcode
     };
   }
@@ -587,3 +542,4 @@ module.exports = {
   COMMODITY_NAME_TO_SYMBOL,
   COMMODITY_FRIENDLY_NAMES
 };
+"
