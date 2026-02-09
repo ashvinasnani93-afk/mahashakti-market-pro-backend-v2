@@ -24,6 +24,11 @@ const signalRoutes = require("./routes/signal.routes");
 const ltpRoutes = require("./routes/ltp.routes");
 const signalIntelRoutes = require("./routes/signal.intel.routes");
 
+const searchRoutes = require("./routes/search.routes");
+const optionSignalRoutes = require("./routes/optionSignal.routes");
+const exitEngineRoutes = require("./routes/exitEngine.routes");
+const strikeExplosionRoutes = require("./routes/strikeExplosion.routes");
+
 // ==========================================
 // APP INITIALIZATION
 // ==========================================
@@ -31,10 +36,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-app.use("/api", require("./routes/search.routes"));
-app.use("/api", require("./routes/optionSignal.routes"));
-app.use("/api", require("./routes/exitEngine.routes"));
-app.use("/api", require("./routes/strikeExplosion.routes"));
+app.use("/api/search", searchRoutes);
+app.use("/api/option-signal", optionSignalRoutes);
+app.use("/api/exit-engine", exitEngineRoutes);
+app.use("/api/strike/explosion", strikeExplosionRoutes);
 
 // ==========================================
 // GLOBAL STATE
