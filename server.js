@@ -31,6 +31,11 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.use("/api", require("./routes/search.routes"));
+app.use("/api", require("./routes/optionSignal.routes"));
+app.use("/api", require("./routes/exitEngine.routes"));
+app.use("/api", require("./routes/strikeExplosion.routes"));
+
 // ==========================================
 // GLOBAL STATE
 // ==========================================
