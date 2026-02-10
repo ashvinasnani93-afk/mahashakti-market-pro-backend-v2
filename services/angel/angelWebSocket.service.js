@@ -22,6 +22,25 @@ let lastTickTimestamp = Date.now();
 let tickCount = 0;
 
 // ==========================================
+// MARKET HOURS CHECK (IST)
+// ==========================================
+function isMarketOpen() {
+  const now = new Date();
+  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
+  const ist = new Date(utc + 5.5 * 60 * 60000);
+
+  const day = ist.getDay();
+  const minutes = ist.getHours() * 60 + ist.getMinutes();
+
+  if (day === 0 || day === 6) return false;
+
+  const open = 9 * 60 + 15;
+  const close = 15 * 60 + 30;
+
+  return minutes >= open && minutes <= close;
+}
+
+// ==========================================
 // ADD: GLOBAL OHLC CACHE (MCX + NSE + BSE)
 // ==========================================
 if (!global.latestOHLC) {
@@ -34,7 +53,7 @@ if (!global.latestOHLC) {
 function setClientCode(clientCode) {
   globalClientCode = clientCode;
 }
-
+let staleCheckInterval = null;
 // ==========================================
 // SET SESSION TOKENS (SAFE RECONNECT SUPPORT)
 // ==========================================
@@ -68,7 +87,7 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
 
     ws = new WebSocket(wsUrl, {
       headers: {
-       "Authorization": `Bearer ${global.angelSession.jwtToken}`,
+      "Authorization": `Bearer ${global.angelSession?.jwtToken}`,
         "x-api-key": globalApiKey,
         "x-client-code": globalClientCode,
         "x-feed-token": globalFeedToken
@@ -81,32 +100,17 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
   if (global.angelSession) {
     global.angelSession.wsConnected = true;
   }
+    
+   lastTickTimestamp = Date.now();
+tickCount = 0; 
 
   // Start heartbeat
   startHeartbeat();
 
   // Subscribe to default symbols
   subscribeToSymbols();
+  startStaleMonitor();  
 });
-
-      // ==========================================
-// STALE CONNECTION DETECTOR - 30 sec check
-// ==========================================
-setInterval(() => {
-  const age = Date.now() - lastTickTimestamp;
-  
-  console.log(`[WS] Heartbeat: Last tick ${Math.round(age/1000)}s ago, Total: ${tickCount}`);
-  
-  if (age > 60000) {
-    console.log("⚠️ NO TICKS FOR 60s — FORCE RECONNECTING WS");
-    if (ws) {
-      try { ws.terminate(); } catch(e) {}
-    }
-    // Reconnect will be triggered by onclose handler
-  }
-}, 30000);
-
-      global.angelSession.wsConnected = true;
 
     ws.on("message", (data) => {
 
@@ -141,24 +145,67 @@ setInterval(() => {
 
       stopHeartbeat();
 
-     // Reconnect after 5 seconds (SAFE RECONNECT)
-reconnectTimeout = setTimeout(() => {
-  console.log("🔄 Reconnecting WebSocket...");
+      if (staleCheckInterval) {
+  clearInterval(staleCheckInterval);
+  staleCheckInterval = null;
+}
 
-  if (global.angelSession) {
-    startAngelWebSocket(
-      global.angelSession.feedToken,
-      global.angelSession.clientCode,
-      process.env.ANGEL_API_KEY
-    );
-  }
+    // Reconnect only if market open
+if (isMarketOpen()) {
 
-}, 5000);
+  reconnectTimeout = setTimeout(() => {
+    console.log("🔄 Reconnecting WebSocket...");
+
+    if (global.angelSession) {
+      startAngelWebSocket(
+        global.angelSession.feedToken,
+        global.angelSession.clientCode,
+        process.env.ANGEL_API_KEY
+      );
+    }
+
+  }, 5000);
+
+} else {
+  console.log("🕒 Market closed — no reconnect needed");
+}
     });
 
   } catch (err) {
     console.error("❌ WebSocket Start Error:", err.message);
   }
+}
+
+// ==========================================
+// SMART STALE MONITOR
+// ==========================================
+function startStaleMonitor() {
+
+  if (staleCheckInterval) {
+    clearInterval(staleCheckInterval);
+  }
+
+  staleCheckInterval = setInterval(() => {
+
+    const age = Date.now() - lastTickTimestamp;
+
+    console.log(`[WS] Heartbeat: Last tick ${Math.round(age/1000)}s ago, Total: ${tickCount}`);
+
+    if (age > 60000) {
+
+      if (!isMarketOpen()) {
+        console.log("🕒 Market closed — skipping WS reconnect");
+        return;
+      }
+
+      console.log("⚠️ NO TICKS FOR 60s — FORCE RECONNECTING WS");
+
+      if (ws) {
+        try { ws.terminate(); } catch(e) {}
+      }
+    }
+
+  }, 30000);
 }
 
 // ==========================================
