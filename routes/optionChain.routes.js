@@ -46,9 +46,27 @@ router.get("/", async (req, res) => {
         status: false,
         message: chain?.message || "Failed to build option chain",
         symbol: upperSymbol,
-        hint: "Make sure Angel One login is successful and symbol has options available"
+        
       });
     }
+
+  // ==========================================
+    // 🔥 STRIKE WINDOW FILTER (ATM ± 25)
+    // ==========================================
+    const STRIKE_WINDOW = 25; // 25 above + 25 below
+    const step = chain.type === "INDEX" ? 50 : 10; // Basic step logic
+
+    const atm = chain.atmStrike;
+
+    const minStrike = atm - (STRIKE_WINDOW * step);
+    const maxStrike = atm + (STRIKE_WINDOW * step);
+
+    const filteredChain = chain.chain.filter(strike =>
+      strike.strike >= minStrike &&
+      strike.strike <= maxStrike
+    );
+
+    console.log(`⚡ Strike reduced from ${chain.chain.length} → ${filteredChain.length}`);
 
     return res.json({
       status: true,
@@ -58,10 +76,10 @@ router.get("/", async (req, res) => {
       availableExpiries: chain.availableExpiries,
       spot: chain.spot,
       atmStrike: chain.atmStrike,
-      totalStrikes: chain.totalStrikes,
-      chain: chain.chain,
+      totalStrikes: filteredChain.length,
+      chain: filteredChain,
       timestamp: Date.now(),
-      note: "Option chain is context-only. No execution or recommendation."
+      note: "Optimized 50-strike window active"
     });
 
   } catch (err) {
