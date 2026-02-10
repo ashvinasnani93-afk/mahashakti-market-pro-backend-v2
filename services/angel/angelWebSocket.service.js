@@ -15,31 +15,6 @@ let globalClientCode = null;
 let globalFeedToken = null;
 let globalApiKey = null;
 
-// ================================
-// STALE DETECTION VARIABLES
-// ================================
-let lastTickTimestamp = Date.now();
-let tickCount = 0;
-
-// ==========================================
-// MARKET HOURS CHECK (IST)
-// ==========================================
-function isMarketOpen() {
-  const now = new Date();
-  const utc = now.getTime() + now.getTimezoneOffset() * 60000;
-  const ist = new Date(utc + 5.5 * 60 * 60000);
-
-  const day = ist.getDay();
-  const minutes = ist.getHours() * 60 + ist.getMinutes();
-
-  if (day === 0 || day === 6) return false;
-
-  const open = 9 * 60 + 15;
-  const close = 15 * 60 + 30;
-
-  return minutes >= open && minutes <= close;
-}
-
 // ==========================================
 // ADD: GLOBAL OHLC CACHE (MCX + NSE + BSE)
 // ==========================================
@@ -53,7 +28,7 @@ if (!global.latestOHLC) {
 function setClientCode(clientCode) {
   globalClientCode = clientCode;
 }
-let staleCheckInterval = null;
+
 // ==========================================
 // SET SESSION TOKENS (SAFE RECONNECT SUPPORT)
 // ==========================================
@@ -83,49 +58,34 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
 
     console.log("🔌 Connecting to Angel WebSocket...");
 
-  const wsUrl = `wss://smartapisocket.angelone.in/smart-stream`;
+    const wsUrl = `wss://smartapisocket.angelone.in/smart-stream`;
 
-if (!global.angelSession || !global.angelSession.jwtToken) {
-  throw new Error("JWT Token missing before WebSocket connect");
-}
+    ws = new WebSocket(wsUrl, {
+      headers: {
+        "Authorization": `Bearer ${globalFeedToken}`,
+        "x-api-key": globalApiKey,
+        "x-client-code": globalClientCode,
+        "x-feed-token": globalFeedToken
+      }
+    });
 
-ws = new WebSocket(wsUrl, {
-  headers: {
-    "Authorization": `Bearer ${global.angelSession.jwtToken}`,
-    "x-api-key": globalApiKey,
-    "x-client-code": globalClientCode,
-    "x-feed-token": globalFeedToken
-  }
-});
+    ws.on("open", () => {
+      console.log("🟢 Angel WebSocket CONNECTED");
 
-  ws.on("open", () => {
-  console.log("🟢 Angel WebSocket CONNECTED");
+      if (!global.angelSession) {
+        global.angelSession = {};
+      }
 
-  if (global.angelSession) {
-    global.angelSession.wsConnected = true;
-  }
-    
-   lastTickTimestamp = Date.now();
-tickCount = 0; 
+      global.angelSession.wsConnected = true;
 
-  // Start heartbeat
-  startHeartbeat();
+      // Start heartbeat
+      startHeartbeat();
 
-  // Subscribe to default symbols
-  subscribeToSymbols();
-  startStaleMonitor();  
-});
+      // Subscribe to default symbols
+      subscribeToSymbols();
+    });
 
     ws.on("message", (data) => {
-
-      // STALE DETECTION - Update timestamp on every tick
-  lastTickTimestamp = Date.now();
-  tickCount++;
-  
-  // Log 1% of ticks for proof
-  if (Math.random() < 0.01) {
-    console.log("📊 LIVE TICK:", tickCount);
-  }
       try {
         handleWebSocketMessage(data);
       } catch (err) {
@@ -149,67 +109,20 @@ tickCount = 0;
 
       stopHeartbeat();
 
-      if (staleCheckInterval) {
-  clearInterval(staleCheckInterval);
-  staleCheckInterval = null;
-}
-
-    // Reconnect only if market open
-if (isMarketOpen()) {
-
-  reconnectTimeout = setTimeout(() => {
-    console.log("🔄 Reconnecting WebSocket...");
-
-    if (global.angelSession) {
-      startAngelWebSocket(
-        global.angelSession.feedToken,
-        global.angelSession.clientCode,
-        process.env.ANGEL_API_KEY
-      );
-    }
-
-  }, 5000);
-
-} else {
-  console.log("🕒 Market closed — no reconnect needed");
-}
+      // Reconnect after 5 seconds (SAFE RECONNECT)
+      reconnectTimeout = setTimeout(() => {
+        console.log("🔄 Reconnecting WebSocket...");
+        startAngelWebSocket(
+          globalFeedToken,
+          globalClientCode,
+          globalApiKey
+        );
+      }, 5000);
     });
 
   } catch (err) {
     console.error("❌ WebSocket Start Error:", err.message);
   }
-}
-
-// ==========================================
-// SMART STALE MONITOR
-// ==========================================
-function startStaleMonitor() {
-
-  if (staleCheckInterval) {
-    clearInterval(staleCheckInterval);
-  }
-
-  staleCheckInterval = setInterval(() => {
-
-    const age = Date.now() - lastTickTimestamp;
-
-    console.log(`[WS] Heartbeat: Last tick ${Math.round(age/1000)}s ago, Total: ${tickCount}`);
-
-    if (age > 60000) {
-
-      if (!isMarketOpen()) {
-        console.log("🕒 Market closed — skipping WS reconnect");
-        return;
-      }
-
-      console.log("⚠️ NO TICKS FOR 60s — FORCE RECONNECTING WS");
-
-      if (ws) {
-        try { ws.terminate(); } catch(e) {}
-      }
-    }
-
-  }, 30000);
 }
 
 // ==========================================
