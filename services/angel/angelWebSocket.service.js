@@ -83,16 +83,20 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
 
     console.log("🔌 Connecting to Angel WebSocket...");
 
-    const wsUrl = `wss://smartapisocket.angelone.in/smart-stream`;
+  const wsUrl = `wss://smartapisocket.angelone.in/smart-stream`;
 
-    ws = new WebSocket(wsUrl, {
-      headers: {
-      "Authorization": `Bearer ${global.angelSession?.jwtToken}`,
-        "x-api-key": globalApiKey,
-        "x-client-code": globalClientCode,
-        "x-feed-token": globalFeedToken
-      }
-    });
+if (!global.angelSession || !global.angelSession.jwtToken) {
+  throw new Error("JWT Token missing before WebSocket connect");
+}
+
+ws = new WebSocket(wsUrl, {
+  headers: {
+    "Authorization": `Bearer ${global.angelSession.jwtToken}`,
+    "x-api-key": globalApiKey,
+    "x-client-code": globalClientCode,
+    "x-feed-token": globalFeedToken
+  }
+});
 
   ws.on("open", () => {
   console.log("🟢 Angel WebSocket CONNECTED");
