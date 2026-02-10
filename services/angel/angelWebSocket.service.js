@@ -15,6 +15,12 @@ let globalClientCode = null;
 let globalFeedToken = null;
 let globalApiKey = null;
 
+// ================================
+// STALE DETECTION VARIABLES
+// ================================
+let lastTickTimestamp = Date.now();
+let tickCount = 0;
+
 // ==========================================
 // ADD: GLOBAL OHLC CACHE (MCX + NSE + BSE)
 // ==========================================
@@ -62,30 +68,56 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
 
     ws = new WebSocket(wsUrl, {
       headers: {
-        "Authorization": `Bearer ${globalFeedToken}`,
+       "Authorization": `Bearer ${global.angelSession.jwtToken}`,
         "x-api-key": globalApiKey,
         "x-client-code": globalClientCode,
         "x-feed-token": globalFeedToken
       }
     });
 
-    ws.on("open", () => {
-      console.log("🟢 Angel WebSocket CONNECTED");
+  ws.on("open", () => {
+  console.log("🟢 Angel WebSocket CONNECTED");
 
-      if (!global.angelSession) {
-        global.angelSession = {};
-      }
+  if (global.angelSession) {
+    global.angelSession.wsConnected = true;
+  }
+
+  // Start heartbeat
+  startHeartbeat();
+
+  // Subscribe to default symbols
+  subscribeToSymbols();
+});
+
+      // ==========================================
+// STALE CONNECTION DETECTOR - 30 sec check
+// ==========================================
+setInterval(() => {
+  const age = Date.now() - lastTickTimestamp;
+  
+  console.log(`[WS] Heartbeat: Last tick ${Math.round(age/1000)}s ago, Total: ${tickCount}`);
+  
+  if (age > 60000) {
+    console.log("⚠️ NO TICKS FOR 60s — FORCE RECONNECTING WS");
+    if (ws) {
+      try { ws.terminate(); } catch(e) {}
+    }
+    // Reconnect will be triggered by onclose handler
+  }
+}, 30000);
 
       global.angelSession.wsConnected = true;
 
-      // Start heartbeat
-      startHeartbeat();
-
-      // Subscribe to default symbols
-      subscribeToSymbols();
-    });
-
     ws.on("message", (data) => {
+
+      // STALE DETECTION - Update timestamp on every tick
+  lastTickTimestamp = Date.now();
+  tickCount++;
+  
+  // Log 1% of ticks for proof
+  if (Math.random() < 0.01) {
+    console.log("📊 LIVE TICK:", tickCount);
+  }
       try {
         handleWebSocketMessage(data);
       } catch (err) {
@@ -109,15 +141,19 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
 
       stopHeartbeat();
 
-      // Reconnect after 5 seconds (SAFE RECONNECT)
-      reconnectTimeout = setTimeout(() => {
-        console.log("🔄 Reconnecting WebSocket...");
-        startAngelWebSocket(
-          globalFeedToken,
-          globalClientCode,
-          globalApiKey
-        );
-      }, 5000);
+     // Reconnect after 5 seconds (SAFE RECONNECT)
+reconnectTimeout = setTimeout(() => {
+  console.log("🔄 Reconnecting WebSocket...");
+
+  if (global.angelSession) {
+    startAngelWebSocket(
+      global.angelSession.feedToken,
+      global.angelSession.clientCode,
+      process.env.ANGEL_API_KEY
+    );
+  }
+
+}, 5000);
     });
 
   } catch (err) {
