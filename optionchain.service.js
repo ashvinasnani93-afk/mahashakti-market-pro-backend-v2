@@ -170,40 +170,16 @@ async function buildOptionChainFromAngel(symbol, expiryDate = null) {
       });
     });
 
-   // ==========================================
-// LIMIT TO 50 STRIKES (ATM ±25)
-// ==========================================
-
-let finalStrikeMap = strikeMap;
-let finalStrikes = strikes;
-
-if (atmStrike && strikes.length > 50) {
-
-  const atmIndex = strikes.findIndex(s => s === atmStrike);
-
-  let start = Math.max(0, atmIndex - 25);
-  let end = Math.min(strikes.length, atmIndex + 25);
-
-  const slicedStrikes = strikes.slice(start, end);
-
-  finalStrikeMap = {};
-  slicedStrikes.forEach(strike => {
-    finalStrikeMap[strike] = strikeMap[strike];
-  });
-
-  finalStrikes = slicedStrikes;
-}
-
-   return {
-  status: true,
-  type: symbolType,
-  expiry: selectedExpiry,
-  availableExpiries,
-  spot: spotPrice,
-  atmStrike,
-  totalStrikes: finalStrikes.length,
-  chain: finalStrikeMap
-}; 
+    return {
+      status: true,
+      type: symbolType,
+      expiry: selectedExpiry,
+      availableExpiries,
+      spot: spotPrice,
+      atmStrike,
+      totalStrikes: strikes.length,
+      chain: strikeMap
+    };
 
   } catch (err) {
     console.error("❌ buildOptionChainFromAngel error:", err.message);
