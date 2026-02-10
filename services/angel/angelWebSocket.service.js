@@ -15,6 +15,12 @@ let globalClientCode = null;
 let globalFeedToken = null;
 let globalApiKey = null;
 
+// ================================
+// STALE DETECTION VARIABLES
+// ================================
+let lastTickTimestamp = Date.now();
+let tickCount = 0;
+
 // ==========================================
 // ADD: GLOBAL OHLC CACHE (MCX + NSE + BSE)
 // ==========================================
@@ -62,7 +68,7 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
 
     ws = new WebSocket(wsUrl, {
       headers: {
-        "Authorization": `Bearer ${globalFeedToken}`,
+        "Authorization": `Bearer ${global.angelSession?.jwtToken}`,
         "x-api-key": globalApiKey,
         "x-client-code": globalClientCode,
         "x-feed-token": globalFeedToken
@@ -85,7 +91,26 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
       subscribeToSymbols();
     });
 
+    // ===============================
+// WEBSOCKET STALE HEALTH CHECK
+// ===============================
+setInterval(() => {
+  const age = Date.now() - lastTickTimestamp;
+
+  console.log(`[WS HEALTH] Last tick ${Math.round(age/1000)}s ago | Total ticks: ${tickCount}`);
+
+  if (age > 60000) {
+    console.log("⚠️ STALE WS DETECTED - TERMINATING");
+    try { ws.terminate(); } catch (e) {}
+  }
+}, 30000);
+
     ws.on("message", (data) => {
+
+     // Update tick timestamp
+lastTickTimestamp = Date.now();
+tickCount++; 
+      
       try {
         handleWebSocketMessage(data);
       } catch (err) {
