@@ -158,15 +158,8 @@ async function performAngelLogin() {
 );
 
       console.log("✅ Angel One Login SUCCESS");
-console.log("🔐 JWT Token:", result.jwtToken.substring(0, 20) + "...");
-console.log("📡 Feed Token:", result.feedToken.substring(0, 20) + "...");
-
-// 🔥 START WEBSOCKET AFTER LOGIN
-startAngelWebSocket(
-  global.angelSession.feedToken,
-  global.angelSession.clientCode,
-  process.env.ANGEL_API_KEY
-);
+      console.log("📡 JWT Token:", result.jwtToken.substring(0, 20) + "...");
+      console.log("📡 Feed Token:", result.feedToken.substring(0, 20) + "...");
 
       return true;
     } else {
