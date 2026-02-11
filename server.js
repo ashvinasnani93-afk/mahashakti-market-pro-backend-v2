@@ -2,6 +2,7 @@
 // MAHASHAKTI MARKET PRO - MAIN SERVER
 // REAL ANGEL ONE API INTEGRATION
 // Complete Option Chains + Signals
+// FIXED: WebSocket starts AFTER login
 // ==========================================
 // Load environment variables FIRST
 require('dotenv').config();
@@ -12,7 +13,7 @@ const cors = require("cors");
 // Angel One Services
 const { loginWithPassword, generateToken } = require("./services/angel/angelAuth.service");
 const { setGlobalTokens, getLtpData } = require("./services/angel/angelApi.service");
-const { startAngelWebSocket } = require("./services/angel/angelWebSocket.service");
+const { startAngelWebSocket, getWebSocketStatus } = require("./services/angel/angelWebSocket.service");
 
 // Token & Symbol Services
 const { initializeTokenService } = require("./token.service");
@@ -83,13 +84,19 @@ app.get("/health", (req, res) => {
 });
 
 // ==========================================
-// SYSTEM STATUS
+// SYSTEM STATUS (ENHANCED WITH WS STATUS)
 // ==========================================
 app.get("/api/status", (req, res) => {
+  // Get real WebSocket status
+  const wsStatus = getWebSocketStatus();
+  
   res.json({
     status: true,
     angelLogin: global.angelSession.isLoggedIn,
-    wsConnected: global.angelSession.wsConnected,
+    wsConnected: wsStatus.connected && !wsStatus.isStale,  // True only if connected AND not stale
+    isStale: wsStatus.isStale,
+    lastTickAge: wsStatus.lastTickAge,
+    tickCount: wsStatus.tickCount,
     jwtToken: global.angelSession.jwtToken ? "SET" : "NOT_SET",
     feedToken: global.angelSession.feedToken ? "SET" : "NOT_SET",
     ltpCount: Object.keys(global.latestLTP).length,
@@ -151,11 +158,11 @@ async function performAngelLogin() {
       global.angelSession.isLoggedIn = true;
 
       // Set tokens for API service
-     setGlobalTokens(
-  result.jwtToken,
-  ANGEL_API_KEY,
-  result.clientCode
-);
+      setGlobalTokens(
+        result.jwtToken,
+        ANGEL_API_KEY,
+        result.clientCode
+      );
 
       console.log("✅ Angel One Login SUCCESS");
       console.log("📡 JWT Token:", result.jwtToken.substring(0, 20) + "...");
@@ -195,6 +202,15 @@ async function autoRefreshToken() {
       setGlobalTokens(result.jwtToken, process.env.ANGEL_API_KEY);
 
       console.log("✅ Token Refreshed");
+      
+      // ✅ FIX: Restart WebSocket with new tokens
+      console.log("🔄 Restarting WebSocket with new tokens...");
+      startAngelWebSocket(
+        result.feedToken,
+        global.angelSession.clientCode,
+        process.env.ANGEL_API_KEY
+      );
+      
     } else {
       console.error("❌ Token Refresh Failed");
       // Re-login
@@ -222,7 +238,7 @@ app.listen(PORT, async () => {
   console.log(`🌐 URL: http://localhost:${PORT}`);
   console.log("=".repeat(50));
 
-try {
+  try {
     // Step 1: Login to Angel One FIRST
     const loginSuccess = await performAngelLogin();
 
@@ -235,6 +251,16 @@ try {
     console.log("📥 Loading Option Master...");
     await initializeTokenService();
     console.log("✅ Option Master Loaded");
+
+    // ==========================================
+    // ✅ FIX: START WEBSOCKET AFTER LOGIN SUCCESS
+    // ==========================================
+    console.log("🔌 Starting WebSocket connection...");
+    startAngelWebSocket(
+      global.angelSession.feedToken,
+      global.angelSession.clientCode,
+      process.env.ANGEL_API_KEY
+    );
 
     // Step 3: System ready
     console.log("🟢 SYSTEM READY: Live LTP + Option Chain + Signals");
