@@ -143,25 +143,32 @@ router.get("/", async (req, res) => {
     // Safe global cache init
     global.latestLTP = global.latestLTP || {};
 
-    // Check cache - but NEVER return if ltp is null/undefined
+    // Check cache - return ONLY if fresh (< 10 seconds old)
     if (!force && global.latestLTP[upperSymbol]) {
       const cached = global.latestLTP[upperSymbol];
-
+      const cacheAge = Date.now() - (cached.timestamp || 0);
+      
+      // Cache must be:
+      // 1. Valid LTP
+      // 2. Fresh (< 10 seconds old)
       if (
         cached.ltp !== null &&
         cached.ltp !== undefined &&
         !isNaN(cached.ltp) &&
-        cached.ltp > 0
+        cached.ltp > 0 &&
+        cacheAge < 10000  // ✅ FIX: Only use cache if < 10 seconds old
       ) {
-        console.log(`[LTP] ✅ Cache hit: ${upperSymbol} = ${cached.ltp}`);
+        console.log(`[LTP] ✅ Fresh cache hit: ${upperSymbol} = ${cached.ltp} (${Math.round(cacheAge/1000)}s old)`);
         return res.json({
           status: true,
           symbol: upperSymbol,
           type: symbolType,
           ...cached,
-          source: "CACHE",
+          source: cacheAge < 3000 ? "WEBSOCKET" : "CACHE",  // Label based on freshness
           timestamp: cached.timestamp || Date.now()
         });
+      } else if (cacheAge >= 10000) {
+        console.log(`[LTP] ⚠️ Cache stale (${Math.round(cacheAge/1000)}s old), fetching fresh...`);
       } else {
         console.log("[LTP] ⚠️ Cache invalid (null/0), deleting...");
         delete global.latestLTP[upperSymbol];
