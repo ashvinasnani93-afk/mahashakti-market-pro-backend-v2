@@ -13,7 +13,7 @@ const cors = require("cors");
 // Angel One Services
 const { loginWithPassword, generateToken } = require("./services/angel/angelAuth.service");
 const { setGlobalTokens, getLtpData } = require("./services/angel/angelApi.service");
-const { startAngelWebSocket, getWebSocketStatus } = require("./services/angel/angelWebSocket.service");
+const { startAngelWebSocket, getWebSocketStatus, subscribeTokens, unsubscribeTokens, getSubscriptionCount } = require("./services/angel/angelWebSocket.service");
 
 // Token & Symbol Services
 const { initializeTokenService } = require("./token.service");
@@ -93,10 +93,12 @@ app.get("/api/status", (req, res) => {
   res.json({
     status: true,
     angelLogin: global.angelSession.isLoggedIn,
-    wsConnected: wsStatus.connected && !wsStatus.isStale,  // True only if connected AND not stale
+    wsConnected: wsStatus.connected && !wsStatus.isStale,
     isStale: wsStatus.isStale,
     lastTickAge: wsStatus.lastTickAge,
     tickCount: wsStatus.tickCount,
+    subscriptionCount: wsStatus.subscriptionCount,
+    ltpCacheSize: wsStatus.ltpCacheSize,
     jwtToken: global.angelSession.jwtToken ? "SET" : "NOT_SET",
     feedToken: global.angelSession.feedToken ? "SET" : "NOT_SET",
     ltpCount: Object.keys(global.latestLTP).length,
@@ -112,6 +114,76 @@ app.use("/api/option-chain", optionChainRoutes);
 app.use("/api/signal", signalRoutes);
 app.use("/api/signal/intel", signalIntelRoutes);
 app.use("/api/ltp", ltpRoutes);
+
+// ==========================================
+// DYNAMIC SUBSCRIPTION ENDPOINTS
+// ==========================================
+
+// Subscribe tokens (for option chain, scanner)
+app.post("/api/ws/subscribe", (req, res) => {
+  try {
+    const { tokens, source } = req.body;
+    
+    if (!tokens || !Array.isArray(tokens)) {
+      return res.status(400).json({
+        status: false,
+        error: "tokens array required"
+      });
+    }
+
+    const success = subscribeTokens(tokens, source || "api");
+    
+    res.json({
+      status: success,
+      subscribed: tokens.length,
+      totalSubscriptions: getSubscriptionCount()
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: false,
+      error: err.message
+    });
+  }
+});
+
+// Unsubscribe tokens (when leaving screen)
+app.post("/api/ws/unsubscribe", (req, res) => {
+  try {
+    const { tokens, source } = req.body;
+    
+    if (!tokens || !Array.isArray(tokens)) {
+      return res.status(400).json({
+        status: false,
+        error: "tokens array required"
+      });
+    }
+
+    const success = unsubscribeTokens(tokens, source || "api");
+    
+    res.json({
+      status: success,
+      unsubscribed: tokens.length,
+      remainingSubscriptions: getSubscriptionCount()
+    });
+  } catch (err) {
+    res.status(500).json({
+      status: false,
+      error: err.message
+    });
+  }
+});
+
+// Get subscription status
+app.get("/api/ws/subscriptions", (req, res) => {
+  const wsStatus = getWebSocketStatus();
+  res.json({
+    status: true,
+    count: wsStatus.subscriptionCount,
+    ltpCacheSize: wsStatus.ltpCacheSize,
+    connected: wsStatus.connected,
+    tickCount: wsStatus.tickCount
+  });
+});
 
 // ==========================================
 // ERROR HANDLER
