@@ -1,7 +1,7 @@
 // ==========================================
 // ANGEL ONE WEBSOCKET SERVICE
 // Real-Time Market Data Feed
-// FIXED VERSION - Binary Decode Fix + FULL OHLC SUPPORT
+// FIXED VERSION - Auth Header + Stale Detection
 // ==========================================
 
 const WebSocket = require("ws");
@@ -9,11 +9,18 @@ const WebSocket = require("ws");
 let ws = null;
 let heartbeatInterval = null;
 let reconnectTimeout = null;
+let staleCheckInterval = null;
 
 // 🔒 GLOBAL MEMORY (58-FILE BASELINE COMPATIBLE)
 let globalClientCode = null;
 let globalFeedToken = null;
 let globalApiKey = null;
+
+// ==========================================
+// ✅ FIX 1: TICK MONITORING VARIABLES
+// ==========================================
+let lastTickTimestamp = Date.now();
+let tickCount = 0;
 
 // ==========================================
 // ADD: GLOBAL OHLC CACHE (MCX + NSE + BSE)
@@ -60,12 +67,16 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
 
     const wsUrl = `wss://smartapisocket.angelone.in/smart-stream`;
 
+    // ==========================================
+    // ✅ FIX 2: CORRECT AUTHORIZATION HEADER
+    // Use jwtToken for Authorization, NOT feedToken
+    // ==========================================
     ws = new WebSocket(wsUrl, {
       headers: {
-        "Authorization": `Bearer ${globalFeedToken}`,
+        "Authorization": `Bearer ${global.angelSession.jwtToken}`,  // ✅ FIXED: Use jwtToken
         "x-api-key": globalApiKey,
         "x-client-code": globalClientCode,
-        "x-feed-token": globalFeedToken
+        "x-feed-token": globalFeedToken  // feedToken goes here
       }
     });
 
@@ -77,9 +88,16 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
       }
 
       global.angelSession.wsConnected = true;
+      lastTickTimestamp = Date.now();  // Reset on connect
+      tickCount = 0;
 
       // Start heartbeat
       startHeartbeat();
+
+      // ==========================================
+      // ✅ FIX 3: START STALE CHECK AFTER OPEN
+      // ==========================================
+      startStaleCheck();
 
       // Subscribe to default symbols
       subscribeToSymbols();
@@ -108,6 +126,7 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
       }
 
       stopHeartbeat();
+      stopStaleCheck();
 
       // Reconnect after 5 seconds (SAFE RECONNECT)
       reconnectTimeout = setTimeout(() => {
@@ -130,6 +149,16 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
 // ==========================================
 function handleWebSocketMessage(data) {
   try {
+    // ==========================================
+    // ✅ FIX 4: UPDATE TICK TIMESTAMP ON EVERY MESSAGE
+    // ==========================================
+    lastTickTimestamp = Date.now();
+    tickCount++;
+
+    // Log every 100 ticks for verification
+    if (tickCount % 100 === 0) {
+      console.log(`📊 Tick count: ${tickCount}`);
+    }
 
     // 51 BYTE LTP PACKETS
     if (Buffer.isBuffer(data) && data.length >= 51 && data.length < 140) {
@@ -176,7 +205,7 @@ function decodeBinaryLTP(buffer) {
 
     const tokenStr = buffer
       .toString("utf8", 2, 27)
-      .replace(/\0/g, "")
+      .replace(//g, "")
       .trim();
 
     return {
@@ -196,7 +225,7 @@ function decodeBinaryFULL(buffer) {
   try {
     const tokenStr = buffer
       .toString("utf8", 2, 27)
-      .replace(/\0/g, "")
+      .replace(//g, "")
       .trim();
 
     const ltp = buffer.readInt32LE(43) / 100;
@@ -288,13 +317,13 @@ function subscribeToSymbols() {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
     const payload = {
-      action: "subscribe",
+      action: 1,  // Subscribe action
       params: {
-        mode: 1,
+        mode: 1,  // LTP mode
         tokenList: [
           {
             exchangeType: 1,
-            tokens: ["99926000", "99926009", "99926037"]
+            tokens: ["99926000", "99926009", "99926037"]  // NIFTY, BANKNIFTY, FINNIFTY
           }
         ]
       }
@@ -332,24 +361,57 @@ function stopHeartbeat() {
 }
 
 // ==========================================
+// ✅ FIX 5: STALE CONNECTION CHECK
+// ==========================================
+function startStaleCheck() {
+  stopStaleCheck();
+
+  staleCheckInterval = setInterval(() => {
+    const diff = Date.now() - lastTickTimestamp;
+
+    console.log(`[WS] Heartbeat: Last tick ${Math.round(diff/1000)}s ago, Total ticks: ${tickCount}`);
+
+    // If no ticks for 60 seconds, connection is stale
+    if (diff > 60000) {
+      console.log("⚠️ WebSocket STALE (no ticks for 60s). Force reconnecting...");
+      
+      if (ws) {
+        try {
+          ws.close();
+        } catch (e) {
+          ws.terminate();
+        }
+      }
+    }
+  }, 30000);
+}
+
+function stopStaleCheck() {
+  if (staleCheckInterval) {
+    clearInterval(staleCheckInterval);
+    staleCheckInterval = null;
+  }
+}
+
+// ==========================================
 // SUBSCRIBE TO ADDITIONAL TOKEN (LTP MODE)
 // ==========================================
 function subscribeToToken(token, exchangeType = 1) {
   try {
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
 
- const payload = {
-  action: 1,
-  params: {
-    mode: 1,
-    tokenList: [
-      {
-        exchangeType: exchangeType,
-        tokens: [String(token)]
+    const payload = {
+      action: 1,
+      params: {
+        mode: 1,
+        tokenList: [
+          {
+            exchangeType: exchangeType,
+            tokens: [String(token)]
+          }
+        ]
       }
-    ]
-  }
-};
+    };
     ws.send(JSON.stringify(payload));
 
     // AUTO-UPGRADE MCX TO FULL MODE
@@ -373,18 +435,18 @@ function subscribeFullToken(token, exchangeType = 5) {
   try {
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
 
-   const payload = {
-  action: 1,
-  params: {
-    mode: 3,
-    tokenList: [
-      {
-        exchangeType: exchangeType,
-        tokens: [String(token)]
+    const payload = {
+      action: 1,
+      params: {
+        mode: 3,
+        tokenList: [
+          {
+            exchangeType: exchangeType,
+            tokens: [String(token)]
+          }
+        ]
       }
-    ]
-  }
-};
+    };
 
     ws.send(JSON.stringify(payload));
     console.log("📊 FULL MODE Subscribed:", token);
@@ -397,6 +459,18 @@ function subscribeFullToken(token, exchangeType = 5) {
 }
 
 // ==========================================
+// GET WEBSOCKET STATUS (NEW)
+// ==========================================
+function getWebSocketStatus() {
+  return {
+    connected: global.angelSession?.wsConnected || false,
+    lastTickAge: Date.now() - lastTickTimestamp,
+    tickCount: tickCount,
+    isStale: (Date.now() - lastTickTimestamp) > 60000
+  };
+}
+
+// ==========================================
 // EXPORTS
 // ==========================================
 module.exports = {
@@ -404,5 +478,6 @@ module.exports = {
   subscribeToToken,
   subscribeFullToken,
   setClientCode,
-  setSessionTokens
+  setSessionTokens,
+  getWebSocketStatus
 };
