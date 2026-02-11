@@ -11,42 +11,32 @@ let heartbeatInterval = null;
 let reconnectTimeout = null;
 let staleCheckInterval = null;
 
-// 🔒 GLOBAL MEMORY (58-FILE BASELINE COMPATIBLE)
+// GLOBAL MEMORY (58-FILE BASELINE COMPATIBLE)
 let globalClientCode = null;
 let globalFeedToken = null;
 let globalApiKey = null;
 
-// ==========================================
-// ✅ FIX 1: TICK MONITORING VARIABLES
-// ==========================================
+// TICK MONITORING VARIABLES
 let lastTickTimestamp = Date.now();
 let tickCount = 0;
 
-// ==========================================
-// ADD: GLOBAL OHLC CACHE (MCX + NSE + BSE)
-// ==========================================
+// GLOBAL OHLC CACHE (MCX + NSE + BSE)
 if (!global.latestOHLC) {
   global.latestOHLC = {};
 }
 
-// ==========================================
 // SET CLIENT CODE FROM AUTH SERVICE
-// ==========================================
 function setClientCode(clientCode) {
   globalClientCode = clientCode;
 }
 
-// ==========================================
 // SET SESSION TOKENS (SAFE RECONNECT SUPPORT)
-// ==========================================
 function setSessionTokens(feedToken, apiKey) {
   globalFeedToken = feedToken;
   globalApiKey = apiKey;
 }
 
-// ==========================================
 // START WEBSOCKET CONNECTION
-// ==========================================
 function startAngelWebSocket(feedToken, clientCode, apiKey) {
   try {
     // Store for reconnects
@@ -59,67 +49,57 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
     }
 
     if (ws && ws.readyState === WebSocket.OPEN) {
-      console.log("⚠️ WebSocket already connected");
+      console.log("WebSocket already connected");
       return;
     }
 
-    console.log("🔌 Connecting to Angel WebSocket...");
+    console.log("Connecting to Angel WebSocket...");
 
-    const wsUrl = `wss://smartapisocket.angelone.in/smart-stream`;
+    const wsUrl = "wss://smartapisocket.angelone.in/smart-stream";
 
-    // ==========================================
-    // ✅ FIX 2: CORRECT AUTHORIZATION HEADER
-    // Use jwtToken for Authorization, NOT feedToken
-    // ==========================================
+    // CORRECT AUTHORIZATION HEADER - Use jwtToken NOT feedToken
     ws = new WebSocket(wsUrl, {
       headers: {
-        "Authorization": `Bearer ${global.angelSession.jwtToken}`,  // ✅ FIXED: Use jwtToken
+        "Authorization": "Bearer " + global.angelSession.jwtToken,
         "x-api-key": globalApiKey,
         "x-client-code": globalClientCode,
-        "x-feed-token": globalFeedToken  // feedToken goes here
+        "x-feed-token": globalFeedToken
       }
     });
 
-    ws.on("open", () => {
-      console.log("🟢 Angel WebSocket CONNECTED");
+    ws.on("open", function() {
+      console.log("Angel WebSocket CONNECTED");
 
       if (!global.angelSession) {
         global.angelSession = {};
       }
 
       global.angelSession.wsConnected = true;
-      lastTickTimestamp = Date.now();  // Reset on connect
+      lastTickTimestamp = Date.now();
       tickCount = 0;
 
-      // Start heartbeat
       startHeartbeat();
-
-      // ==========================================
-      // ✅ FIX 3: START STALE CHECK AFTER OPEN
-      // ==========================================
       startStaleCheck();
-
-      // Subscribe to default symbols
       subscribeToSymbols();
     });
 
-    ws.on("message", (data) => {
+    ws.on("message", function(data) {
       try {
         handleWebSocketMessage(data);
       } catch (err) {
-        console.error("❌ WS Message Error:", err.message);
+        console.error("WS Message Error:", err.message);
       }
     });
 
-    ws.on("error", (err) => {
-      console.error("❌ WebSocket Error:", err.message);
+    ws.on("error", function(err) {
+      console.error("WebSocket Error:", err.message);
       if (global.angelSession) {
         global.angelSession.wsConnected = false;
       }
     });
 
-    ws.on("close", () => {
-      console.log("🔴 WebSocket DISCONNECTED");
+    ws.on("close", function() {
+      console.log("WebSocket DISCONNECTED");
 
       if (global.angelSession) {
         global.angelSession.wsConnected = false;
@@ -128,85 +108,68 @@ function startAngelWebSocket(feedToken, clientCode, apiKey) {
       stopHeartbeat();
       stopStaleCheck();
 
-      // Reconnect after 5 seconds (SAFE RECONNECT)
-      reconnectTimeout = setTimeout(() => {
-        console.log("🔄 Reconnecting WebSocket...");
-        startAngelWebSocket(
-          globalFeedToken,
-          globalClientCode,
-          globalApiKey
-        );
+      // Reconnect after 5 seconds
+      reconnectTimeout = setTimeout(function() {
+        console.log("Reconnecting WebSocket...");
+        startAngelWebSocket(globalFeedToken, globalClientCode, globalApiKey);
       }, 5000);
     });
 
   } catch (err) {
-    console.error("❌ WebSocket Start Error:", err.message);
+    console.error("WebSocket Start Error:", err.message);
   }
 }
 
-// ==========================================
 // HANDLE WEBSOCKET MESSAGE
-// ==========================================
 function handleWebSocketMessage(data) {
   try {
-    // ==========================================
-    // ✅ FIX 4: UPDATE TICK TIMESTAMP ON EVERY MESSAGE
-    // ==========================================
+    // UPDATE TICK TIMESTAMP ON EVERY MESSAGE
     lastTickTimestamp = Date.now();
     tickCount++;
 
-    // Log every 100 ticks for verification
+    // Log every 100 ticks
     if (tickCount % 100 === 0) {
-      console.log(`📊 Tick count: ${tickCount}`);
+      console.log("Tick count: " + tickCount);
     }
 
     // 51 BYTE LTP PACKETS
     if (Buffer.isBuffer(data) && data.length >= 51 && data.length < 140) {
-      const ltp = decodeBinaryLTP(data);
+      var ltp = decodeBinaryLTP(data);
       if (ltp && ltp.token) {
         updateLTP(ltp.token, ltp.price);
       }
     }
-
     // FULL / SNAPQUOTE PACKETS
     else if (Buffer.isBuffer(data) && data.length >= 140) {
-      const ohlc = decodeBinaryFULL(data);
+      var ohlc = decodeBinaryFULL(data);
       if (ohlc && ohlc.token) {
         updateOHLC(ohlc);
       }
     }
-
     // JSON MESSAGE
     else {
-      const message = JSON.parse(data.toString());
-
+      var message = JSON.parse(data.toString());
       if (message.action === "subscribe" && message.result === "success") {
         console.log("Subscription confirmed");
       }
-
       if (message.ltp) {
         updateLTP(message.token || message.symboltoken, message.ltp);
       }
     }
-
   } catch (err) {
     // Silent
   }
 }
 
-// ==========================================
 // DECODE BINARY LTP (Angel Format)
-// ==========================================
 function decodeBinaryLTP(buffer) {
   try {
-    // Bytes 43-46: LTP in paise (Int32LE)
-    const pricePaise = buffer.readInt32LE(43);
-    const price = pricePaise / 100;
+    var pricePaise = buffer.readInt32LE(43);
+    var price = pricePaise / 100;
 
-    const tokenStr = buffer
-      .toString("utf8", 2, 27)
-      .replace(//g, "")
-      .trim();
+    var tokenStr = buffer.toString("utf8", 2, 27);
+    // Remove null characters
+    tokenStr = tokenStr.split(String.fromCharCode(0)).join("").trim();
 
     return {
       token: tokenStr,
@@ -217,41 +180,35 @@ function decodeBinaryLTP(buffer) {
   }
 }
 
-// ==========================================
 // DECODE FULL / SNAPQUOTE (REAL OHLC ONLY)
-// NO DUMMY / NO FALLBACK VALUES
-// ==========================================
 function decodeBinaryFULL(buffer) {
   try {
-    const tokenStr = buffer
-      .toString("utf8", 2, 27)
-      .replace(//g, "")
-      .trim();
+    var tokenStr = buffer.toString("utf8", 2, 27);
+    // Remove null characters
+    tokenStr = tokenStr.split(String.fromCharCode(0)).join("").trim();
 
-    const ltp = buffer.readInt32LE(43) / 100;
-    const open = buffer.readInt32LE(47) / 100;
-    const high = buffer.readInt32LE(51) / 100;
-    const low = buffer.readInt32LE(55) / 100;
-    const close = buffer.readInt32LE(59) / 100;
-    const volume = buffer.readInt32LE(63);
+    var ltp = buffer.readInt32LE(43) / 100;
+    var open = buffer.readInt32LE(47) / 100;
+    var high = buffer.readInt32LE(51) / 100;
+    var low = buffer.readInt32LE(55) / 100;
+    var close = buffer.readInt32LE(59) / 100;
+    var volume = buffer.readInt32LE(63);
 
     return {
       token: tokenStr,
-      ltp,
-      open,
-      high,
-      low,
-      close,
-      volume
+      ltp: ltp,
+      open: open,
+      high: high,
+      low: low,
+      close: close,
+      volume: volume
     };
   } catch (err) {
     return null;
   }
 }
 
-// ==========================================
 // UPDATE LTP IN GLOBAL CACHE
-// ==========================================
 function updateLTP(token, price) {
   try {
     if (!token || price === undefined || price === null) return;
@@ -272,15 +229,12 @@ function updateLTP(token, price) {
     if (!global.symbolOpenPrice[token]) {
       global.symbolOpenPrice[token] = Number(price);
     }
-
   } catch (err) {
-    console.error("❌ Update LTP Error:", err.message);
+    console.error("Update LTP Error:", err.message);
   }
 }
 
-// ==========================================
-// UPDATE OHLC IN GLOBAL CACHE (REAL DATA ONLY)
-// ==========================================
+// UPDATE OHLC IN GLOBAL CACHE
 function updateOHLC(data) {
   try {
     if (!data || !data.token) return;
@@ -303,51 +257,45 @@ function updateOHLC(data) {
       ltp: Number(data.ltp),
       timestamp: Date.now()
     };
-
   } catch (err) {
-    console.error("❌ Update OHLC Error:", err.message);
+    console.error("Update OHLC Error:", err.message);
   }
 }
 
-// ==========================================
 // SUBSCRIBE TO SYMBOLS
-// ==========================================
 function subscribeToSymbols() {
   try {
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
 
-    const payload = {
-      action: 1,  // Subscribe action
+    var payload = {
+      action: 1,
       params: {
-        mode: 1,  // LTP mode
+        mode: 1,
         tokenList: [
           {
             exchangeType: 1,
-            tokens: ["99926000", "99926009", "99926037"]  // NIFTY, BANKNIFTY, FINNIFTY
+            tokens: ["99926000", "99926009", "99926037"]
           }
         ]
       }
     };
 
     ws.send(JSON.stringify(payload));
-    console.log("📡 Subscribed to Index symbols");
+    console.log("Subscribed to Index symbols");
   } catch (err) {
-    console.error("❌ Subscribe Error:", err.message);
+    console.error("Subscribe Error:", err.message);
   }
 }
 
-// ==========================================
 // HEARTBEAT
-// ==========================================
 function startHeartbeat() {
   stopHeartbeat();
-
-  heartbeatInterval = setInterval(() => {
+  heartbeatInterval = setInterval(function() {
     if (ws && ws.readyState === WebSocket.OPEN) {
       try {
         ws.ping();
       } catch (err) {
-        console.error("❌ Heartbeat Error:", err.message);
+        console.error("Heartbeat Error:", err.message);
       }
     }
   }, 25000);
@@ -360,21 +308,15 @@ function stopHeartbeat() {
   }
 }
 
-// ==========================================
-// ✅ FIX 5: STALE CONNECTION CHECK
-// ==========================================
+// STALE CONNECTION CHECK
 function startStaleCheck() {
   stopStaleCheck();
+  staleCheckInterval = setInterval(function() {
+    var diff = Date.now() - lastTickTimestamp;
+    console.log("[WS] Heartbeat: Last tick " + Math.round(diff/1000) + "s ago, Total ticks: " + tickCount);
 
-  staleCheckInterval = setInterval(() => {
-    const diff = Date.now() - lastTickTimestamp;
-
-    console.log(`[WS] Heartbeat: Last tick ${Math.round(diff/1000)}s ago, Total ticks: ${tickCount}`);
-
-    // If no ticks for 60 seconds, connection is stale
     if (diff > 60000) {
-      console.log("⚠️ WebSocket STALE (no ticks for 60s). Force reconnecting...");
-      
+      console.log("WebSocket STALE (no ticks for 60s). Force reconnecting...");
       if (ws) {
         try {
           ws.close();
@@ -393,14 +335,13 @@ function stopStaleCheck() {
   }
 }
 
-// ==========================================
 // SUBSCRIBE TO ADDITIONAL TOKEN (LTP MODE)
-// ==========================================
-function subscribeToToken(token, exchangeType = 1) {
+function subscribeToToken(token, exchangeType) {
   try {
+    exchangeType = exchangeType || 1;
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
 
-    const payload = {
+    var payload = {
       action: 1,
       params: {
         mode: 1,
@@ -416,26 +357,25 @@ function subscribeToToken(token, exchangeType = 1) {
 
     // AUTO-UPGRADE MCX TO FULL MODE
     if (exchangeType === 5) {
-      setTimeout(() => {
+      setTimeout(function() {
         subscribeFullToken(token, 5);
       }, 500);
     }
 
     return true;
   } catch (err) {
-    console.error("❌ Subscribe Token Error:", err.message);
+    console.error("Subscribe Token Error:", err.message);
     return false;
   }
 }
 
-// ==========================================
 // SUBSCRIBE FULL MODE (OHLC SUPPORT)
-// ==========================================
-function subscribeFullToken(token, exchangeType = 5) {
+function subscribeFullToken(token, exchangeType) {
   try {
+    exchangeType = exchangeType || 5;
     if (!ws || ws.readyState !== WebSocket.OPEN) return false;
 
-    const payload = {
+    var payload = {
       action: 1,
       params: {
         mode: 3,
@@ -449,35 +389,30 @@ function subscribeFullToken(token, exchangeType = 5) {
     };
 
     ws.send(JSON.stringify(payload));
-    console.log("📊 FULL MODE Subscribed:", token);
+    console.log("FULL MODE Subscribed: " + token);
     return true;
-
   } catch (err) {
-    console.error("❌ FULL Subscribe Error:", err.message);
+    console.error("FULL Subscribe Error:", err.message);
     return false;
   }
 }
 
-// ==========================================
-// GET WEBSOCKET STATUS (NEW)
-// ==========================================
+// GET WEBSOCKET STATUS
 function getWebSocketStatus() {
   return {
-    connected: global.angelSession?.wsConnected || false,
+    connected: global.angelSession ? global.angelSession.wsConnected : false,
     lastTickAge: Date.now() - lastTickTimestamp,
     tickCount: tickCount,
     isStale: (Date.now() - lastTickTimestamp) > 60000
   };
 }
 
-// ==========================================
 // EXPORTS
-// ==========================================
 module.exports = {
-  startAngelWebSocket,
-  subscribeToToken,
-  subscribeFullToken,
-  setClientCode,
-  setSessionTokens,
-  getWebSocketStatus
+  startAngelWebSocket: startAngelWebSocket,
+  subscribeToToken: subscribeToToken,
+  subscribeFullToken: subscribeFullToken,
+  setClientCode: setClientCode,
+  setSessionTokens: setSessionTokens,
+  getWebSocketStatus: getWebSocketStatus
 };
