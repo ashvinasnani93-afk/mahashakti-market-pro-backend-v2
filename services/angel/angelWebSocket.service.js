@@ -247,7 +247,7 @@ function subscribeTokens(tokens, source) {
     var nsePayload = {
       action: 1,
       params: {
-        mode: 1,
+        mode: 3,
         tokenList: [{
           exchangeType: 1,
           tokens: nseTokens
