@@ -97,10 +97,13 @@ function extractOHLC(data) {
       null,
 
     // Additional fields
-    volume:
-      data.volume ||
-      data.tradedvolume ||
-      null,
+   volume:
+  data.volume ||
+  data.tradedVolume ||
+  data.tradeVolume ||
+  data.totalTradedVolume ||
+  data.tradedvolume ||
+  0,
 
     exchFeedTime:
       data.exchFeedTime ||
