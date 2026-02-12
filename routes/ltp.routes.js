@@ -277,11 +277,10 @@ router.get("/", async (req, res) => {
     console.log(`     Symbol: ${exactSymbol}`);
     console.log(`     Token: ${tokenToUse}`);
 
-   const result = await getFullQuote(...)
-      exchangeToUse,
-      exactSymbol,
-      tokenToUse
-    );
+  const result = await getFullQuote({
+      symbol: exactSymbol,
+      exchange: exchangeToUse
+    });
 
     if (result.success && result.data) {
       // Extract OHLC data using improved function
