@@ -7,7 +7,7 @@ const express = require("express");
 const router = express.Router();
 
 const {
-  getLtpData,
+  getFullQuote,   // 👈 NEW
   loadStockMaster,
   loadCommodityMaster,
   getCommodityToken,
@@ -277,7 +277,7 @@ router.get("/", async (req, res) => {
     console.log(`     Symbol: ${exactSymbol}`);
     console.log(`     Token: ${tokenToUse}`);
 
-    const result = await getLtpData(
+   const result = await getFullQuote(...)
       exchangeToUse,
       exactSymbol,
       tokenToUse
