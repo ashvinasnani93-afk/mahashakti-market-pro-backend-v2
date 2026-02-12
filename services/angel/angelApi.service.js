@@ -439,6 +439,60 @@ async function getLtpData(exchange, tradingSymbol, symbolToken) {
 }
 
 // ==========================================
+// GET FULL QUOTE (REAL MARKET DATA)
+// ==========================================
+async function getFullQuote(exchange, tradingSymbol, symbolToken) {
+  try {
+    if (!symbolToken) {
+      const ltpRes = await getLtpData(exchange, tradingSymbol);
+      if (!ltpRes.success) return ltpRes;
+      symbolToken = ltpRes.data.symboltoken;
+    }
+
+    const payload = {
+      mode: "FULL",
+      exchangeTokens: {
+        [exchange]: [symbolToken]
+      }
+    };
+
+    const response = await axios.post(
+      `${BASE_URL}/rest/secure/angelbroking/market/v1/quote`,
+      payload,
+      {
+        headers: getHeaders(),
+        timeout: 15000
+      }
+    );
+
+    if (response.data && response.data.status === true) {
+      const quote = response.data.data.fetched[0];
+
+      return {
+        success: true,
+        data: {
+          ltp: quote.ltp,
+          open: quote.open,
+          high: quote.high,
+          low: quote.low,
+          close: quote.close,
+          volume: quote.tradeVolume || quote.totalTradedVolume || 0,
+          oi: quote.openInterest || 0
+        }
+      };
+    }
+
+    throw new Error("Full quote fetch failed");
+
+  } catch (err) {
+    return {
+      success: false,
+      error: err.message
+    };
+  }
+}
+
+// ==========================================
 // RMS, ORDER BOOK, TRADE BOOK, PLACE ORDER
 // ==========================================
 async function getRMS() {
@@ -530,6 +584,7 @@ async function placeOrder(orderParams) {
 module.exports = {
   setGlobalTokens,
   getLtpData,
+ getFullQuote,   
   getRMS,
   getOrderBook,
   getTradeBook,
