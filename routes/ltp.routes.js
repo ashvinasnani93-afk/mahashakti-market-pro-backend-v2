@@ -93,6 +93,7 @@ function extractOHLC(data) {
       data.prevclose ||
       data.previousclose ||
       data.prev_close ||
+      data.close ||
       null,
 
     // Additional fields
