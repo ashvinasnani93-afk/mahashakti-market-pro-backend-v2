@@ -39,6 +39,9 @@ if (!global.latestLTP) {
 if (!global.latestOHLC) {
   global.latestOHLC = {};
 }
+if (!global.prevCloseCache) {
+  global.prevCloseCache = {};
+}
 
 // ==========================================
 // SET CLIENT CODE FROM AUTH SERVICE
@@ -459,20 +462,29 @@ function decodeBinaryFULL(buffer) {
 function updateLTP(token, price) {
   if (!token || price === undefined || price === null) return;
 
-  // Find symbol from subscription
   var sub = subscribedTokens.get(token);
   var symbol = sub ? sub.symbol : token;
 
+  var ltp = Number(price);
+  var prevClose = global.prevCloseCache[symbol] || null;
+
+  var change = null;
+  var percent = null;
+
+  if (prevClose && prevClose !== 0) {
+    change = ltp - prevClose;
+    percent = (change / prevClose) * 100;
+  }
+
   global.latestLTP[symbol] = {
-    ltp: Number(price),
+    ltp: ltp,
+    prevClose: prevClose,
+    change: change,
+    percent: percent,
     timestamp: Date.now()
   };
 
-  // Also store by token
-  global.latestLTP[token] = {
-    ltp: Number(price),
-    timestamp: Date.now()
-  };
+  global.latestLTP[token] = global.latestLTP[symbol];
 }
 
 // ==========================================
@@ -483,6 +495,11 @@ function updateOHLC(data) {
 
   var sub = subscribedTokens.get(data.token);
   var symbol = sub ? sub.symbol : data.token;
+
+  // Save prevClose from FULL packet
+if (data.close !== undefined && data.close !== null) {
+  global.prevCloseCache[symbol] = Number(data.close);
+}
 
   global.latestOHLC[symbol] = {
     ltp: Number(data.ltp),
