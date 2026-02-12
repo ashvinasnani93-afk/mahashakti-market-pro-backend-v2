@@ -325,30 +325,16 @@ router.get("/", async (req, res) => {
         !isNaN(ohlcData.ltp) &&
         ohlcData.ltp > 0
       ) {
-        global.latestLTP[upperSymbol] = {
-          ltp: Number(ohlcData.ltp),
-          open:
-            ohlcData.open !== null
-              ? Number(ohlcData.open)
-              : null,
-          high:
-            ohlcData.high !== null
-              ? Number(ohlcData.high)
-              : null,
-          low:
-            ohlcData.low !== null
-              ? Number(ohlcData.low)
-              : null,
-          close:
-            ohlcData.close !== null
-              ? Number(ohlcData.close)
-              : null,
-          prevClose:
-            ohlcData.prevClose !== null
-              ? Number(ohlcData.prevClose)
-              : null,
-          timestamp: Date.now()
-        };
+       global.latestLTP[upperSymbol] = {
+  ltp: Number(ohlcData.ltp),
+  open: ohlcData.open !== null ? Number(ohlcData.open) : null,
+  high: ohlcData.high !== null ? Number(ohlcData.high) : null,
+  low: ohlcData.low !== null ? Number(ohlcData.low) : null,
+  close: ohlcData.close !== null ? Number(ohlcData.close) : null,
+  prevClose: ohlcData.prevClose !== null ? Number(ohlcData.prevClose) : null,
+  volume: ohlcData.volume !== null ? Number(ohlcData.volume) : 0,
+  timestamp: Date.now()
+};
       }
 
       return res.json(responseData);
