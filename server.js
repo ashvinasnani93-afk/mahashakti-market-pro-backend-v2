@@ -15,6 +15,8 @@ const { loginWithPassword, generateToken } = require("./services/angel/angelAuth
 const { setGlobalTokens, getLtpData } = require("./services/angel/angelApi.service");
 const { connectWebSocket, getWebSocketStatus, subscribeTokens, unsubscribeTokens, getSubscriptionCount } = require("./services/angel/angelWebSocket.service");
 
+const instrumentMaster = require("./services/instrumentMaster.service");
+
 // Token & Symbol Services
 const { initializeTokenService } = require("./token.service");
 const { setAllSymbols } = require("./symbol.service");
@@ -320,6 +322,22 @@ app.listen(PORT, async () => {
       return;
     }
 
+if (!loginSuccess) {
+   console.log("⚠ Angel login failed – server running in LIMITED MODE");
+   return;
+}
+
+// 👇 YAHAN ADD KARO (Line 324 ke baad)
+
+console.log("[BOOT] Loading Angel Instrument Master...");
+await instrumentMaster.loadMaster();
+console.log("[BOOT] Instrument Master Ready ✅");
+
+// Step 2: Load Option Master AFTER successful login
+console.log("📦 Loading Option Master...");
+await initializeTokenService();
+console.log("✅ Option Master Loaded");
+    
     // Step 2: Load Option Master AFTER successful login
     console.log("📥 Loading Option Master...");
     await initializeTokenService();
