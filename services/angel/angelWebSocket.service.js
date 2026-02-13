@@ -33,6 +33,7 @@ let heartbeatTimer = null;
 // =======================
 const subscriptions = new Map();
 const coreTokens = new Set(); // Core tokens that should always be subscribed
+const priorityTokens = new Set();
 
 // =======================
 // STATUS
@@ -111,7 +112,7 @@ async function connectWebSocket(jwtToken, apiKey, clientCode, feedToken) {
     });
 
     // Build WebSocket URL with auth
-    const wsUrl = `wss://smartapisocket.angelone.in/smart-stream?clientCode=${clientCode}&feedToken=${feedToken}&apiKey=${apiKey}`;
+  const wsUrl = "wss://smartapisocket.angelone.in/smart-stream";
 
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -120,7 +121,14 @@ async function connectWebSocket(jwtToken, apiKey, clientCode, feedToken) {
         reject(new Error("WebSocket connection timeout"));
       }, 30000);
 
-      wsInstance = new WebSocket(wsUrl);
+     wsInstance = new WebSocket(wsUrl, {
+  headers: {
+    "Authorization": `Bearer ${jwtToken}`,
+    "x-api-key": apiKey,
+    "x-client-code": clientCode,
+    "x-feed-token": feedToken
+  }
+});
 
       wsInstance.on("open", () => {
         clearTimeout(timeout);
@@ -136,6 +144,16 @@ async function connectWebSocket(jwtToken, apiKey, clientCode, feedToken) {
         }
 
         logStabilityEvent("CONNECTED", { subscriptionCount: subscriptions.size });
+
+        if (subscriptions.size > 0) {
+       const existing = Array.from(subscriptions.entries()).map(([token, s]) => ({
+       token,
+       symbol: s.symbol,
+       exchangeType: s.exchangeType
+     }));
+
+  subscribeTokens(existing, "resubscribe");
+}
 
         // Start heartbeat
         startHeartbeat();
@@ -176,6 +194,11 @@ async function connectWebSocket(jwtToken, apiKey, clientCode, feedToken) {
       });
 
       wsInstance.on("close", (code, reason) => {
+        logStabilityEvent("CLOSE_EVENT", { code, reason: reason?.toString() });
+
+       if (code === 1006 || code === 1001) {
+        logStabilityEvent("SMARTAPI_NOT_CONNECTED", { code });
+     }
         clearTimeout(timeout);
         isConnecting = false;
         isConnected = false;
@@ -232,6 +255,11 @@ function startHeartbeat() {
   
   heartbeatTimer = setInterval(() => {
     if (wsInstance && wsInstance.readyState === WebSocket.OPEN) {
+      try {
+       wsInstance.ping();
+       } catch (err) {
+        logStabilityEvent("PING_FAILED", { error: err.message });
+     }
       // Check for stale connection
       const now = Date.now();
       const lastTickTime = wsStatus.lastTick ? new Date(wsStatus.lastTick).getTime() : 0;
@@ -239,6 +267,10 @@ function startHeartbeat() {
       
       if (age > STALE_THRESHOLD && wsStatus.tickCount > 0) {
         logStabilityEvent("STALE_DETECTED", { age, threshold: STALE_THRESHOLD });
+
+        global.latestOHLC = {};
+         global.latestLTP = {};
+        
         // Force reconnect
         disconnectWebSocket();
         scheduleReconnect();
@@ -261,7 +293,7 @@ function stopHeartbeat() {
 // SCHEDULE RECONNECT (EXPONENTIAL BACKOFF)
 // =======================
 function scheduleReconnect() {
-  if (reconnectTimer) {
+ if (reconnectTimer) return; {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
@@ -355,7 +387,7 @@ function parseBinaryTick(buffer) {
     const data = {
       subscription_mode: buffer.readUInt8(0),
       exchange_type: buffer.readUInt8(1),
-      token: buffer.slice(2, 27).toString().replace(//g, '').trim(),
+      token: buffer.readBigInt64LE(2).toString(),
       sequence_number: buffer.readBigInt64LE(27),
       exchange_timestamp: buffer.readBigInt64LE(35),
       last_traded_price: buffer.readBigInt64LE(43),
@@ -378,6 +410,33 @@ function parseBinaryTick(buffer) {
 }
 
 // =======================
+// EVICT LOW PRIORITY TOKENS
+// =======================
+function evictLowPriorityTokens(requiredSlots = 1) {
+  const removable = [];
+
+  subscriptions.forEach((sub, token) => {
+    if (!coreTokens.has(token) && !priorityTokens.has(token)) {
+      removable.push({
+        token,
+        subscribedAt: sub.subscribedAt
+      });
+    }
+  });
+
+  removable.sort((a, b) => a.subscribedAt - b.subscribedAt);
+
+  const tokensToRemove = removable.slice(0, requiredSlots).map(r => r.token);
+
+  if (tokensToRemove.length > 0) {
+    unsubscribeTokens(tokensToRemove, "auto-evict");
+    logStabilityEvent("AUTO_EVICT", { removed: tokensToRemove.length });
+  }
+
+  return tokensToRemove.length;
+}
+
+// =======================
 // SUBSCRIBE TOKENS
 // =======================
 function subscribeTokens(tokens, source = "manual") {
@@ -393,19 +452,22 @@ function subscribeTokens(tokens, source = "manual") {
   const currentCount = subscriptions.size;
   const newCount = currentCount + newTokens.length;
   
-  if (newCount > MAX_SUBSCRIPTIONS) {
-    logStabilityEvent("SUBSCRIPTION_LIMIT", { 
-      current: currentCount, 
-      requested: newTokens.length, 
-      max: MAX_SUBSCRIPTIONS 
-    });
-    
-    // Only subscribe up to limit
-    const allowedCount = MAX_SUBSCRIPTIONS - currentCount;
-    if (allowedCount <= 0) return false;
-    
-    newTokens.splice(allowedCount);
-  }
+if (newCount > MAX_SUBSCRIPTIONS) {
+
+  const needed = newCount - MAX_SUBSCRIPTIONS;
+  evictLowPriorityTokens(needed);
+
+  logStabilityEvent("SUBSCRIPTION_LIMIT", { 
+    current: currentCount, 
+    requested: newTokens.length, 
+    max: MAX_SUBSCRIPTIONS 
+  });
+
+  const allowedCount = MAX_SUBSCRIPTIONS - subscriptions.size;
+  if (allowedCount <= 0) return false;
+
+  newTokens.splice(allowedCount);
+} 
 
   if (newTokens.length === 0) {
     return true; // Already subscribed
@@ -583,6 +645,12 @@ function resetReconnect() {
   logStabilityEvent("RECONNECT_RESET", {});
 }
 
+function setPriorityTokens(tokens = []) {
+  priorityTokens.clear();
+  tokens.forEach(t => priorityTokens.add(t));
+  logStabilityEvent("PRIORITY_SET", { count: tokens.length });
+}
+
 // =======================
 // EXPORTS
 // =======================
@@ -591,6 +659,7 @@ module.exports = {
   disconnectWebSocket,
   subscribeTokens,
   unsubscribeTokens,
+ setPriorityTokens, 
   getWebSocketStatus,
   getSubscriptionCount,
   getStabilityLog,
