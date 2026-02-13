@@ -264,8 +264,12 @@ function startHeartbeat() {
       const now = Date.now();
       const lastTickTime = wsStatus.lastTick ? new Date(wsStatus.lastTick).getTime() : 0;
       const age = now - lastTickTime;
+
+     const nowIST = new Date();
+     const hour = nowIST.getHours();
+     const isMarketHours = hour >= 9 && hour <= 15; 
       
-      if (age > STALE_THRESHOLD && wsStatus.tickCount > 0) {
+    if (isMarketHours && age > STALE_THRESHOLD && wsStatus.tickCount > 0) {
         logStabilityEvent("STALE_DETECTED", { age, threshold: STALE_THRESHOLD });
 
         global.latestOHLC = {};
@@ -293,23 +297,21 @@ function stopHeartbeat() {
 // SCHEDULE RECONNECT (EXPONENTIAL BACKOFF)
 // =======================
 function scheduleReconnect() {
- if (reconnectTimer) return; {
-    clearTimeout(reconnectTimer);
-    reconnectTimer = null;
-  }
+  if (reconnectTimer) return;
 
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
     logStabilityEvent("RECONNECT_ABORTED", { reason: "Max attempts reached" });
     return;
   }
 
-  // Exponential backoff: 10 -> 20 -> 40 -> 80
   const delay = Math.min(currentReconnectDelay, MAX_RECONNECT_DELAY);
   currentReconnectDelay = currentReconnectDelay * 2;
 
   logStabilityEvent("RECONNECT_SCHEDULED", { delay, attempt: reconnectAttempts + 1 });
 
   reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+
     if (global.angelSession && global.angelSession.jwtToken) {
       connectWebSocket(
         global.angelSession.jwtToken,
