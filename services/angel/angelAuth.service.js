@@ -5,18 +5,14 @@
 
 const axios = require("axios");
 const { authenticator } = require("otplib");
-const path = require("path");
-
-const { BASE_URL, ENDPOINTS, HEADERS, TIMEOUT } = require(
-  path.join(process.cwd(), "config", "angel.config.js")
-);
+const { BASE_URL, ENDPOINTS, HEADERS, TIMEOUT } = require("../../config/angel.config");
 
 // ==========================================
 // LOGIN WITH PASSWORD + TOTP
 // ==========================================
 async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
   try {
-    console.log("[AUTH] 🔐 Logging into Angel One...");
+    console.log("[AUTH] Logging into Angel One...");
     console.log(`[AUTH] Client Code: ${clientCode}`);
 
     if (!clientCode || !password || !totpSecret || !apiKey) {
@@ -61,18 +57,19 @@ async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
       const refreshToken = data.data.refreshToken;
       const feedToken = data.data.feedToken;
 
-      console.log("[AUTH] ✅ Angel One Login SUCCESS");
+      console.log("[AUTH] Angel One Login SUCCESS");
       console.log("[AUTH] JWT Token:", jwtToken ? "SET" : "MISSING");
       console.log("[AUTH] Feed Token:", feedToken ? "SET" : "MISSING");
-      console.log("[AUTH] Refresh Token:", refreshToken ? "SET" : "MISSING");
 
-      // Store in global session for WebSocket to use
+      // Store in global session
       global.angelSession = {
         jwtToken,
         refreshToken,
         feedToken,
         apiKey,
-        clientCode
+        clientCode,
+        isLoggedIn: true,
+        wsConnected: false
       };
 
       return {
@@ -84,7 +81,7 @@ async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
       };
     }
 
-    console.error("[AUTH] ❌ Login failed:", data.message);
+    console.error("[AUTH] Login failed:", data.message);
 
     return {
       success: false,
@@ -92,7 +89,7 @@ async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
     };
 
   } catch (err) {
-    console.error("[AUTH] ❌ Login error:", err.message);
+    console.error("[AUTH] Login error:", err.message);
     
     return {
       success: false,
@@ -106,7 +103,7 @@ async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
 // ==========================================
 async function generateToken(refreshToken, apiKey) {
   try {
-    console.log("[AUTH] 🔄 Refreshing JWT token...");
+    console.log("[AUTH] Refreshing JWT token...");
 
     if (!refreshToken || !apiKey) {
       return {
@@ -140,28 +137,24 @@ async function generateToken(refreshToken, apiKey) {
     const data = response.data;
 
     if (data.status === true && data.data) {
-      const jwtToken = data.data.jwtToken;
-      const newRefreshToken = data.data.refreshToken;
-      const feedToken = data.data.feedToken;
-
-      console.log("[AUTH] ✅ Token refreshed successfully");
+      console.log("[AUTH] Token refreshed successfully");
 
       // Update global session
       if (global.angelSession) {
-        global.angelSession.jwtToken = jwtToken;
-        global.angelSession.refreshToken = newRefreshToken;
-        global.angelSession.feedToken = feedToken;
+        global.angelSession.jwtToken = data.data.jwtToken;
+        global.angelSession.refreshToken = data.data.refreshToken;
+        global.angelSession.feedToken = data.data.feedToken;
       }
 
       return {
         success: true,
-        jwtToken,
-        refreshToken: newRefreshToken,
-        feedToken
+        jwtToken: data.data.jwtToken,
+        refreshToken: data.data.refreshToken,
+        feedToken: data.data.feedToken
       };
     }
 
-    console.error("[AUTH] ❌ Token refresh failed:", data.message);
+    console.error("[AUTH] Token refresh failed:", data.message);
 
     return {
       success: false,
@@ -169,7 +162,7 @@ async function generateToken(refreshToken, apiKey) {
     };
 
   } catch (err) {
-    console.error("[AUTH] ❌ Token refresh error:", err.message);
+    console.error("[AUTH] Token refresh error:", err.message);
     
     return {
       success: false,
