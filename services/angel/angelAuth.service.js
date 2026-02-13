@@ -1,19 +1,11 @@
 // ==========================================
-// ANGEL AUTH SERVICE
+// ANGEL AUTH SERVICE - PRODUCTION GRADE
 // Handles Angel One Login & Token Refresh
-// REAL API - NO DUMMY
 // ==========================================
 
 const axios = require("axios");
 const { authenticator } = require("otplib");
 const path = require("path");
-
-// 🔌 WebSocket Bridge (58-files baseline safe)
-const {
-  startAngelWebSocket,
-  setClientCode,
-  setSessionTokens
-} = require("./angelWebSocket.service");
 
 const { BASE_URL, ENDPOINTS, HEADERS, TIMEOUT } = require(
   path.join(process.cwd(), "config", "angel.config.js")
@@ -24,6 +16,9 @@ const { BASE_URL, ENDPOINTS, HEADERS, TIMEOUT } = require(
 // ==========================================
 async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
   try {
+    console.log("[AUTH] 🔐 Logging into Angel One...");
+    console.log(`[AUTH] Client Code: ${clientCode}`);
+
     if (!clientCode || !password || !totpSecret || !apiKey) {
       return {
         success: false,
@@ -33,6 +28,7 @@ async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
 
     // Generate TOTP
     const totp = authenticator.generate(totpSecret);
+    console.log(`[AUTH] TOTP generated: ${totp}`);
 
     const payload = {
       clientcode: clientCode,
@@ -64,30 +60,31 @@ async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
       const jwtToken = data.data.jwtToken;
       const refreshToken = data.data.refreshToken;
       const feedToken = data.data.feedToken;
-      
-     const resolvedClientCode = clientCode; // TRUST ENV, NOT API RESPONSE
 
-      if (!resolvedClientCode) {
-  throw new Error("CRITICAL: ClientCode missing from ENV / login input");
-}
+      console.log("[AUTH] ✅ Angel One Login SUCCESS");
+      console.log("[AUTH] JWT Token:", jwtToken ? "SET" : "MISSING");
+      console.log("[AUTH] Feed Token:", feedToken ? "SET" : "MISSING");
+      console.log("[AUTH] Refresh Token:", refreshToken ? "SET" : "MISSING");
 
-      // ==============================
-      // 🔗 WS BRIDGE (CRITICAL FIX)
-      // ==============================
-      setClientCode(resolvedClientCode);
-      setSessionTokens(feedToken, apiKey);
-
-      // Start Angel WebSocket
-      startAngelWebSocket(feedToken, resolvedClientCode, apiKey);
+      // Store in global session for WebSocket to use
+      global.angelSession = {
+        jwtToken,
+        refreshToken,
+        feedToken,
+        apiKey,
+        clientCode
+      };
 
       return {
         success: true,
         jwtToken,
         refreshToken,
         feedToken,
-        clientCode: resolvedClientCode
+        clientCode
       };
     }
+
+    console.error("[AUTH] ❌ Login failed:", data.message);
 
     return {
       success: false,
@@ -95,6 +92,8 @@ async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
     };
 
   } catch (err) {
+    console.error("[AUTH] ❌ Login error:", err.message);
+    
     return {
       success: false,
       error: err.response?.data?.message || err.message || "Angel login error"
@@ -107,6 +106,8 @@ async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
 // ==========================================
 async function generateToken(refreshToken, apiKey) {
   try {
+    console.log("[AUTH] 🔄 Refreshing JWT token...");
+
     if (!refreshToken || !apiKey) {
       return {
         success: false,
@@ -143,10 +144,14 @@ async function generateToken(refreshToken, apiKey) {
       const newRefreshToken = data.data.refreshToken;
       const feedToken = data.data.feedToken;
 
-      // ==============================
-      // 🔗 WS TOKEN REFRESH BRIDGE
-      // ==============================
-      setSessionTokens(feedToken, apiKey);
+      console.log("[AUTH] ✅ Token refreshed successfully");
+
+      // Update global session
+      if (global.angelSession) {
+        global.angelSession.jwtToken = jwtToken;
+        global.angelSession.refreshToken = newRefreshToken;
+        global.angelSession.feedToken = feedToken;
+      }
 
       return {
         success: true,
@@ -156,12 +161,16 @@ async function generateToken(refreshToken, apiKey) {
       };
     }
 
+    console.error("[AUTH] ❌ Token refresh failed:", data.message);
+
     return {
       success: false,
       error: data.message || "Token refresh failed"
     };
 
   } catch (err) {
+    console.error("[AUTH] ❌ Token refresh error:", err.message);
+    
     return {
       success: false,
       error: err.response?.data?.message || err.message || "Token refresh error"
