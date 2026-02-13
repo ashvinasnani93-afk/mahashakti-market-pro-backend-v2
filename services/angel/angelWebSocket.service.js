@@ -1,603 +1,425 @@
 // ==========================================
-// ANGEL ONE WEBSOCKET SERVICE
-// DYNAMIC SUBSCRIPTION MODEL
-// Memory Efficient - Subscribe only what's needed
+// ANGEL ONE WEBSOCKET SERVICE - PRODUCTION GRADE
+// WITH RATE LIMIT PROTECTION & SINGLETON GUARD
 // ==========================================
 
-const WebSocket = require("ws");
+const SmartAPI = require("smartapi-javascript");
+const EventEmitter = require("events");
 
 // ==========================================
-// CONNECTION STATE
+// ANGEL ONE WEBSOCKET RATE LIMITS
 // ==========================================
-let ws = null;
-let heartbeatInterval = null;
-let reconnectTimeout = null;
-let staleCheckInterval = null;
-let isStarted = false;  // Prevent multiple starts
+// Official Angel One WS Limits:
+// - Max 3 connections per user
+// - Max 50 subscriptions per connection
+// - Reconnect throttle: 5 seconds minimum
+// - Rate limit error: 429 (Too Many Requests)
 
-// GLOBAL MEMORY (58-FILE BASELINE COMPATIBLE)
-let globalClientCode = null;
-let globalFeedToken = null;
-let globalApiKey = null;
-
-// TICK MONITORING VARIABLES
-let lastTickTimestamp = Date.now();
-let tickCount = 0;
+const MAX_SUBSCRIPTIONS_PER_CONNECTION = 50;
+const RECONNECT_THROTTLE_MS = 10000; // 10 seconds backoff
+const MAX_RECONNECT_ATTEMPTS = 5;
+const HEARTBEAT_INTERVAL = 30000; // 30 seconds
 
 // ==========================================
-// DYNAMIC SUBSCRIPTION MANAGEMENT
+// SINGLETON GUARD - PREVENT DOUBLE START
 // ==========================================
-const subscribedTokens = new Map();  // token -> { exchangeType, mode, refCount, lastUpdate }
-const MAX_SUBSCRIPTIONS = 500;  // Safety limit
+let wsInstance = null;
+let isConnecting = false;
+let isConnected = false;
+let reconnectAttempts = 0;
+let lastReconnectTime = 0;
+let reconnectTimer = null;
+let heartbeatTimer = null;
 
 // ==========================================
-// GLOBAL CACHES (LIMITED SIZE)
+// SUBSCRIPTION MANAGEMENT
 // ==========================================
-if (!global.latestLTP) {
-  global.latestLTP = {};
+const activeSubscriptions = new Map(); // token -> { symbol, exchangeType, mode }
+let totalSubscriptionCount = 0;
+
+// ==========================================
+// WS STATUS TRACKING
+// ==========================================
+let wsStatus = {
+  connected: false,
+  lastTick: null,
+  tickCount: 0,
+  subscriptionCount: 0,
+  lastError: null,
+  reconnectAttempts: 0
+};
+
+// ==========================================
+// EVENT EMITTER
+// ==========================================
+const wsEmitter = new EventEmitter();
+
+// ==========================================
+// CONNECT TO ANGEL WEBSOCKET (SINGLETON)
+// ==========================================
+async function connectWebSocket(jwtToken, apiKey, clientCode, feedToken) {
+  // SINGLETON GUARD
+  if (isConnecting) {
+    console.log("[WS] ⚠️ Connection already in progress, skipping");
+    return { success: false, message: "Connection in progress" };
+  }
+
+  if (isConnected && wsInstance) {
+    console.log("[WS] ⚠️ Already connected");
+    return { success: true, message: "Already connected" };
+  }
+
+  // RECONNECT THROTTLING
+  const now = Date.now();
+  const timeSinceLastReconnect = now - lastReconnectTime;
+  
+  if (timeSinceLastReconnect < RECONNECT_THROTTLE_MS) {
+    const waitTime = RECONNECT_THROTTLE_MS - timeSinceLastReconnect;
+    console.log(`[WS] ⏳ Throttling reconnect, wait ${Math.floor(waitTime/1000)}s`);
+    return { success: false, message: `Throttled, retry in ${Math.floor(waitTime/1000)}s` };
+  }
+
+  // MAX RECONNECT ATTEMPTS GUARD
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    console.log(`[WS] ❌ Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached, giving up`);
+    return { success: false, message: "Max reconnect attempts reached" };
+  }
+
+  isConnecting = true;
+  lastReconnectTime = now;
+  reconnectAttempts++;
+
+  try {
+    console.log(`[WS] 🔌 Connecting to Angel WebSocket (Attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})...`);
+
+    wsInstance = new SmartAPI({
+      api_key: apiKey,
+      access_token: jwtToken
+    });
+
+    return new Promise((resolve, reject) => {
+      const timeoutId = setTimeout(() => {
+        isConnecting = false;
+        reject(new Error("WebSocket connection timeout (30s)"));
+      }, 30000);
+
+      wsInstance.connectWebSocket({
+        token: feedToken,
+        clientCode: clientCode
+      }, (data) => {
+        // MESSAGE HANDLER
+        handleWebSocketMessage(data);
+      });
+
+      // CONNECTION EVENT
+      wsInstance.on("connect", () => {
+        clearTimeout(timeoutId);
+        isConnecting = false;
+        isConnected = true;
+        reconnectAttempts = 0; // Reset on successful connect
+        
+        wsStatus.connected = true;
+        wsStatus.reconnectAttempts = 0;
+
+        console.log("[WS] ✅ CONNECTED");
+
+        // Start heartbeat
+        startHeartbeat();
+
+        resolve({ success: true, message: "WebSocket connected" });
+      });
+
+      // ERROR EVENT
+      wsInstance.on("error", (error) => {
+        clearTimeout(timeoutId);
+        isConnecting = false;
+        isConnected = false;
+        
+        wsStatus.connected = false;
+        wsStatus.lastError = error.message;
+
+        console.error("[WS] ❌ Error:", error.message);
+
+        // Check for rate limit (429)
+        if (error.message.includes("429") || error.message.includes("Too Many Requests")) {
+          console.error("[WS] 🚨 RATE LIMIT HIT (429) - Exponential backoff applied");
+          
+          // Exponential backoff for rate limits
+          const backoffTime = RECONNECT_THROTTLE_MS * Math.pow(2, reconnectAttempts - 1);
+          console.log(`[WS] Waiting ${Math.floor(backoffTime/1000)}s before retry`);
+          
+          scheduleReconnect(backoffTime);
+        }
+
+        reject(error);
+      });
+
+      // CLOSE EVENT
+      wsInstance.on("close", () => {
+        clearTimeout(timeoutId);
+        isConnecting = false;
+        isConnected = false;
+        
+        wsStatus.connected = false;
+
+        console.log("[WS] ❌ DISCONNECTED");
+
+        stopHeartbeat();
+
+        // Auto-reconnect with throttle
+        scheduleReconnect(RECONNECT_THROTTLE_MS);
+      });
+    });
+
+  } catch (error) {
+    isConnecting = false;
+    isConnected = false;
+    
+    console.error("[WS] ❌ Connection failed:", error.message);
+    
+    return { success: false, error: error.message };
+  }
 }
-if (!global.latestOHLC) {
-  global.latestOHLC = {};
-}
-if (!global.prevCloseCache) {
-  global.prevCloseCache = {};
-}
 
 // ==========================================
-// SET CLIENT CODE FROM AUTH SERVICE
+// SCHEDULE RECONNECT WITH THROTTLE
 // ==========================================
-function setClientCode(clientCode) {
-  globalClientCode = clientCode;
-}
+function scheduleReconnect(delay) {
+  // Clear existing timer
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
 
-// ==========================================
-// SET SESSION TOKENS
-// ==========================================
-function setSessionTokens(feedToken, apiKey) {
-  globalFeedToken = feedToken;
-  globalApiKey = apiKey;
-}
-
-// ==========================================
-// START WEBSOCKET - RUNS ONLY ONCE
-// ==========================================
-function startAngelWebSocket(feedToken, clientCode, apiKey) {
-  // Prevent multiple starts
-  if (isStarted && ws && ws.readyState === WebSocket.OPEN) {
-    console.log("[WS] Already running, skipping start");
+  // Don't reconnect if max attempts reached
+  if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+    console.log("[WS] ⚠️ Not scheduling reconnect - max attempts reached");
     return;
   }
 
+  console.log(`[WS] 🔄 Scheduling reconnect in ${Math.floor(delay/1000)}s`);
+
+  reconnectTimer = setTimeout(() => {
+    if (global.angelSession) {
+      console.log("[WS] Attempting reconnect...");
+      connectWebSocket(
+        global.angelSession.jwtToken,
+        global.angelSession.apiKey,
+        global.angelSession.clientCode,
+        global.angelSession.feedToken
+      ).catch(err => {
+        console.error("[WS] Reconnect failed:", err.message);
+      });
+    }
+  }, delay);
+}
+
+// ==========================================
+// HEARTBEAT TO KEEP CONNECTION ALIVE
+// ==========================================
+function startHeartbeat() {
+  stopHeartbeat();
+  
+  heartbeatTimer = setInterval(() => {
+    if (isConnected && wsInstance) {
+      // Check if connection is stale
+      const now = Date.now();
+      const lastTickTime = wsStatus.lastTick ? new Date(wsStatus.lastTick).getTime() : 0;
+      const timeSinceLastTick = now - lastTickTime;
+
+      // If no ticks for 2 minutes, consider stale
+      if (timeSinceLastTick > 120000 && wsStatus.tickCount > 0) {
+        console.log("[WS] ⚠️ Connection appears stale, reconnecting...");
+        disconnectWebSocket();
+        scheduleReconnect(5000);
+      }
+    }
+  }, HEARTBEAT_INTERVAL);
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+}
+
+// ==========================================
+// HANDLE WEBSOCKET MESSAGES
+// ==========================================
+function handleWebSocketMessage(data) {
   try {
-    globalFeedToken = feedToken;
-    globalApiKey = apiKey;
-    globalClientCode = clientCode;
+    wsStatus.lastTick = new Date().toISOString();
+    wsStatus.tickCount++;
 
-    if (!globalClientCode) {
-      throw new Error("Missing clientCode for WebSocket header");
+    // Store in global cache
+    if (!global.latestOHLC) {
+      global.latestOHLC = {};
     }
 
-    // Close existing connection if any
-    if (ws) {
-      try { ws.close(); } catch (e) {}
-      ws = null;
+    if (data && data.token) {
+      const subscription = activeSubscriptions.get(data.token);
+      
+      if (subscription) {
+        global.latestOHLC[subscription.symbol] = {
+          ltp: data.last_traded_price,
+          open: data.open_price_day,
+          high: data.high_price_day,
+          low: data.low_price_day,
+          close: data.close_price,
+          volume: data.volume_trade_for_day,
+          timestamp: new Date().toISOString()
+        };
+      }
     }
 
-    console.log("[WS] Connecting to Angel WebSocket...");
+    // Emit event for listeners
+    wsEmitter.emit("tick", data);
 
-    const wsUrl = "wss://smartapisocket.angelone.in/smart-stream";
-
-    ws = new WebSocket(wsUrl, {
-      headers: {
-        "Authorization": "Bearer " + global.angelSession.jwtToken,
-        "x-api-key": globalApiKey,
-        "x-client-code": globalClientCode,
-        "x-feed-token": globalFeedToken
-      }
-    });
-
-    ws.on("open", function() {
-      console.log("[WS] ✅ CONNECTED");
-      isStarted = true;
-
-      if (!global.angelSession) {
-        global.angelSession = {};
-      }
-      global.angelSession.wsConnected = true;
-      lastTickTimestamp = Date.now();
-      tickCount = 0;
-
-      startHeartbeat();
-      startStaleCheck();
-
-      // Subscribe to core indices only (3 tokens)
-      subscribeToIndices();
-    });
-
-    ws.on("message", function(data) {
-      try {
-        handleWebSocketMessage(data);
-      } catch (err) {
-        // Silent
-      }
-    });
-
-    ws.on("error", function(err) {
-      console.error("[WS] Error:", err.message);
-      if (global.angelSession) {
-        global.angelSession.wsConnected = false;
-      }
-    });
-
-    ws.on("close", function() {
-      console.log("[WS] ❌ DISCONNECTED");
-      isStarted = false;
-
-      if (global.angelSession) {
-        global.angelSession.wsConnected = false;
-      }
-
-      stopHeartbeat();
-      stopStaleCheck();
-
-      // Reconnect after 5 seconds
-      reconnectTimeout = setTimeout(function() {
-        console.log("[WS] Reconnecting...");
-        startAngelWebSocket(globalFeedToken, globalClientCode, globalApiKey);
-      }, 5000);
-    });
-
-  } catch (err) {
-    console.error("[WS] Start Error:", err.message);
-    isStarted = false;
+  } catch (error) {
+    console.error("[WS] Message handler error:", error.message);
   }
 }
 
 // ==========================================
-// SUBSCRIBE TO CORE INDICES ONLY
+// SUBSCRIBE TO TOKENS (WITH LIMIT CHECK)
 // ==========================================
-function subscribeToIndices() {
-  if (!ws || ws.readyState !== WebSocket.OPEN) return;
-
-  // Only 3 core indices
-  var coreTokens = [
-    { token: "99926000", symbol: "NIFTY" },
-    { token: "99926009", symbol: "BANKNIFTY" },
-    { token: "99926037", symbol: "FINNIFTY" }
-  ];
-
-  coreTokens.forEach(function(item) {
-    subscribedTokens.set(item.token, {
-      exchangeType: 1,
-      mode: 1,
-      refCount: 1,
-      symbol: item.symbol,
-      isPermanent: true  // Never unsubscribe
-    });
-  });
-
-  var payload = {
-    action: 1,
-    params: {
-      mode: 1,
-      tokenList: [{
-        exchangeType: 1,
-        tokens: coreTokens.map(function(t) { return t.token; })
-      }]
-    }
-  };
-
-  ws.send(JSON.stringify(payload));
-  console.log("[WS] Subscribed to 3 core indices");
-}
-
-// ==========================================
-// DYNAMIC SUBSCRIBE - For Option Chain, Scanner, Search
-// ==========================================
-function subscribeTokens(tokens, source) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
-    console.log("[WS] Not connected, cannot subscribe");
-    return false;
-  }
-
-  if (!Array.isArray(tokens) || tokens.length === 0) {
+function subscribeTokens(tokens, source = "manual") {
+  if (!isConnected || !wsInstance) {
+    console.log(`[WS] ⚠️ Not connected, cannot subscribe (source: ${source})`);
     return false;
   }
 
   // Check subscription limit
-  if (subscribedTokens.size + tokens.length > MAX_SUBSCRIPTIONS) {
-    console.log("[WS] ⚠️ Subscription limit reached, cleaning old subscriptions");
-    cleanupOldSubscriptions();
+  const newCount = totalSubscriptionCount + tokens.length;
+  if (newCount > MAX_SUBSCRIPTIONS_PER_CONNECTION) {
+    console.log(`[WS] ❌ Subscription limit exceeded: ${newCount}/${MAX_SUBSCRIPTIONS_PER_CONNECTION}`);
+    return false;
   }
 
-  // Group by exchange type
-  var nseTokens = [];
-  var mcxTokens = [];
+  try {
+    console.log(`[WS] 📥 Subscribing ${tokens.length} tokens (source: ${source})`);
 
-  tokens.forEach(function(t) {
-    var token = String(t.token);
-    var exchangeType = t.exchangeType || 1;
+    const subscriptionData = tokens.map(t => ({
+      exchangeType: t.exchangeType || 1,
+      tokens: [t.token],
+      mode: t.mode || 3 // FULL mode
+    }));
 
-    // Check if already subscribed
-    if (subscribedTokens.has(token)) {
-      var existing = subscribedTokens.get(token);
-      existing.refCount++;
-      existing.lastUpdate = Date.now();
-      subscribedTokens.set(token, existing);
-    } else {
-      subscribedTokens.set(token, {
-        exchangeType: exchangeType,
-        mode: t.mode || 1,
-        refCount: 1,
-        symbol: t.symbol || token,
-        source: source,
-        lastUpdate: Date.now()
+    wsInstance.subscribe(subscriptionData);
+
+    // Track subscriptions
+    tokens.forEach(t => {
+      activeSubscriptions.set(t.token, {
+        symbol: t.symbol,
+        exchangeType: t.exchangeType || 1,
+        mode: t.mode || 3,
+        subscribedAt: Date.now(),
+        source
       });
+      totalSubscriptionCount++;
+    });
 
-      if (exchangeType === 5) {
-        mcxTokens.push(token);
-      } else {
-        nseTokens.push(token);
-      }
-    }
-  });
+    wsStatus.subscriptionCount = totalSubscriptionCount;
 
-  // Subscribe NSE tokens
-  if (nseTokens.length > 0) {
-    var nsePayload = {
-      action: 1,
-      params: {
-        mode: 3,
-        tokenList: [{
-          exchangeType: 1,
-          tokens: nseTokens
-        }]
-      }
-    };
-    ws.send(JSON.stringify(nsePayload));
-    console.log("[WS] Subscribed " + nseTokens.length + " NSE tokens (" + source + ")");
+    console.log(`[WS] ✅ Subscribed. Total: ${totalSubscriptionCount}/${MAX_SUBSCRIPTIONS_PER_CONNECTION}`);
+
+    return true;
+
+  } catch (error) {
+    console.error(`[WS] ❌ Subscribe error (source: ${source}):`, error.message);
+    return false;
   }
-
-  // Subscribe MCX tokens
-  if (mcxTokens.length > 0) {
-    var mcxPayload = {
-      action: 1,
-      params: {
-        mode: 3,  // Full mode for MCX
-        tokenList: [{
-          exchangeType: 5,
-          tokens: mcxTokens
-        }]
-      }
-    };
-    ws.send(JSON.stringify(mcxPayload));
-    console.log("[WS] Subscribed " + mcxTokens.length + " MCX tokens (" + source + ")");
-  }
-
-  console.log("[WS] Total subscriptions: " + subscribedTokens.size);
-  return true;
 }
 
 // ==========================================
-// UNSUBSCRIBE TOKENS - When leaving screen
+// UNSUBSCRIBE FROM TOKENS
 // ==========================================
-function unsubscribeTokens(tokens, source) {
-  if (!ws || ws.readyState !== WebSocket.OPEN) {
+function unsubscribeTokens(tokens, source = "manual") {
+  if (!isConnected || !wsInstance) {
+    console.log(`[WS] ⚠️ Not connected, cannot unsubscribe (source: ${source})`);
     return false;
   }
 
-  if (!Array.isArray(tokens) || tokens.length === 0) {
+  try {
+    console.log(`[WS] 📤 Unsubscribing ${tokens.length} tokens (source: ${source})`);
+
+    const unsubscriptionData = tokens.map(t => ({
+      exchangeType: t.exchangeType || 1,
+      tokens: [t.token]
+    }));
+
+    wsInstance.unsubscribe(unsubscriptionData);
+
+    // Remove from tracking
+    tokens.forEach(t => {
+      const token = typeof t === "string" ? t : t.token;
+      activeSubscriptions.delete(token);
+      totalSubscriptionCount--;
+    });
+
+    wsStatus.subscriptionCount = totalSubscriptionCount;
+
+    console.log(`[WS] ✅ Unsubscribed. Total: ${totalSubscriptionCount}/${MAX_SUBSCRIPTIONS_PER_CONNECTION}`);
+
+    return true;
+
+  } catch (error) {
+    console.error(`[WS] ❌ Unsubscribe error (source: ${source}):`, error.message);
     return false;
   }
-
-  var tokensToUnsubscribe = [];
-
-  tokens.forEach(function(t) {
-    var token = String(t.token || t);
-
-    if (subscribedTokens.has(token)) {
-      var sub = subscribedTokens.get(token);
-      
-      // Don't unsubscribe permanent tokens (indices)
-      if (sub.isPermanent) return;
-
-      sub.refCount--;
-
-      if (sub.refCount <= 0) {
-        tokensToUnsubscribe.push({
-          token: token,
-          exchangeType: sub.exchangeType
-        });
-        subscribedTokens.delete(token);
-
-        // Also remove from LTP cache to free memory
-        if (global.latestLTP[sub.symbol]) {
-          delete global.latestLTP[sub.symbol];
-        }
-      } else {
-        subscribedTokens.set(token, sub);
-      }
-    }
-  });
-
-  // Send unsubscribe for NSE
-  var nseUnsub = tokensToUnsubscribe.filter(function(t) { return t.exchangeType !== 5; });
-  if (nseUnsub.length > 0) {
-    var nsePayload = {
-      action: 0,  // Unsubscribe
-      params: {
-        mode: 1,
-        tokenList: [{
-          exchangeType: 1,
-          tokens: nseUnsub.map(function(t) { return t.token; })
-        }]
-      }
-    };
-    ws.send(JSON.stringify(nsePayload));
-  }
-
-  // Send unsubscribe for MCX
-  var mcxUnsub = tokensToUnsubscribe.filter(function(t) { return t.exchangeType === 5; });
-  if (mcxUnsub.length > 0) {
-    var mcxPayload = {
-      action: 0,
-      params: {
-        mode: 3,
-        tokenList: [{
-          exchangeType: 5,
-          tokens: mcxUnsub.map(function(t) { return t.token; })
-        }]
-      }
-    };
-    ws.send(JSON.stringify(mcxPayload));
-  }
-
-  if (tokensToUnsubscribe.length > 0) {
-    console.log("[WS] Unsubscribed " + tokensToUnsubscribe.length + " tokens (" + source + ")");
-    console.log("[WS] Remaining subscriptions: " + subscribedTokens.size);
-  }
-
-  return true;
 }
 
 // ==========================================
-// CLEANUP OLD SUBSCRIPTIONS (FIFO)
+// DISCONNECT WEBSOCKET
 // ==========================================
-function cleanupOldSubscriptions() {
-  var now = Date.now();
-  var threshold = 5 * 60 * 1000;  // 5 minutes
-  var tokensToRemove = [];
+function disconnectWebSocket() {
+  console.log("[WS] 🛑 Disconnecting WebSocket...");
 
-  subscribedTokens.forEach(function(data, token) {
-    if (data.isPermanent) return;
-    if (now - data.lastUpdate > threshold) {
-      tokensToRemove.push({ token: token, exchangeType: data.exchangeType });
-    }
-  });
-
-  if (tokensToRemove.length > 0) {
-    unsubscribeTokens(tokensToRemove, "cleanup");
-    console.log("[WS] Cleaned up " + tokensToRemove.length + " stale subscriptions");
-  }
-}
-
-// ==========================================
-// HANDLE WEBSOCKET MESSAGE
-// ==========================================
-function handleWebSocketMessage(data) {
-  lastTickTimestamp = Date.now();
-  tickCount++;
-
-  if (tickCount % 500 === 0) {
-    console.log("[WS] Tick count: " + tickCount + ", Subscriptions: " + subscribedTokens.size);
-  }
-
-  // 51 BYTE LTP PACKETS
-  if (Buffer.isBuffer(data) && data.length >= 51 && data.length < 140) {
-    var ltp = decodeBinaryLTP(data);
-    if (ltp && ltp.token) {
-      updateLTP(ltp.token, ltp.price);
-    }
-  }
-  // FULL / SNAPQUOTE PACKETS
-  else if (Buffer.isBuffer(data) && data.length >= 140) {
-    var ohlc = decodeBinaryFULL(data);
-    if (ohlc && ohlc.token) {
-      updateOHLC(ohlc);
-    }
-  }
-  // JSON MESSAGE
-  else {
-    try {
-      var message = JSON.parse(data.toString());
-      if (message.ltp) {
-        updateLTP(message.token || message.symboltoken, message.ltp);
-      }
-    } catch (e) {}
-  }
-}
-
-// ==========================================
-// DECODE BINARY LTP
-// ==========================================
-function decodeBinaryLTP(buffer) {
-  try {
-    var pricePaise = buffer.readInt32LE(43);
-    var price = pricePaise / 100;
-
-    var tokenStr = buffer.toString("utf8", 2, 27);
-    tokenStr = tokenStr.split(String.fromCharCode(0)).join("").trim();
-
-    return { token: tokenStr, price: price };
-  } catch (err) {
-    return null;
-  }
-}
-
-// ==========================================
-// DECODE FULL / SNAPQUOTE
-// ==========================================
-function decodeBinaryFULL(buffer) {
-  try {
-    var tokenStr = buffer.toString("utf8", 2, 27);
-    tokenStr = tokenStr.split(String.fromCharCode(0)).join("").trim();
-
-    return {
-      token: tokenStr,
-      ltp: buffer.readInt32LE(43) / 100,
-      open: buffer.readInt32LE(47) / 100,
-      high: buffer.readInt32LE(51) / 100,
-      low: buffer.readInt32LE(55) / 100,
-      close: buffer.readInt32LE(59) / 100,
-      volume: buffer.readInt32LE(63)
-    };
-  } catch (err) {
-    return null;
-  }
-}
-
-// ==========================================
-// UPDATE LTP - Limited Cache Size
-// ==========================================
-function updateLTP(token, price) {
-  if (!token || price === undefined || price === null) return;
-
-  var sub = subscribedTokens.get(token);
-  var symbol = sub ? sub.symbol : token;
-
-  var ltp = Number(price);
-  var prevClose = global.prevCloseCache[symbol] || null;
-
-  var change = null;
-  var percent = null;
-
-  if (prevClose && prevClose !== 0) {
-    change = ltp - prevClose;
-    percent = (change / prevClose) * 100;
-  }
-
-  global.latestLTP[symbol] = {
-    ltp: ltp,
-    prevClose: prevClose,
-    change: change,
-    percent: percent,
-    timestamp: Date.now()
-  };
-
-  global.latestLTP[token] = global.latestLTP[symbol];
-}
-
-// ==========================================
-// UPDATE OHLC
-// ==========================================
-function updateOHLC(data) {
-  if (!data || !data.token) return;
-
-  var sub = subscribedTokens.get(data.token);
-  var symbol = sub ? sub.symbol : data.token;
-
-  // Save prevClose from FULL packet
-if (data.close !== undefined && data.close !== null) {
-  global.prevCloseCache[symbol] = Number(data.close);
-}
-
-  global.latestOHLC[symbol] = {
-    ltp: Number(data.ltp),
-    open: Number(data.open),
-    high: Number(data.high),
-    low: Number(data.low),
-    close: Number(data.close),
-    volume: Number(data.volume),
-    timestamp: Date.now()
-  };
-
-  global.latestLTP[symbol] = {
-    ltp: Number(data.ltp),
-    timestamp: Date.now()
-  };
-}
-
-// ==========================================
-// HEARTBEAT
-// ==========================================
-function startHeartbeat() {
   stopHeartbeat();
-  heartbeatInterval = setInterval(function() {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      try { ws.ping(); } catch (err) {}
-    }
-  }, 25000);
-}
 
-function stopHeartbeat() {
-  if (heartbeatInterval) {
-    clearInterval(heartbeatInterval);
-    heartbeatInterval = null;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
   }
-}
 
-// ==========================================
-// STALE CONNECTION CHECK
-// ==========================================
-function startStaleCheck() {
-  stopStaleCheck();
-  staleCheckInterval = setInterval(function() {
-    var diff = Date.now() - lastTickTimestamp;
-    console.log("[WS] Heartbeat: " + Math.round(diff/1000) + "s ago, Subs: " + subscribedTokens.size + ", Ticks: " + tickCount);
-
-    if (diff > 60000) {
-      console.log("[WS] ⚠️ STALE - reconnecting...");
-      if (ws) {
-        try { ws.close(); } catch (e) { ws.terminate(); }
-      }
+  if (wsInstance) {
+    try {
+      wsInstance.disconnect();
+    } catch (error) {
+      console.error("[WS] Disconnect error:", error.message);
     }
-
-    // Periodic cleanup
-    if (subscribedTokens.size > 300) {
-      cleanupOldSubscriptions();
-    }
-  }, 30000);
-}
-
-function stopStaleCheck() {
-  if (staleCheckInterval) {
-    clearInterval(staleCheckInterval);
-    staleCheckInterval = null;
+    wsInstance = null;
   }
-}
 
-// ==========================================
-// LEGACY: SUBSCRIBE SINGLE TOKEN
-// ==========================================
-function subscribeToToken(token, exchangeType) {
-  return subscribeTokens([{
-    token: token,
-    exchangeType: exchangeType || 1
-  }], "single");
-}
+  isConnecting = false;
+  isConnected = false;
+  wsStatus.connected = false;
 
-// ==========================================
-// LEGACY: SUBSCRIBE FULL MODE
-// ==========================================
-function subscribeFullToken(token, exchangeType) {
-  return subscribeTokens([{
-    token: token,
-    exchangeType: exchangeType || 5,
-    mode: 3
-  }], "full");
+  console.log("[WS] Disconnected");
 }
 
 // ==========================================
 // GET WEBSOCKET STATUS
 // ==========================================
 function getWebSocketStatus() {
+  const now = Date.now();
+  const lastTickTime = wsStatus.lastTick ? new Date(wsStatus.lastTick).getTime() : 0;
+  const lastTickAge = now - lastTickTime;
+
   return {
-    connected: global.angelSession ? global.angelSession.wsConnected : false,
-    lastTickAge: Date.now() - lastTickTimestamp,
-    tickCount: tickCount,
-    subscriptionCount: subscribedTokens.size,
-    isStale: (Date.now() - lastTickTimestamp) > 60000,
-    ltpCacheSize: Object.keys(global.latestLTP).length
+    connected: isConnected,
+    connecting: isConnecting,
+    lastTick: wsStatus.lastTick,
+    lastTickAge: Math.floor(lastTickAge / 1000),
+    tickCount: wsStatus.tickCount,
+    subscriptionCount: totalSubscriptionCount,
+    maxSubscriptions: MAX_SUBSCRIPTIONS_PER_CONNECTION,
+    utilization: ((totalSubscriptionCount / MAX_SUBSCRIPTIONS_PER_CONNECTION) * 100).toFixed(1),
+    reconnectAttempts: reconnectAttempts,
+    maxReconnectAttempts: MAX_RECONNECT_ATTEMPTS,
+    lastError: wsStatus.lastError,
+    isStale: lastTickAge > 60000 && wsStatus.tickCount > 0
   };
 }
 
@@ -605,20 +427,42 @@ function getWebSocketStatus() {
 // GET SUBSCRIPTION COUNT
 // ==========================================
 function getSubscriptionCount() {
-  return subscribedTokens.size;
+  return totalSubscriptionCount;
+}
+
+// ==========================================
+// GET ACTIVE SUBSCRIPTIONS
+// ==========================================
+function getActiveSubscriptions() {
+  return Array.from(activeSubscriptions.entries()).map(([token, data]) => ({
+    token,
+    symbol: data.symbol,
+    source: data.source,
+    age: Math.floor((Date.now() - data.subscribedAt) / 1000)
+  }));
+}
+
+// ==========================================
+// RESET RECONNECT ATTEMPTS (ADMIN)
+// ==========================================
+function resetReconnectAttempts() {
+  reconnectAttempts = 0;
+  wsStatus.reconnectAttempts = 0;
+  console.log("[WS] ✅ Reconnect attempts reset");
 }
 
 // ==========================================
 // EXPORTS
 // ==========================================
 module.exports = {
-  startAngelWebSocket: startAngelWebSocket,
-  subscribeToToken: subscribeToToken,
-  subscribeFullToken: subscribeFullToken,
-  subscribeTokens: subscribeTokens,
-  unsubscribeTokens: unsubscribeTokens,
-  setClientCode: setClientCode,
-  setSessionTokens: setSessionTokens,
-  getWebSocketStatus: getWebSocketStatus,
-  getSubscriptionCount: getSubscriptionCount
+  connectWebSocket,
+  disconnectWebSocket,
+  subscribeTokens,
+  unsubscribeTokens,
+  getWebSocketStatus,
+  getSubscriptionCount,
+  getActiveSubscriptions,
+  resetReconnectAttempts,
+  wsEmitter,
+  MAX_SUBSCRIPTIONS_PER_CONNECTION
 };
