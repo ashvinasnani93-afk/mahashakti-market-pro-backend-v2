@@ -1,4 +1,4 @@
- "module.exports = {
+ module.exports = {
     scanner: {
         scanIntervalMs: 60000,
         maxConcurrentScans: 5,
