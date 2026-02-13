@@ -5,7 +5,7 @@
 
 const axios = require("axios");
 const settings = require("../../config/settings.config")
-const authService = require("./auth.service");
+const authService = require('./angelAuth.service');
 const { BASE_URL, ENDPOINTS } = require("../config/angel.config");
 
 // ==========================================
