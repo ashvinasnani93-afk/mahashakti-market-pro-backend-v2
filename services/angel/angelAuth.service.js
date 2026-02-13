@@ -1,6 +1,6 @@
 // ==========================================
-// ANGEL AUTH SERVICE - PRODUCTION GRADE
-// Handles Angel One Login & Token Refresh
+// ANGEL AUTH SERVICE - FINAL PRODUCTION MERGED
+// Documentation Compliant + Concurrency Safe
 // ==========================================
 
 const axios = require("axios");
@@ -8,60 +8,68 @@ const { authenticator } = require("otplib");
 const { BASE_URL, ENDPOINTS, HEADERS, TIMEOUT } = require("../../config/angel.config");
 
 // ==========================================
+// INTERNAL STATE
+// ==========================================
+let loginInProgress = false;
+let lastLoginTime = null;
+const TOKEN_EXPIRY_MS = 6 * 60 * 60 * 1000; // 6 hours
+
+// ==========================================
+// BUILD ANGEL HEADERS
+// ==========================================
+function buildHeaders(apiKey, jwtToken = null) {
+  return {
+    "Authorization": jwtToken ? `Bearer ${jwtToken}` : undefined,
+    "Content-Type": HEADERS.CONTENT_TYPE,
+    "Accept": HEADERS.ACCEPT,
+    "X-UserType": HEADERS.USER_TYPE,
+    "X-SourceID": HEADERS.SOURCE_ID,
+    "X-ClientLocalIP": HEADERS.CLIENT_LOCAL_IP,
+    "X-ClientPublicIP": HEADERS.CLIENT_PUBLIC_IP,
+    "X-MACAddress": HEADERS.MAC_ADDRESS,
+    "X-PrivateKey": apiKey
+  };
+}
+
+// ==========================================
 // LOGIN WITH PASSWORD + TOTP
 // ==========================================
 async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
   try {
-    console.log("[AUTH] Logging into Angel One...");
-    console.log(`[AUTH] Client Code: ${clientCode}`);
-
-    if (!clientCode || !password || !totpSecret || !apiKey) {
-      return {
-        success: false,
-        error: "Missing login parameters"
-      };
+    if (loginInProgress) {
+      console.log("[AUTH] Login already in progress. Waiting...");
+      await waitForLogin();
+      return { success: true };
     }
 
-    // Generate TOTP
+    loginInProgress = true;
+
+    if (!clientCode || !password || !totpSecret || !apiKey) {
+      return { success: false, error: "Missing login parameters" };
+    }
+
+    console.log("[AUTH] Logging into Angel One...");
+
     const totp = authenticator.generate(totpSecret);
-    console.log(`[AUTH] TOTP generated: ${totp}`);
 
     const payload = {
       clientcode: clientCode,
-      password: password,
-      totp: totp
-    };
-
-    const headers = {
-      "Content-Type": HEADERS.CONTENT_TYPE,
-      "Accept": HEADERS.ACCEPT,
-      "X-UserType": HEADERS.USER_TYPE,
-      "X-SourceID": HEADERS.SOURCE_ID,
-      "X-ClientLocalIP": HEADERS.CLIENT_LOCAL_IP,
-      "X-ClientPublicIP": HEADERS.CLIENT_PUBLIC_IP,
-      "X-MACAddress": HEADERS.MAC_ADDRESS,
-      "X-PrivateKey": apiKey
+      password,
+      totp
     };
 
     const url = `${BASE_URL}${ENDPOINTS.LOGIN}`;
 
     const response = await axios.post(url, payload, {
-      headers,
+      headers: buildHeaders(apiKey),
       timeout: TIMEOUT.API
     });
 
     const data = response.data;
 
     if (data.status === true && data.data) {
-      const jwtToken = data.data.jwtToken;
-      const refreshToken = data.data.refreshToken;
-      const feedToken = data.data.feedToken;
+      const { jwtToken, refreshToken, feedToken } = data.data;
 
-      console.log("[AUTH] Angel One Login SUCCESS");
-      console.log("[AUTH] JWT Token:", jwtToken ? "SET" : "MISSING");
-      console.log("[AUTH] Feed Token:", feedToken ? "SET" : "MISSING");
-
-      // Store in global session
       global.angelSession = {
         jwtToken,
         refreshToken,
@@ -72,6 +80,10 @@ async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
         wsConnected: false
       };
 
+      lastLoginTime = Date.now();
+
+      console.log("[AUTH] ✅ Angel Login SUCCESS");
+
       return {
         success: true,
         jwtToken,
@@ -81,8 +93,6 @@ async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
       };
     }
 
-    console.error("[AUTH] Login failed:", data.message);
-
     return {
       success: false,
       error: data.message || "Angel login failed"
@@ -90,12 +100,49 @@ async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
 
   } catch (err) {
     console.error("[AUTH] Login error:", err.message);
-    
+
     return {
       success: false,
-      error: err.response?.data?.message || err.message || "Angel login error"
+      error: err.response?.data?.message || err.message
     };
+
+  } finally {
+    loginInProgress = false;
   }
+}
+
+// ==========================================
+// WAIT FOR LOGIN (Concurrency Protection)
+// ==========================================
+async function waitForLogin() {
+  const maxWait = 30000;
+  const interval = 200;
+  let waited = 0;
+
+  while (loginInProgress && waited < maxWait) {
+    await new Promise(res => setTimeout(res, interval));
+    waited += interval;
+  }
+}
+
+// ==========================================
+// ENSURE AUTHENTICATED (Auto Re-login)
+// ==========================================
+async function ensureAuthenticated() {
+  const session = global.angelSession;
+
+  if (!session || !session.jwtToken) {
+    throw new Error("Angel session not initialized");
+  }
+
+  const tokenAge = Date.now() - (lastLoginTime || 0);
+
+  if (tokenAge > TOKEN_EXPIRY_MS) {
+    console.log("[AUTH] Token expired. Refreshing...");
+    await generateToken(session.refreshToken, session.apiKey);
+  }
+
+  return session.jwtToken;
 }
 
 // ==========================================
@@ -103,48 +150,31 @@ async function loginWithPassword({ clientCode, password, totpSecret, apiKey }) {
 // ==========================================
 async function generateToken(refreshToken, apiKey) {
   try {
-    console.log("[AUTH] Refreshing JWT token...");
-
     if (!refreshToken || !apiKey) {
-      return {
-        success: false,
-        error: "Missing refresh token or API key"
-      };
+      return { success: false, error: "Missing refresh token or API key" };
     }
 
-    const payload = {
-      refreshToken: refreshToken
-    };
+    console.log("[AUTH] Refreshing JWT token...");
 
-    const headers = {
-      "Content-Type": HEADERS.CONTENT_TYPE,
-      "Accept": HEADERS.ACCEPT,
-      "X-UserType": HEADERS.USER_TYPE,
-      "X-SourceID": HEADERS.SOURCE_ID,
-      "X-ClientLocalIP": HEADERS.CLIENT_LOCAL_IP,
-      "X-ClientPublicIP": HEADERS.CLIENT_PUBLIC_IP,
-      "X-MACAddress": HEADERS.MAC_ADDRESS,
-      "X-PrivateKey": apiKey
-    };
+    const payload = { refreshToken };
 
     const url = `${BASE_URL}${ENDPOINTS.GENERATE_TOKEN}`;
 
     const response = await axios.post(url, payload, {
-      headers,
+      headers: buildHeaders(apiKey),
       timeout: TIMEOUT.API
     });
 
     const data = response.data;
 
     if (data.status === true && data.data) {
-      console.log("[AUTH] Token refreshed successfully");
+      global.angelSession.jwtToken = data.data.jwtToken;
+      global.angelSession.refreshToken = data.data.refreshToken;
+      global.angelSession.feedToken = data.data.feedToken;
 
-      // Update global session
-      if (global.angelSession) {
-        global.angelSession.jwtToken = data.data.jwtToken;
-        global.angelSession.refreshToken = data.data.refreshToken;
-        global.angelSession.feedToken = data.data.feedToken;
-      }
+      lastLoginTime = Date.now();
+
+      console.log("[AUTH] ✅ Token refreshed successfully");
 
       return {
         success: true,
@@ -154,8 +184,6 @@ async function generateToken(refreshToken, apiKey) {
       };
     }
 
-    console.error("[AUTH] Token refresh failed:", data.message);
-
     return {
       success: false,
       error: data.message || "Token refresh failed"
@@ -163,15 +191,19 @@ async function generateToken(refreshToken, apiKey) {
 
   } catch (err) {
     console.error("[AUTH] Token refresh error:", err.message);
-    
+
     return {
       success: false,
-      error: err.response?.data?.message || err.message || "Token refresh error"
+      error: err.response?.data?.message || err.message
     };
   }
 }
 
+// ==========================================
+// EXPORTS
+// ==========================================
 module.exports = {
   loginWithPassword,
-  generateToken
+  generateToken,
+  ensureAuthenticated
 };
