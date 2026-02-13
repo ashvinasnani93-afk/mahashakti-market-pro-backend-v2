@@ -13,7 +13,7 @@ const cors = require("cors");
 // Angel One Services
 const { loginWithPassword, generateToken } = require("./services/angel/angelAuth.service");
 const { setGlobalTokens, getLtpData } = require("./services/angel/angelApi.service");
-const { startAngelWebSocket, getWebSocketStatus, subscribeTokens, unsubscribeTokens, getSubscriptionCount } = require("./services/angel/angelWebSocket.service");
+const { connectWebSocket, getWebSocketStatus, subscribeTokens, unsubscribeTokens, getSubscriptionCount } = require("./services/angel/angelWebSocket.service");
 
 // Token & Symbol Services
 const { initializeTokenService } = require("./token.service");
@@ -277,10 +277,11 @@ async function autoRefreshToken() {
       
       // ✅ FIX: Restart WebSocket with new tokens
       console.log("🔄 Restarting WebSocket with new tokens...");
-      startAngelWebSocket(
-        result.feedToken,
+      await connectWebSocket(
+        result.jwtToken,
+        process.env.ANGEL_API_KEY,
         global.angelSession.clientCode,
-        process.env.ANGEL_API_KEY
+       result.feedToken
       );
       
     } else {
@@ -328,10 +329,11 @@ app.listen(PORT, async () => {
     // ✅ FIX: START WEBSOCKET AFTER LOGIN SUCCESS
     // ==========================================
     console.log("🔌 Starting WebSocket connection...");
-    startAngelWebSocket(
-      global.angelSession.feedToken,
+    await connectWebSocket(
+      global.angelSession.jwtToken,
+      process.env.ANGEL_API_KEY,
       global.angelSession.clientCode,
-      process.env.ANGEL_API_KEY
+      global.angelSession.feedToken
     );
 
     // Step 3: System ready
