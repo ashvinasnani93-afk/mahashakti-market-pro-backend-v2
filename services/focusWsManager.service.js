@@ -1,22 +1,25 @@
 // ==========================================
-// WS FOCUS MANAGER - INSTITUTIONAL GRADE
-// MAHASHAKTI MARKET PRO
-// Smart subscription: Max 120 tokens, Dynamic rotation
+// WS FOCUS MANAGER - PRODUCTION GRADE
+// WITH SINGLETON GUARD & RATE LIMIT PROTECTION
 // ==========================================
 
-const { subscribeTokens, unsubscribeTokens, getSubscriptionCount } = require("./angel/angelWebSocket.service");
+const { subscribeTokens, unsubscribeTokens, getSubscriptionCount, MAX_SUBSCRIPTIONS_PER_CONNECTION } = require("./angel/angelWebSocket.service");
 const { getTopCandidates } = require("./marketScanner.service");
 const { getTopNForWebSocket } = require("./rankingEngine.service");
 
 // ==========================================
 // CONFIG
 // ==========================================
-const MAX_LIVE_TOKENS = 120;
-const ROTATION_INTERVAL = 60000; // 60 seconds
-const PERFORMANCE_CHECK_INTERVAL = 30000; // 30 seconds
-const MIN_PERFORMANCE_SCORE = 0.5; // Minimum score to keep subscription
+const MAX_FOCUS_TOKENS = 50; // Stay well under Angel's 50 per connection limit
+const ROTATION_INTERVAL = 120000; // 2 minutes (reduced from 60s for stability)
+const PERFORMANCE_CHECK_INTERVAL = 60000; // 1 minute
+const MIN_PERFORMANCE_SCORE = 0.5;
 
+// ==========================================
+// SINGLETON GUARD - PREVENT DOUBLE START
+// ==========================================
 let focusManagerActive = false;
+let focusManagerStarting = false;
 let rotationTimer = null;
 let performanceCheckTimer = null;
 
@@ -26,36 +29,61 @@ let performanceCheckTimer = null;
 const activeSubscriptions = new Map(); // token -> { symbol, score, subscribedAt, lastUpdate, performance }
 
 // ==========================================
-// START FOCUS MANAGER
+// START FOCUS MANAGER (SINGLETON)
 // ==========================================
 function startFocusManager() {
+  // SINGLETON GUARD
+  if (focusManagerStarting) {
+    console.log("[FOCUS_WS] ⚠️ Start already in progress");
+    return { success: false, message: "Start already in progress" };
+  }
+
   if (focusManagerActive) {
-    console.log("[FOCUS_WS] Already running");
+    console.log("[FOCUS_WS] ⚠️ Already running");
     return { success: false, message: "Focus manager already active" };
   }
 
-  focusManagerActive = true;
-  console.log("[FOCUS_WS] 🎯 Starting Smart WebSocket Focus Manager");
+  focusManagerStarting = true;
 
-  // Initial subscription
-  performRotation();
+  try {
+    focusManagerActive = true;
+    console.log("[FOCUS_WS] 🎯 Starting Smart WebSocket Focus Manager");
 
-  // Schedule periodic rotation
-  rotationTimer = setInterval(() => {
-    performRotation();
-  }, ROTATION_INTERVAL);
+    // Wait 5 seconds before first rotation (let scanner stabilize)
+    setTimeout(() => {
+      performRotation();
+    }, 5000);
 
-  // Schedule performance checks
-  performanceCheckTimer = setInterval(() => {
-    checkPerformance();
-  }, PERFORMANCE_CHECK_INTERVAL);
+    // Schedule periodic rotation
+    rotationTimer = setInterval(() => {
+      performRotation();
+    }, ROTATION_INTERVAL);
 
-  return {
-    success: true,
-    message: "Focus manager started",
-    maxTokens: MAX_LIVE_TOKENS,
-    rotationInterval: ROTATION_INTERVAL
-  };
+    // Schedule performance checks
+    performanceCheckTimer = setInterval(() => {
+      checkPerformance();
+    }, PERFORMANCE_CHECK_INTERVAL);
+
+    focusManagerStarting = false;
+
+    return {
+      success: true,
+      message: "Focus manager started",
+      maxTokens: MAX_FOCUS_TOKENS,
+      rotationInterval: ROTATION_INTERVAL
+    };
+
+  } catch (error) {
+    focusManagerStarting = false;
+    focusManagerActive = false;
+    
+    console.error("[FOCUS_WS] ❌ Start error:", error.message);
+    
+    return {
+      success: false,
+      error: error.message
+    };
+  }
 }
 
 // ==========================================
@@ -67,6 +95,7 @@ function stopFocusManager() {
   }
 
   focusManagerActive = false;
+  focusManagerStarting = false;
 
   if (rotationTimer) {
     clearInterval(rotationTimer);
@@ -79,7 +108,11 @@ function stopFocusManager() {
   }
 
   // Unsubscribe all focus tokens
-  const tokensToUnsubscribe = Array.from(activeSubscriptions.keys()).map(token => ({ token }));
+  const tokensToUnsubscribe = Array.from(activeSubscriptions.keys()).map(token => ({
+    token,
+    exchangeType: 1
+  }));
+
   if (tokensToUnsubscribe.length > 0) {
     unsubscribeTokens(tokensToUnsubscribe, "focus-shutdown");
   }
@@ -95,11 +128,25 @@ function stopFocusManager() {
 // PERFORM ROTATION - CORE LOGIC
 // ==========================================
 async function performRotation() {
+  // Check if manager still active
+  if (!focusManagerActive) {
+    console.log("[FOCUS_WS] ⚠️ Manager not active, skipping rotation");
+    return;
+  }
+
   try {
     console.log("[FOCUS_WS] 🔄 Performing rotation...");
 
+    // Get current WS subscription count
+    const currentWSCount = getSubscriptionCount();
+    
+    // Reserve slots for core subscriptions (3 indices)
+    const availableSlots = MAX_FOCUS_TOKENS - 3;
+
+    console.log(`[FOCUS_WS] Current WS total: ${currentWSCount}, Available for focus: ${availableSlots}`);
+
     // Get top candidates from scanner
-    const scannerCandidates = getTopCandidates(150); // Get more than we need
+    const scannerCandidates = getTopCandidates(availableSlots * 2); // Get 2x for selection
 
     if (!scannerCandidates || scannerCandidates.length === 0) {
       console.log("[FOCUS_WS] ⚠️ No candidates from scanner");
@@ -109,44 +156,49 @@ async function performRotation() {
     console.log(`[FOCUS_WS] Scanner provided ${scannerCandidates.length} candidates`);
 
     // Build priority list
-    const priorityList = buildPriorityList(scannerCandidates);
+    const priorityList = buildPriorityList(scannerCandidates, availableSlots);
 
     console.log(`[FOCUS_WS] Priority list built: ${priorityList.length} stocks`);
 
     // Determine which tokens to subscribe/unsubscribe
     const { toSubscribe, toUnsubscribe } = determineRotation(priorityList);
 
-    // Unsubscribe low-performing tokens
+    // Unsubscribe low-performing tokens first
     if (toUnsubscribe.length > 0) {
       console.log(`[FOCUS_WS] Unsubscribing ${toUnsubscribe.length} tokens`);
-      unsubscribeTokens(toUnsubscribe, "focus-rotation");
+      const success = unsubscribeTokens(toUnsubscribe, "focus-rotation");
       
-      // Remove from tracking
-      toUnsubscribe.forEach(t => {
-        activeSubscriptions.delete(t.token);
-      });
+      if (success) {
+        toUnsubscribe.forEach(t => {
+          activeSubscriptions.delete(t.token);
+        });
+      }
     }
+
+    // Wait a bit before subscribing (rate limit protection)
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     // Subscribe to new high-priority tokens
     if (toSubscribe.length > 0) {
       console.log(`[FOCUS_WS] Subscribing ${toSubscribe.length} new tokens`);
-      subscribeTokens(toSubscribe, "focus-rotation");
+      const success = subscribeTokens(toSubscribe, "focus-rotation");
       
-      // Add to tracking
-      toSubscribe.forEach(t => {
-        activeSubscriptions.set(t.token, {
-          symbol: t.symbol,
-          exchange: t.exchange,
-          score: t.score || 0,
-          subscribedAt: Date.now(),
-          lastUpdate: Date.now(),
-          performance: 1.0,
-          reason: t.reason || "scanner"
+      if (success) {
+        toSubscribe.forEach(t => {
+          activeSubscriptions.set(t.token, {
+            symbol: t.symbol,
+            exchange: t.exchange,
+            score: t.score || 0,
+            subscribedAt: Date.now(),
+            lastUpdate: Date.now(),
+            performance: 1.0,
+            reason: t.reason || "scanner"
+          });
         });
-      });
+      }
     }
 
-    console.log(`[FOCUS_WS] ✅ Rotation complete. Active: ${activeSubscriptions.size}/${MAX_LIVE_TOKENS}`);
+    console.log(`[FOCUS_WS] ✅ Rotation complete. Active: ${activeSubscriptions.size}/${availableSlots}`);
 
   } catch (error) {
     console.error("[FOCUS_WS] ❌ Rotation error:", error.message);
@@ -156,7 +208,7 @@ async function performRotation() {
 // ==========================================
 // BUILD PRIORITY LIST
 // ==========================================
-function buildPriorityList(candidates) {
+function buildPriorityList(candidates, maxCount) {
   // Score each candidate
   const scored = candidates.map(candidate => {
     let priorityScore = 0;
@@ -178,7 +230,7 @@ function buildPriorityList(candidates) {
     // Boost if already subscribed (continuity)
     if (activeSubscriptions.has(candidate.token)) {
       const existing = activeSubscriptions.get(candidate.token);
-      priorityScore += existing.performance * 5; // Boost based on performance
+      priorityScore += existing.performance * 5;
     }
 
     return {
@@ -191,7 +243,7 @@ function buildPriorityList(candidates) {
   scored.sort((a, b) => b.priorityScore - a.priorityScore);
 
   // Take top N
-  return scored.slice(0, MAX_LIVE_TOKENS);
+  return scored.slice(0, maxCount);
 }
 
 // ==========================================
@@ -231,9 +283,10 @@ function determineRotation(priorityList) {
     }
   });
 
-  // Limit subscriptions to available slots
-  const availableSlots = MAX_LIVE_TOKENS - (activeSubscriptions.size - toUnsubscribe.length);
+  // Limit subscriptions to avoid exceeding max
+  const availableSlots = MAX_FOCUS_TOKENS - (activeSubscriptions.size - toUnsubscribe.length);
   if (toSubscribe.length > availableSlots) {
+    console.log(`[FOCUS_WS] ⚠️ Limiting subscriptions to ${availableSlots} slots`);
     toSubscribe.splice(availableSlots);
   }
 
@@ -241,7 +294,7 @@ function determineRotation(priorityList) {
 }
 
 // ==========================================
-// CHECK PERFORMANCE - Remove slow movers
+// CHECK PERFORMANCE
 // ==========================================
 function checkPerformance() {
   if (!focusManagerActive) return;
@@ -252,13 +305,9 @@ function checkPerformance() {
   const lowPerformers = [];
 
   activeSubscriptions.forEach((data, token) => {
-    // Calculate time subscribed
     const timeSubscribed = now - data.subscribedAt;
-
-    // Check if data is stale
     const timeSinceUpdate = now - data.lastUpdate;
 
-    // Performance calculation (simplified)
     let performance = data.performance || 1.0;
 
     // Degrade performance if no updates
@@ -284,87 +333,14 @@ function checkPerformance() {
   // Remove low performers
   if (lowPerformers.length > 0) {
     console.log(`[FOCUS_WS] Removing ${lowPerformers.length} low performers`);
-    unsubscribeTokens(lowPerformers, "performance-cleanup");
+    const success = unsubscribeTokens(lowPerformers, "performance-cleanup");
     
-    lowPerformers.forEach(p => {
-      activeSubscriptions.delete(p.token);
-    });
-  }
-}
-
-// ==========================================
-// UPDATE PERFORMANCE (Called when data received)
-// ==========================================
-function updatePerformance(token) {
-  if (activeSubscriptions.has(token)) {
-    const data = activeSubscriptions.get(token);
-    data.lastUpdate = Date.now();
-    data.performance = Math.min(1.0, (data.performance || 0.5) + 0.1);
-    activeSubscriptions.set(token, data);
-  }
-}
-
-// ==========================================
-// MANUAL SUBSCRIBE (For user search or specific requests)
-// ==========================================
-function manualSubscribe(tokens) {
-  if (!Array.isArray(tokens)) {
-    tokens = [tokens];
-  }
-
-  const tokensToSubscribe = tokens.map(t => ({
-    token: t.token,
-    symbol: t.symbol,
-    exchange: t.exchange || "NSE",
-    exchangeType: t.exchangeType || 1,
-    mode: 3
-  }));
-
-  const success = subscribeTokens(tokensToSubscribe, "manual");
-
-  if (success) {
-    // Add to tracking with high priority
-    tokensToSubscribe.forEach(t => {
-      activeSubscriptions.set(t.token, {
-        symbol: t.symbol,
-        exchange: t.exchange,
-        score: 999, // High priority
-        subscribedAt: Date.now(),
-        lastUpdate: Date.now(),
-        performance: 1.0,
-        reason: "manual",
-        isManual: true
+    if (success) {
+      lowPerformers.forEach(p => {
+        activeSubscriptions.delete(p.token);
       });
-    });
+    }
   }
-
-  return {
-    success,
-    message: success ? `Subscribed ${tokensToSubscribe.length} tokens` : "Subscription failed"
-  };
-}
-
-// ==========================================
-// MANUAL UNSUBSCRIBE
-// ==========================================
-function manualUnsubscribe(tokens) {
-  if (!Array.isArray(tokens)) {
-    tokens = [tokens];
-  }
-
-  const success = unsubscribeTokens(tokens, "manual");
-
-  if (success) {
-    tokens.forEach(t => {
-      const token = typeof t === "string" ? t : t.token;
-      activeSubscriptions.delete(token);
-    });
-  }
-
-  return {
-    success,
-    message: success ? `Unsubscribed ${tokens.length} tokens` : "Unsubscription failed"
-  };
 }
 
 // ==========================================
@@ -380,31 +356,18 @@ function getFocusStatus() {
     reason: data.reason
   }));
 
-  // Sort by score
   subscriptions.sort((a, b) => b.score - a.score);
 
   return {
     active: focusManagerActive,
+    starting: focusManagerStarting,
     subscriptionCount: activeSubscriptions.size,
-    maxTokens: MAX_LIVE_TOKENS,
-    utilization: ((activeSubscriptions.size / MAX_LIVE_TOKENS) * 100).toFixed(1),
-    subscriptions: subscriptions.slice(0, 50), // Return top 50
+    maxTokens: MAX_FOCUS_TOKENS,
+    utilization: ((activeSubscriptions.size / MAX_FOCUS_TOKENS) * 100).toFixed(1),
+    subscriptions: subscriptions.slice(0, 50),
     rotationInterval: ROTATION_INTERVAL,
     nextRotation: rotationTimer ? "Active" : "Inactive"
   };
-}
-
-// ==========================================
-// GET ACTIVE TOKENS (For external use)
-// ==========================================
-function getActiveTokens() {
-  return Array.from(activeSubscriptions.values()).map(data => ({
-    symbol: data.symbol,
-    token: data.token,
-    exchange: data.exchange,
-    score: data.score,
-    reason: data.reason
-  }));
 }
 
 // ==========================================
@@ -413,12 +376,6 @@ function getActiveTokens() {
 module.exports = {
   startFocusManager,
   stopFocusManager,
-  performRotation,
-  checkPerformance,
-  updatePerformance,
-  manualSubscribe,
-  manualUnsubscribe,
   getFocusStatus,
-  getActiveTokens,
-  MAX_LIVE_TOKENS
+  MAX_FOCUS_TOKENS
 };
