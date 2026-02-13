@@ -6,7 +6,7 @@
 const axios = require("axios");
 const settings = require("../../config/settings.config")
 const authService = require('./angelAuth.service');
-const { BASE_URL, ENDPOINTS } = require("../config/angel.config");
+const { BASE_URL, ENDPOINTS } = require('../../config/angel.config')
 
 // ==========================================
 // VALID INTERVALS (Angel Official Limits)
