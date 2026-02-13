@@ -338,11 +338,7 @@ console.log("📦 Loading Option Master...");
 await initializeTokenService();
 console.log("✅ Option Master Loaded");
     
-    // Step 2: Load Option Master AFTER successful login
-    console.log("📥 Loading Option Master...");
-    await initializeTokenService();
-    console.log("✅ Option Master Loaded");
-
+    
     // ==========================================
     // ✅ FIX: START WEBSOCKET AFTER LOGIN SUCCESS
     // ==========================================
