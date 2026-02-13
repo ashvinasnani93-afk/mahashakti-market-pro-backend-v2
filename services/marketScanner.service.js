@@ -1,21 +1,24 @@
 // ==========================================
-// MARKET SCANNER ENGINE - INSTITUTIONAL GRADE
-// MAHASHAKTI MARKET PRO
-// Scans: NIFTY 500, F&O stocks, Volume spikes, Breakouts
+// MARKET SCANNER ENGINE - PRODUCTION GRADE
+// WITH SINGLETON GUARD & RATE LIMIT PROTECTION
 // ==========================================
 
 const { getFullQuote } = require("./angel/angelApi.service");
-const { calculateIndicators } = require("./indicators.service");
 
 // ==========================================
 // SCANNER CONFIG
 // ==========================================
-const SCAN_INTERVAL = 45000; // 45 seconds
-const VOLUME_SPIKE_THRESHOLD = 1.5; // 1.5x average volume
-const BREAKOUT_PROXIMITY = 0.98; // 98% of range high
-const MIN_LIQUIDITY = 100000; // Minimum volume for consideration
+const SCAN_INTERVAL = 60000; // 60 seconds (safe for production)
+const VOLUME_SPIKE_THRESHOLD = 1.5;
+const BREAKOUT_PROXIMITY = 0.98;
+const MIN_LIQUIDITY = 100000;
 
+// ==========================================
+// SINGLETON GUARD - PREVENT DOUBLE START
+// ==========================================
 let scannerActive = false;
+let scannerStarting = false;
+let scannerInterval = null;
 let lastScanResults = null;
 let lastScanTime = null;
 
@@ -25,24 +28,24 @@ let lastScanTime = null;
 const NIFTY_500_SYMBOLS = [
   // NIFTY 50
   "RELIANCE", "TCS", "HDFCBANK", "INFY", "HINDUNILVR", "ICICIBANK", "KOTAKBANK",
-  "SBIN", "BHARTIARTL", "BAJFINANCE", "ITC", "ASIANPAINT", "LT", "AXISBANK",
+  "SBIN", "BHARTIARTL", "BAJ FINANCE", "ITC", "ASIANPAINT", "LT", "AXISBANK",
   "MARUTI", "TITAN", "SUNPHARMA", "ULTRACEMCO", "NESTLEIND", "WIPRO", "HCLTECH",
-  "TECHM", "POWERGRID", "NTPC", "BAJAJFINSV", "ONGC", "TATAMOTORS", "ADANIPORTS",
+  "TECHM", "POWERGRID", "NTPC", "BAJAJFINSV", "ONGC", "ADANIPORTS",
   "COALINDIA", "M&M", "TATASTEEL", "JSWSTEEL", "INDUSINDBK", "HINDALCO", "DRREDDY",
   "CIPLA", "DIVISLAB", "EICHERMOT", "GRASIM", "BPCL", "TATACONSUM", "HEROMOTOCO",
-  "SHREECEM", "UPL", "SBILIFE", "APOLLOHOSP", "BRITANNIA", "ADANIENT", "BAJAJ-AUTO",
+  "SHREECEM", "UPL", "SBILIFE", "APOLLOHOSP", "BRITANNIA", "ADANIENT",
   
   // ADDITIONAL F&O STOCKS
   "VEDL", "TATAPOWER", "SAIL", "CANBK", "PNB", "BANKBARODA", "UNIONBANK",
   "IDFCFIRSTB", "RECLTD", "PFC", "LICHSGFIN", "CHOLAFIN", "MUTHOOTFIN",
-  "IDFC", "FEDERALBNK", "AUBANK", "BANDHANBNK", "RBLBANK", "DELTACORP",
-  "IDEA", "ZEEL", "SAIL", "NMDC", "NATIONALUM", "GMRINFRA", "ADANIPOWER",
-  "TORNTPOWER", "ADANIGREEN", "IRCTC", "DIXON", "ZOMATO", "PAYTM", "NYKAA",
-  "POLICYBZR", "DMART", "JUBLFOOD", "BERGEPAINT", "PIDILITIND", "AARTI IND",
+  "IDFC", "FEDERALBNK", "AUBANK", "BANDHANBNK", "RBLBANK",
+  "IDEA", "ZEEL", "NMDC", "NATIONALUM", "GMRINFRA", "ADANIPOWER",
+  "TORNTPOWER", "ADANIGREEN", "IRCTC", "DIXON", "PAYTM", "NYKAA",
+  "POLICYBZR", "DMART", "JUBLFOOD", "BERGEPAINT", "PIDILITIND",
   "NAVINFLUOR", "SRF", "DEEPAKNTR", "ATUL", "BALRAMCHIN", "ALKYLAMINE",
-  "CHAMBLFERT", "COROMANDEL", "GNFC", "GSFC", "MANGCHEFER", "TATACHEM",
+  "CHAMBLFERT", "COROMANDEL", "GNFC", "GSFC", "TATACHEM",
   "FACT", "NFL", "RAIN", "NOCIL", "FINEORG", "TEJASNET", "ROUTE", "TANLA",
-  "PERSISTENT", "COFORGE", "MPHASIS", "LTTS", "OFSS", "MINDTREE", "L&TFH",
+  "PERSISTENT", "COFORGE", "MPHASIS", "LTTS", "OFSS",
   "MFSL", "CDSL", "CAMS", "MAZDOCK", "CONCOR", "BHARATFORG", "EXIDEIND",
   "AMBUJACEM", "ACC", "RAMCOCEM", "JKCEMENT", "INDIACEM", "ORIENTCEM"
 ];
@@ -55,33 +58,63 @@ const INDEX_SYMBOLS = [
 ];
 
 // ==========================================
-// UNIVERSAL WATCHLIST (NIFTY 500 + INDICES)
+// GET UNIVERSAL WATCHLIST
 // ==========================================
 function getUniversalWatchlist() {
   return [...NIFTY_500_SYMBOLS, ...INDEX_SYMBOLS];
 }
 
 // ==========================================
-// START SCANNER
+// START SCANNER (SINGLETON)
 // ==========================================
 function startScanner() {
+  // SINGLETON GUARD
+  if (scannerStarting) {
+    console.log("[SCANNER] ⚠️ Start already in progress");
+    return { success: false, message: "Start already in progress" };
+  }
+
   if (scannerActive) {
-    console.log("[SCANNER] Already running");
+    console.log("[SCANNER] ⚠️ Already running");
     return { success: false, message: "Scanner already active" };
   }
 
-  scannerActive = true;
-  console.log("[SCANNER] 🚀 Starting Market Scanner Engine");
+  scannerStarting = true;
 
-  // Run first scan immediately
-  runScan();
+  try {
+    scannerActive = true;
+    console.log("[SCANNER] 🚀 Starting Market Scanner Engine");
 
-  // Schedule periodic scans
-  global.scannerInterval = setInterval(() => {
-    runScan();
-  }, SCAN_INTERVAL);
+    // Run first scan after 10 seconds (let WS stabilize)
+    setTimeout(() => {
+      runScan();
+    }, 10000);
 
-  return { success: true, message: "Scanner started", interval: SCAN_INTERVAL };
+    // Schedule periodic scans
+    scannerInterval = setInterval(() => {
+      runScan();
+    }, SCAN_INTERVAL);
+
+    scannerStarting = false;
+
+    return {
+      success: true,
+      message: "Scanner started",
+      interval: SCAN_INTERVAL,
+      watchlistSize: getUniversalWatchlist().length
+    };
+
+  } catch (error) {
+    scannerStarting = false;
+    scannerActive = false;
+    
+    console.error("[SCANNER] ❌ Start error:", error.message);
+    
+    return {
+      success: false,
+      error: error.message
+    };
+  }
 }
 
 // ==========================================
@@ -93,14 +126,15 @@ function stopScanner() {
   }
 
   scannerActive = false;
-  
-  if (global.scannerInterval) {
-    clearInterval(global.scannerInterval);
-    global.scannerInterval = null;
+  scannerStarting = false;
+
+  if (scannerInterval) {
+    clearInterval(scannerInterval);
+    scannerInterval = null;
   }
 
   console.log("[SCANNER] 🛑 Scanner stopped");
-  
+
   return { success: true, message: "Scanner stopped" };
 }
 
@@ -108,9 +142,15 @@ function stopScanner() {
 // RUN SCAN - CORE LOGIC
 // ==========================================
 async function runScan() {
+  // Check if scanner still active
+  if (!scannerActive) {
+    console.log("[SCANNER] ⚠️ Scanner not active, skipping scan");
+    return;
+  }
+
   try {
     console.log("[SCANNER] 📊 Running market scan...");
-    
+
     const startTime = Date.now();
     const watchlist = getUniversalWatchlist();
 
@@ -122,7 +162,8 @@ async function runScan() {
       return;
     }
 
-    console.log(`[SCANNER] ✅ Fetched ${quotesResult.successful} quotes in ${Date.now() - startTime}ms`);
+    const duration = Date.now() - startTime;
+    console.log(`[SCANNER] ✅ Fetched ${quotesResult.successful} quotes in ${duration}ms`);
 
     // Process each quote
     const scannedStocks = [];
@@ -191,28 +232,15 @@ async function runScan() {
 function calculateDerivedMetrics(quote) {
   const { open, high, low, close, prevClose, volume, vwap } = quote;
 
-  // Percentage change
   const changePercent = prevClose > 0 ? ((close - prevClose) / prevClose) * 100 : 0;
-
-  // Range
   const range = high - low;
   const rangePercent = low > 0 ? (range / low) * 100 : 0;
-
-  // Position in range (0 = low, 1 = high)
   const positionInRange = range > 0 ? (close - low) / range : 0.5;
-
-  // VWAP deviation
   const vwapDeviation = vwap > 0 ? ((close - vwap) / vwap) * 100 : 0;
-
-  // Buying pressure (simplified)
   const buyingPressure = quote.totalBuyQty > 0 ? 
     quote.totalBuyQty / (quote.totalBuyQty + quote.totalSellQty) : 0.5;
-
-  // Volume ratio (need historical data for avgVolume - using estimate)
-  const estimatedAvgVolume = volume * 0.8; // Rough estimate
+  const estimatedAvgVolume = volume * 0.8;
   const volumeRatio = volume / estimatedAvgVolume;
-
-  // ATR estimate (using range as proxy)
   const atrEstimate = rangePercent;
 
   return {
@@ -244,37 +272,30 @@ function detectPatterns(quote, metrics) {
     compression: false
   };
 
-  // Volume spike
   if (metrics.volumeRatio >= VOLUME_SPIKE_THRESHOLD) {
     patterns.volumeSpike = true;
   }
 
-  // Breakout (close near high)
   if (metrics.positionInRange >= 0.95 && metrics.isBullishCandle) {
     patterns.breakout = true;
   }
 
-  // Pre-breakout (close near previous range high)
   if (metrics.positionInRange >= BREAKOUT_PROXIMITY && metrics.positionInRange < 0.95) {
     patterns.preBreakout = true;
   }
 
-  // Range expansion (ATR increasing)
   if (metrics.rangePercent > 2) {
     patterns.rangeExpansion = true;
   }
 
-  // VWAP bounce
   if (metrics.isAboveVWAP && Math.abs(metrics.vwapDeviation) < 0.5) {
     patterns.vwapBounce = true;
   }
 
-  // Strong momentum
   if (Math.abs(metrics.changePercent) > 2 && metrics.volumeRatio > 1.2) {
     patterns.strongMomentum = true;
   }
 
-  // Compression (low range, high volume)
   if (metrics.rangePercent < 1 && metrics.volumeRatio > 1) {
     patterns.compression = true;
   }
@@ -357,7 +378,6 @@ function getTopCandidates(limit = 100) {
 
   const candidates = new Set();
 
-  // Top 50 movers
   lastScanResults.topMovers?.slice(0, 50).forEach(stock => {
     candidates.add({
       symbol: stock.symbol,
@@ -367,7 +387,6 @@ function getTopCandidates(limit = 100) {
     });
   });
 
-  // Top 30 volume spikes
   lastScanResults.volumeSpikes?.slice(0, 30).forEach(stock => {
     candidates.add({
       symbol: stock.symbol,
@@ -377,7 +396,6 @@ function getTopCandidates(limit = 100) {
     });
   });
 
-  // Top 20 breakouts
   lastScanResults.breakouts?.slice(0, 20).forEach(stock => {
     candidates.add({
       symbol: stock.symbol,
@@ -388,7 +406,7 @@ function getTopCandidates(limit = 100) {
   });
 
   const candidateArray = Array.from(candidates);
-  
+
   return candidateArray.slice(0, limit);
 }
 
@@ -407,6 +425,7 @@ async function manualScan() {
 function getScannerStatus() {
   return {
     active: scannerActive,
+    starting: scannerStarting,
     lastScanTime: lastScanTime ? new Date(lastScanTime).toISOString() : null,
     lastScanAge: lastScanTime ? Math.floor((Date.now() - lastScanTime) / 1000) : null,
     interval: SCAN_INTERVAL,
