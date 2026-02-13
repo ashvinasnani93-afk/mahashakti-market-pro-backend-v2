@@ -300,7 +300,7 @@ setInterval(autoRefreshToken, 5 * 60 * 60 * 1000);
 // ==========================================
 // SERVER STARTUP
 // ==========================================
-const PORT = process.env.PORT || 4000
+const PORT = process.env.PORT || 8080
 
 app.listen(PORT, async () => {
   console.log("=".repeat(50));
